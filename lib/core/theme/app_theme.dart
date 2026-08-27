@@ -1,42 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
+import 'app_spacing.dart';
 import 'app_typography.dart';
 
+/// The app's one `ThemeData` — cream, used by every screen. There is no
+/// dark variant and no `ThemeMode` switch; `main.dart` applies this
+/// unconditionally.
 abstract class AppTheme {
   AppTheme._();
 
-  static ThemeData get dark {
-    final scheme = const ColorScheme.dark(
-      brightness: Brightness.dark,
-      primary: AppColors.amber,
-      onPrimary: AppColors.darkOnAmber,
-      secondary: AppColors.amberDeep,
-      onSecondary: AppColors.darkOnAmber,
-      surface: AppColors.darkSurface,
-      onSurface: AppColors.darkTextPrimary,
-      error: AppColors.errorDark,
-      onError: AppColors.darkOnAmber,
-      outline: AppColors.darkBorder,
-    );
-
-    return _base(scheme, AppTypography.dark, AppColors.darkBg);
-  }
-
   static ThemeData get light {
-    final scheme = const ColorScheme.light(
+    const scheme = ColorScheme.light(
       brightness: Brightness.light,
-      primary: AppColors.amberDeeper,
-      onPrimary: Colors.white,
-      secondary: AppColors.amberDeep,
-      onSecondary: Colors.white,
-      surface: AppColors.lightSurface,
-      onSurface: AppColors.lightTextPrimary,
+      primary: AppColors.primaryMaroon,
+      onPrimary: AppColors.onMaroon,
+      secondary: AppColors.accentRoseDeep,
+      onSecondary: AppColors.primaryMaroonDeep,
+      surface: AppColors.surfaceCard,
+      onSurface: AppColors.inkText,
       error: AppColors.error,
       onError: Colors.white,
-      outline: AppColors.lightBorder,
+      outline: AppColors.borderSubtle,
     );
 
-    return _base(scheme, AppTypography.light, AppColors.lightBg);
+    return _base(scheme, AppTypography.light, AppColors.backgroundCream);
   }
 
   static ThemeData _base(
@@ -44,13 +32,13 @@ abstract class AppTheme {
     TextTheme textTheme,
     Color scaffoldBg,
   ) {
-    final isDark = scheme.brightness == Brightness.dark;
+    const hairline = AppColors.borderSubtle;
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: scaffoldBg,
-      fontFamily: 'Satoshi',
+      fontFamily: GoogleFonts.inter().fontFamily,
       textTheme: textTheme,
       splashFactory: NoSplash.splashFactory,
       highlightColor: Colors.transparent,
@@ -60,58 +48,101 @@ abstract class AppTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         iconTheme: IconThemeData(color: scheme.onSurface),
+        titleTextStyle: textTheme.titleLarge,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.amber,
-          foregroundColor: isDark
-              ? AppColors.darkOnAmber
-              : AppColors.lightOnAmber,
+          backgroundColor: AppColors.primaryMaroon,
+          foregroundColor: AppColors.onMaroon,
           disabledBackgroundColor: scheme.outline,
-          minimumSize: const Size.fromHeight(56),
+          minimumSize: const Size.fromHeight(54),
           elevation: 0,
-          shape: const StadiumBorder(),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+          textStyle: textTheme.labelLarge,
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size.fromHeight(54),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+          textStyle: textTheme.labelLarge,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: scheme.onSurface,
+          minimumSize: const Size.fromHeight(54),
+          side: const BorderSide(color: hairline),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
           textStyle: textTheme.labelLarge,
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: scheme.onSurface.withValues(alpha: 0.7),
-          textStyle: textTheme.labelLarge,
+          foregroundColor: AppColors.primaryMaroon,
+          textStyle: textTheme.labelMedium,
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: isDark
-            ? AppColors.darkSurfaceHigh
-            : AppColors.lightSurfaceSunken,
+        fillColor: AppColors.surfaceCard,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 20,
           vertical: 18,
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide(color: scheme.outline, width: 1),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderSide: const BorderSide(color: hairline, width: 1),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide(color: scheme.outline, width: 1),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderSide: const BorderSide(color: hairline, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: AppColors.amber, width: 1.5),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderSide: const BorderSide(color: AppColors.primaryMaroon, width: 1.5),
         ),
-        hintStyle: textTheme.bodyLarge?.copyWith(
-          color: isDark
-              ? AppColors.darkTextTertiary
-              : AppColors.lightTextTertiary,
-        ),
+        hintStyle: textTheme.bodyLarge?.copyWith(color: AppColors.mutedText),
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
-          TargetPlatform.iOS: FadeForwardsPageTransitionsBuilder(),
+          TargetPlatform.android: _RouteFadeSlideTransitionsBuilder(),
+          TargetPlatform.iOS: _RouteFadeSlideTransitionsBuilder(),
         },
+      ),
+    );
+  }
+}
+
+/// Coordinated slide + fade between screens — replaces the default
+/// platform push transition everywhere in the app (auth steps included,
+/// since they use the same `GoRouter`/`Navigator` push mechanism).
+class _RouteFadeSlideTransitionsBuilder extends PageTransitionsBuilder {
+  const _RouteFadeSlideTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+    return FadeTransition(
+      opacity: curved,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.04),
+          end: Offset.zero,
+        ).animate(curved),
+        child: child,
       ),
     );
   }

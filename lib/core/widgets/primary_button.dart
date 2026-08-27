@@ -1,20 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../theme/app_motion.dart';
+import '../theme/app_colors.dart';
 
-/// A pill CTA with a tactile press response (scale + haptic) instead of
-/// the flat, static Material button most delivery apps ship with.
+/// A rounded-rect CTA with a tactile press response (scale + haptic) and a
+/// maroon glow lift, instead of the flat, static Material button most
+/// delivery apps ship with.
 class PrimaryButton extends StatefulWidget {
   const PrimaryButton({
     super.key,
     required this.label,
     required this.onPressed,
     this.loading = false,
+    this.icon,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final bool loading;
+
+  /// Optional trailing icon (e.g. an arrow on the onboarding CTA).
+  final IconData? icon;
 
   @override
   State<PrimaryButton> createState() => _PrimaryButtonState();
@@ -31,6 +36,8 @@ class _PrimaryButtonState extends State<PrimaryButton> {
   @override
   Widget build(BuildContext context) {
     final enabled = widget.onPressed != null && !widget.loading;
+    const disabledBg = AppColors.borderSubtle;
+    const disabledText = AppColors.mutedText;
 
     return GestureDetector(
       onTapDown: (_) => _setPressed(true),
@@ -44,36 +51,58 @@ class _PrimaryButtonState extends State<PrimaryButton> {
           : null,
       child: AnimatedScale(
         scale: _pressed ? 0.97 : 1,
-        duration: AppMotion.fast,
-        curve: AppMotion.emphasized,
-        child: AnimatedOpacity(
-          opacity: enabled ? 1 : 0.5,
-          duration: AppMotion.fast,
-          child: Container(
-            height: 56,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              gradient: const LinearGradient(
-                colors: [Color(0xFFF4B863), Color(0xFFDB8A2E)],
-              ),
-            ),
-            child: widget.loading
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.4,
-                      color: Color(0xFF1B1309),
-                    ),
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          height: 54,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: enabled
+                ? const LinearGradient(
+                    colors: [AppColors.primaryMaroon, AppColors.primaryMaroonDeep],
                   )
-                : Text(
-                    widget.label,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: const Color(0xFF1B1309),
+                : null,
+            color: enabled ? null : disabledBg,
+            boxShadow: enabled
+                ? [
+                    const BoxShadow(
+                      color: AppColors.primaryMaroonGlow,
+                      blurRadius: 24,
+                      offset: Offset(0, 8),
                     ),
-                  ),
+                  ]
+                : [],
           ),
+          child: widget.loading
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: AppColors.onMaroon,
+                  ),
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.label,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: enabled ? AppColors.onMaroon : disabledText,
+                      ),
+                    ),
+                    if (widget.icon != null) ...[
+                      const SizedBox(width: 8),
+                      Icon(
+                        widget.icon,
+                        size: 18,
+                        color: enabled ? AppColors.onMaroon : disabledText,
+                      ),
+                    ],
+                  ],
+                ),
         ),
       ),
     );

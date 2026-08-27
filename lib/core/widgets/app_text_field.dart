@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_colors.dart';
 import '../theme/app_motion.dart';
+import '../theme/app_spacing.dart';
 
-/// A text field whose border blooms into a soft amber glow on focus,
+/// A text field whose border blooms into a soft maroon glow on focus,
 /// rather than the flat instant color swap Flutter gives you by default —
 /// small detail, disproportionate amount of "premium" it buys back.
 class AppTextField extends StatefulWidget {
@@ -12,9 +14,13 @@ class AppTextField extends StatefulWidget {
     this.hintText,
     this.leadingText,
     this.prefixIcon,
+    this.suffixIcon,
     this.keyboardType,
     this.autofocus = false,
+    this.hasError = false,
+    this.obscureText = false,
     this.onChanged,
+    this.focusNode,
   });
 
   final TextEditingController? controller;
@@ -25,16 +31,21 @@ class AppTextField extends StatefulWidget {
   /// only reveals once the field has content, this stays put regardless.
   final String? leadingText;
   final Widget? prefixIcon;
+  final Widget? suffixIcon;
   final TextInputType? keyboardType;
   final bool autofocus;
+  final bool hasError;
+  final bool obscureText;
   final ValueChanged<String>? onChanged;
+  final FocusNode? focusNode;
 
   @override
   State<AppTextField> createState() => _AppTextFieldState();
 }
 
 class _AppTextFieldState extends State<AppTextField> {
-  final _focusNode = FocusNode();
+  late final _ownsFocusNode = widget.focusNode == null;
+  late final _focusNode = widget.focusNode ?? FocusNode();
   bool _focused = false;
 
   @override
@@ -47,53 +58,63 @@ class _AppTextFieldState extends State<AppTextField> {
 
   @override
   void dispose() {
-    _focusNode.dispose();
+    if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return AnimatedContainer(
-      duration: AppMotion.base,
+      duration: const Duration(milliseconds: 200),
       curve: AppMotion.emphasized,
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurfaceHigh : AppColors.lightSurfaceSunken,
-        borderRadius: BorderRadius.circular(18),
+        // A faint top-to-bottom lightening reads as a raised/tactile
+        // surface instead of a flat fill.
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.white.withValues(alpha: 0.6),
+            AppColors.surfaceCard,
+          ],
+          stops: const [0.0, 0.4],
+        ),
+        borderRadius: BorderRadius.circular(19),
         border: Border.all(
-          color: _focused
-              ? AppColors.amber
-              : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
-          width: _focused ? 1.5 : 1,
+          color: widget.hasError
+              ? AppColors.error
+              : _focused
+              ? AppColors.primaryMaroon
+              : AppColors.borderSubtle,
+          width: widget.hasError || _focused ? 1.5 : 1,
         ),
         boxShadow: _focused
-            ? [
-                BoxShadow(
-                  color: AppColors.amber.withValues(alpha: 0.28),
-                  blurRadius: 18,
-                  spreadRadius: 1,
-                ),
-              ]
-            : [],
+            ? AppElevation.raised(false)
+            : AppElevation.card(false),
       ),
       child: Row(
         children: [
           if (widget.leadingText != null) ...[
-            const SizedBox(width: 20),
-            Text(
-              widget.leadingText!,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: isDark
-                    ? AppColors.darkTextPrimary
-                    : AppColors.lightTextPrimary,
+            const SizedBox(width: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.accentRose.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                widget.leadingText!,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: AppColors.inkText,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             const SizedBox(width: 10),
             Container(
               width: 1,
               height: 22,
-              color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+              color: AppColors.borderSubtle,
             ),
           ],
           Expanded(
@@ -102,11 +123,10 @@ class _AppTextFieldState extends State<AppTextField> {
               focusNode: _focusNode,
               autofocus: widget.autofocus,
               keyboardType: widget.keyboardType,
+              obscureText: widget.obscureText,
               onChanged: widget.onChanged,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: isDark
-                    ? AppColors.darkTextPrimary
-                    : AppColors.lightTextPrimary,
+                color: AppColors.inkText,
               ),
               decoration: InputDecoration(
                 hintText: widget.hintText,
@@ -128,6 +148,10 @@ class _AppTextFieldState extends State<AppTextField> {
               ),
             ),
           ),
+          if (widget.suffixIcon != null) ...[
+            widget.suffixIcon!,
+            const SizedBox(width: 16),
+          ],
         ],
       ),
     );

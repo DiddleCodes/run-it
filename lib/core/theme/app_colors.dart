@@ -1,45 +1,57 @@
 import 'package:flutter/material.dart';
 
-/// RUN-It's palette is built around one warm amber brand hue carried
-/// consistently across both modes. Light mode is a deliberate cream/paper
-/// palette (not an inverted dark theme) and dark mode avoids true black,
-/// both to read as considered rather than a default Material swap.
+/// RUN-It's design system. One base surface — cream — used app-wide by
+/// every screen, student and runner alike. There is no dark theme.
+///
+/// These values are the single canonical source for the app's palette —
+/// screens should never hardcode a hex literal that duplicates one of
+/// these (the runner-flow screens used to each define their own local
+/// `_kGold`, for instance; that's now [gold] below instead).
 abstract class AppColors {
   AppColors._();
 
-  // Brand hue — identical across themes, this is what makes the two modes
-  // feel like the same product rather than two different apps.
-  static const amber = Color(0xFFF0A94E);
-  static const amberDeep = Color(0xFFD9862B);
-  static const amberDeeper = Color(0xFFB8651C);
+  // ---- Primary — burgundy ----
+  static const primaryMaroon = Color(0xFF7A1636);
+  static const primaryMaroonDeep = Color(0xFF5A0E25);
+  static const primaryMaroonGlow = Color(0x597A1636); // primaryMaroon @ 35%
 
-  static const success = Color(0xFF3FA372);
-  static const successDark = Color(0xFF4FC08A);
-  static const error = Color(0xFFE2604F);
-  static const errorDark = Color(0xFFF07A68);
+  // ---- Soft blush — icon badges, secondary tint, celebration surfaces ----
+  static const accentRose = Color(0xFFF8E8E8);
+  static const accentRoseDeep = Color(0xFFE3B6C1);
 
-  // ---- Dark (matches the supplied designs) ----
-  static const darkBg = Color(0xFF0F0D0C);
-  static const darkSurface = Color(0xFF1A1714);
-  static const darkSurfaceHigh = Color(0xFF221D18);
-  static const darkBorder = Color(0xFF2E2822);
-  static const darkTextPrimary = Color(0xFFF7F4EF);
-  static const darkTextSecondary = Color(0xFFA39C92);
-  static const darkTextTertiary = Color(0xFF6C665E);
-  static const darkOnAmber = Color(0xFF1B1309);
+  // Text/icon color rendered on top of a maroon-filled surface (e.g. a CTA
+  // button label) — a warm off-white reads cleanly on burgundy.
+  static const onMaroon = Color(0xFFFBF4E9);
 
-  // ---- Light (new — warm ivory, not white) ----
-  static const lightBg = Color(0xFFFAF6EF);
-  static const lightSurface = Color(0xFFFFFFFF);
-  static const lightSurfaceSunken = Color(0xFFF1EAE0);
-  static const lightBorder = Color(0xFFE8DFD1);
-  static const lightTextPrimary = Color(0xFF1C1712);
-  static const lightTextSecondary = Color(0xFF6F675C);
-  static const lightTextTertiary = Color(0xFFA79D8F);
-  static const lightOnAmber = Color(0xFF1B1309);
+  // ---- Gold — runner-facing accent (online status, ratings, stat
+  // emphasis) ----
+  static const gold = Color(0xFFD99A18);
+  static const goldTint = Color(0xFFFBEFD9);
 
-  // Warm-tinted shadow used instead of flat black/gray — cheap-looking
-  // drop shadows are one of the fastest ways a light UI reads as generic.
-  static const lightShadow = Color(0x1AD9862B);
-  static const darkShadow = Color(0x33000000);
+  // ---- Accent forest — restaurant role (role-select screen) ----
+  // A cool, deep forest green — deliberately breaks from the warm
+  // maroon/gold pair used by the other two roles so a three-way choice
+  // reads as visually distinct at a glance, not just relabeled.
+  static const accentForest = Color(0xFF2F5D3A);
+  static const accentForestDeep = Color(0xFF1D3B26);
+
+  // ---- Status colors ----
+  static const success = Color(0xFF2E7D32);
+  static const successBackground = Color(0xFFE3F3E1);
+  static const warning = Color(0xFFB07A2E);
+  static const error = Color(0xFFB23A3A);
+
+  // ---- Cream (the app's one base surface) ----
+  static const backgroundCream = Color(0xFFFBF4E9);
+  static const surfaceCard = Color(0xFFFFFFFF);
+  static const borderSubtle = Color(0xFFEADDD2);
+  static const inkText = Color(0xFF24151A);
+  static const mutedText = Color(0xFF75656A);
+
+  // ---- Scanner — the Scan screen's viewfinder only ----
+  static const scannerGreen = Color(0xFF72D84F);
+  static const scannerBackground = Color(0xFF080708);
+
+  // Warm-tinted shadow used instead of flat black/gray.
+  static const maroonShadow = Color(0x1A7A1636);
 }

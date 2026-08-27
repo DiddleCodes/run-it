@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/runner_mark.dart';
 
-/// Visualizes the requester/runner mode switch — the app's actual point
-/// of difference — as two nodes joined by a traveling dash, rather than
-/// burying it in copy the way the source flow currently does.
+/// Visualizes the requester/runner mode switch as two rose icon badges
+/// joined by a traveling dash — styled to sit on the full-bleed maroon
+/// onboarding background.
 class DualModeVisual extends StatefulWidget {
   const DualModeVisual({super.key});
 
@@ -27,11 +26,8 @@ class _DualModeVisualState extends State<DualModeVisual>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final trackColor = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-
     return SizedBox(
-      height: 320,
+      height: 300,
       child: Stack(
         alignment: Alignment.center,
         children: [
@@ -39,21 +35,9 @@ class _DualModeVisualState extends State<DualModeVisual>
             padding: const EdgeInsets.symmetric(horizontal: 48),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _Node(
-                  icon: Icons.shopping_bag_rounded,
-                  label: 'Request',
-                  tileColor: isDark
-                      ? AppColors.darkSurfaceHigh
-                      : AppColors.lightSurface,
-                ),
-                _Node(
-                  icon: Icons.bolt_rounded,
-                  label: 'Earn',
-                  tileColor: isDark
-                      ? AppColors.darkSurfaceHigh
-                      : AppColors.lightSurface,
-                ),
+              children: const [
+                _Node(icon: Icons.shopping_bag_rounded, label: 'Request'),
+                _Node(icon: Icons.bolt_rounded, label: 'Earn'),
               ],
             ),
           ),
@@ -61,7 +45,11 @@ class _DualModeVisualState extends State<DualModeVisual>
             child: SizedBox(
               width: 200,
               height: 2,
-              child: DecoratedBox(decoration: BoxDecoration(color: trackColor)),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: AppColors.onMaroon.withValues(alpha: 0.2),
+                ),
+              ),
             ),
           ),
           AnimatedBuilder(
@@ -69,12 +57,16 @@ class _DualModeVisualState extends State<DualModeVisual>
             builder: (context, child) {
               final t = _controller.value;
               final dx = (t < 0.5 ? t * 2 : (1 - t) * 2) * 200 - 100;
-              return Transform.translate(
-                offset: Offset(dx, 0),
-                child: child,
-              );
+              return Transform.translate(offset: Offset(dx, 0), child: child);
             },
-            child: const RunnerMark(size: 44, animate: false),
+            child: Container(
+              width: 22,
+              height: 22,
+              decoration: const BoxDecoration(
+                color: AppColors.accentRose,
+                shape: BoxShape.circle,
+              ),
+            ),
           ),
         ],
       ),
@@ -83,11 +75,10 @@ class _DualModeVisualState extends State<DualModeVisual>
 }
 
 class _Node extends StatelessWidget {
-  const _Node({required this.icon, required this.label, required this.tileColor});
+  const _Node({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
-  final Color tileColor;
 
   @override
   Widget build(BuildContext context) {
@@ -96,15 +87,27 @@ class _Node extends StatelessWidget {
         Container(
           width: 72,
           height: 72,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: tileColor,
+            color: AppColors.accentRose,
             shape: BoxShape.circle,
-            border: Border.all(color: AppColors.amber.withValues(alpha: 0.3)),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primaryMaroonDeep.withValues(alpha: 0.35),
+                blurRadius: 14,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
-          child: Icon(icon, color: AppColors.amber, size: 30),
+          child: Icon(icon, color: AppColors.primaryMaroon, size: 30),
         ),
         const SizedBox(height: 12),
-        Text(label, style: Theme.of(context).textTheme.labelLarge),
+        Text(
+          label,
+          style: Theme.of(
+            context,
+          ).textTheme.labelLarge?.copyWith(color: AppColors.onMaroon),
+        ),
       ],
     );
   }

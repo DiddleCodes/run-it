@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 /// Concentric rings expanding outward from the brand mark — a recurring
 /// motif meant to read as "proximity" / "someone nearby", carried from
@@ -8,7 +9,7 @@ class RadarPulse extends StatefulWidget {
   const RadarPulse({
     super.key,
     required this.child,
-    this.color = const Color(0xFFF0A94E),
+    this.color = AppColors.primaryMaroon,
     this.maxExtent = 340,
     this.ringCount = 3,
   });

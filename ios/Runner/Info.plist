@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>RUN-It uses your camera to verify your student or runner ID, match a quick runner selfie against it, and scan pickup/delivery codes.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>RUN-It uses Face ID so you can sign back in quickly without re-entering a code every time.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

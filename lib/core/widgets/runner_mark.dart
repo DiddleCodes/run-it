@@ -22,7 +22,7 @@ class RunnerMark extends StatelessWidget {
         color: const Color(0xFF0B0A09),
         borderRadius: BorderRadius.circular(size * 0.28),
         border: Border.all(
-          color: AppColors.amber.withValues(alpha: 0.35),
+          color: AppColors.primaryMaroon.withValues(alpha: 0.35),
           width: 1,
         ),
       ),
@@ -39,7 +39,7 @@ class RunnerMark extends StatelessWidget {
           Icon(
             Icons.directions_run_rounded,
             size: size * 0.56,
-            color: AppColors.amber,
+            color: AppColors.primaryMaroon,
           ),
         ],
       ),
@@ -83,7 +83,7 @@ class _SpeedLines extends StatelessWidget {
           height: 2,
           width: width,
           decoration: BoxDecoration(
-            color: AppColors.amber.withValues(alpha: 0.6),
+            color: AppColors.primaryMaroon.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(2),
           ),
         )

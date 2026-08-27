@@ -1,84 +1,96 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 
-/// GeneralSans carries display/headline moments, Satoshi carries body and
-/// UI copy. Both are geometric-but-warm, which is what keeps the type feel
-/// distinct from the default-system look most template apps ship with.
+/// Fraunces carries display/headline moments — screen titles, KYC status
+/// headlines, the account-type choice — used sparingly (one or two lines
+/// per screen), never for body copy. Inter carries everything else: body
+/// text, labels, button text, form fields. JetBrains Mono is reserved for
+/// numeric/data display — OTP digits, prices, order codes — exposed via
+/// [AppTypography.mono] since Flutter's TextTheme has no dedicated slot
+/// for it.
 abstract class AppTypography {
   AppTypography._();
 
-  static const _display = 'GeneralSans';
-  static const _body = 'Satoshi';
-
   static TextTheme textTheme(Color primary, Color secondary) {
     return TextTheme(
-      displayLarge: TextStyle(
-        fontFamily: _display,
-        fontSize: 36,
-        height: 1.1,
+      displayLarge: GoogleFonts.fraunces(
+        fontSize: 40,
+        height: 1.08,
         fontWeight: FontWeight.w700,
-        letterSpacing: -0.6,
+        letterSpacing: -0.5,
         color: primary,
       ),
-      headlineLarge: TextStyle(
-        fontFamily: _display,
+      headlineLarge: GoogleFonts.fraunces(
         fontSize: 28,
-        height: 1.2,
-        fontWeight: FontWeight.w600,
-        letterSpacing: -0.4,
+        height: 1.15,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.3,
         color: primary,
       ),
-      headlineMedium: TextStyle(
-        fontFamily: _display,
+      headlineMedium: GoogleFonts.fraunces(
         fontSize: 22,
-        height: 1.25,
-        fontWeight: FontWeight.w600,
+        height: 1.2,
+        fontWeight: FontWeight.w700,
         letterSpacing: -0.2,
         color: primary,
       ),
-      titleLarge: TextStyle(
-        fontFamily: _display,
-        fontSize: 18,
+      titleLarge: GoogleFonts.inter(
+        fontSize: 17,
         height: 1.3,
         fontWeight: FontWeight.w600,
         color: primary,
       ),
-      bodyLarge: TextStyle(
-        fontFamily: _body,
+      bodyLarge: GoogleFonts.inter(
         fontSize: 16,
-        height: 1.5,
+        height: 1.55,
         fontWeight: FontWeight.w400,
         color: primary,
       ),
-      bodyMedium: TextStyle(
-        fontFamily: _body,
+      bodyMedium: GoogleFonts.inter(
         fontSize: 14,
-        height: 1.5,
+        height: 1.55,
         fontWeight: FontWeight.w400,
         color: secondary,
       ),
-      labelLarge: TextStyle(
-        fontFamily: _body,
-        fontSize: 15,
+      // CTA / primary button label.
+      labelLarge: GoogleFonts.inter(
+        fontSize: 16,
         height: 1.2,
         fontWeight: FontWeight.w600,
-        letterSpacing: 0.1,
         color: primary,
       ),
-      labelSmall: TextStyle(
-        fontFamily: _body,
-        fontSize: 12,
-        height: 1.3,
+      // Ghost / secondary button + inline link label.
+      labelMedium: GoogleFonts.inter(
+        fontSize: 14,
+        height: 1.4,
         fontWeight: FontWeight.w500,
-        letterSpacing: 0.3,
+        color: secondary,
+      ),
+      labelSmall: GoogleFonts.inter(
+        fontSize: 12,
+        height: 1.5,
+        fontWeight: FontWeight.w400,
+        letterSpacing: 0.1,
         color: secondary,
       ),
     );
   }
 
-  static TextTheme get dark =>
-      textTheme(AppColors.darkTextPrimary, AppColors.darkTextSecondary);
-
   static TextTheme get light =>
-      textTheme(AppColors.lightTextPrimary, AppColors.lightTextSecondary);
+      textTheme(AppColors.inkText, AppColors.mutedText);
+
+  /// Numeric/data face — OTP digit boxes, price displays, order/reference
+  /// codes. Called directly rather than through a TextTheme slot.
+  static TextStyle mono({
+    required double fontSize,
+    required Color color,
+    FontWeight fontWeight = FontWeight.w600,
+    double? letterSpacing,
+  }) => GoogleFonts.jetBrainsMono(
+    fontSize: fontSize,
+    color: color,
+    fontWeight: fontWeight,
+    letterSpacing: letterSpacing,
+  );
 }
