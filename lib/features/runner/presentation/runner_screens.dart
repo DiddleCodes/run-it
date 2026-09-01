@@ -394,7 +394,10 @@ class ActiveDeliveryScreen extends ConsumerWidget {
   const ActiveDeliveryScreen({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final active = ref.watch(runnerControllerProvider).activeDelivery;
+    // Task 10 performance audit: same rationale as EarningsScreen above —
+    // this screen only cares about activeDelivery, not e.g. the per-second
+    // offer countdown.
+    final active = ref.watch(runnerControllerProvider.select((s) => s.activeDelivery));
     if (active == null) return const RunnerHomeScreen();
     if (active.status == DeliveryStage.delivered) {
       return _DeliveryComplete(active: active);
@@ -497,7 +500,10 @@ class EarningsScreen extends ConsumerWidget {
   const EarningsScreen({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final earnings = ref.watch(runnerControllerProvider).earnings;
+    // Task 10 performance audit: .select() so this screen doesn't rebuild
+    // on unrelated session churn — most notably offerSecondsRemaining,
+    // which ticks every second while an offer is pending.
+    final earnings = ref.watch(runnerControllerProvider.select((s) => s.earnings));
     final total = earnings.fold(0, (sum, item) => sum + item.amount);
     return Scaffold(
       appBar: AppBar(title: const Text('Earnings')),

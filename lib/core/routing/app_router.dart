@@ -19,6 +19,7 @@ import '../../features/home/presentation/home_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/ordering/presentation/my_orders_screen.dart';
 import '../../features/ordering/presentation/ordering_screens.dart';
+import '../../features/payout/presentation/payout_account_screen.dart';
 import '../../features/profile/presentation/run_it_plus_screen.dart';
 import '../../features/profile/presentation/student_profile_screen.dart';
 import '../../features/runner/presentation/runner_jobs_screen.dart';
@@ -27,8 +28,13 @@ import '../../features/runner/presentation/runner_profile_screen.dart';
 import '../../features/runner/presentation/runner_scan_screen.dart';
 import '../../features/runner/presentation/runner_screens.dart';
 import '../../features/splash/presentation/splash_screen.dart';
+import '../../features/vendor/domain/vendor_dashboard_models.dart';
+import '../../features/vendor/presentation/restaurant_menu_screen.dart';
+import '../../features/vendor/presentation/restaurant_metrics_screen.dart';
+import '../../features/vendor/presentation/restaurant_orders_screen.dart';
+import '../../features/vendor/presentation/restaurant_profile_screen.dart';
+import '../../features/vendor/presentation/restaurant_profile_setup_screen.dart';
 import '../../features/vendor/presentation/vendor_application_screen.dart';
-import '../../features/vendor/presentation/vendor_pending_screen.dart';
 import '../../features/wallet/presentation/wallet_screen.dart';
 import '../widgets/app_nav_shell.dart';
 
@@ -62,16 +68,19 @@ String postBiometricDestination(AccountType accountType) =>
 /// degrades for a non-Verified runner (read-only Jobs, a Pending-review
 /// Profile state) rather than parking them on a standalone status screen.
 /// A returning student always has a passcode already (that's how they got
-/// a session), so they always land on home. A returning restaurant always
-/// lands on the Pending/Hand-off screen — there's no mobile "home" for a
-/// vendor to return to; once an application is submitted (or even if it
-/// somehow isn't — an edge case out of scope here, since the only way to
-/// have a session at all is to have completed the passcode step that
-/// immediately precedes the wizard), the only next mobile step is waiting
-/// on the approval email.
+/// a session), so they always land on home.
+///
+/// A returning restaurant always lands on Profile Setup (Task 12) — never
+/// directly on the shell — because that screen itself checks the real
+/// backend (`GET /vendors/me`) and either confirms an already-complete
+/// profile straight through to [AppRoutes.restaurantOrders] or, for the
+/// rare case of an app kill between wizard submission and finishing setup,
+/// picks up exactly where they left off. That self-healing check is
+/// simpler and more honest than caching a second local "is setup done"
+/// flag here that could drift from what the backend actually has.
 String postAuthDestination(UserProfile user) => switch (user.accountType) {
   AccountType.runner => AppRoutes.runnerHome,
-  AccountType.restaurant => AppRoutes.vendorPending,
+  AccountType.restaurant => AppRoutes.restaurantProfileSetup,
   AccountType.student => AppRoutes.home,
 };
 
@@ -108,8 +117,15 @@ abstract class AppRoutes {
   static const runnerScan = '/runner/scan';
   static const runnerMessages = '/runner/messages';
   static const runnerProfile = '/runner/profile';
+  static const payoutAccount = '/payout-account';
   static const vendorApplication = '/vendor/apply';
-  static const vendorPending = '/vendor/pending';
+  static const restaurantProfileSetup = '/vendor/profile-setup';
+  static const restaurantOrders = '/restaurant/orders';
+  static const restaurantMenu = '/restaurant/menu';
+  static const restaurantMenuAdd = '/restaurant/menu/add';
+  static const restaurantMenuEdit = '/restaurant/menu/edit';
+  static const restaurantMetrics = '/restaurant/metrics';
+  static const restaurantProfile = '/restaurant/profile';
 
   static const _publicRoutes = {
     splash,
@@ -155,9 +171,26 @@ abstract class AppRoutes {
     studentProfile,
   };
 
-  /// The entire vendor-application wizard + hand-off screen — the only
-  /// mobile surface a restaurant account has any business reaching.
-  static const _vendorOnlyRoutes = {vendorApplication, vendorPending};
+  /// The Restaurant Dashboard shell — Task 12's mirror of
+  /// [_runnerShellRoutes]/[_studentShellRoutes].
+  static const _restaurantShellRoutes = {
+    restaurantOrders,
+    restaurantMenu,
+    restaurantMetrics,
+    restaurantProfile,
+  };
+
+  /// Every mobile surface a restaurant account has any business reaching —
+  /// the wizard, first-run profile setup, the dashboard shell, and the
+  /// (not shell-wrapped, same treatment as the runner's Scan screen)
+  /// Add/Edit Menu Item screens.
+  static const _vendorOnlyRoutes = {
+    vendorApplication,
+    restaurantProfileSetup,
+    restaurantMenuAdd,
+    restaurantMenuEdit,
+    ..._restaurantShellRoutes,
+  };
 }
 
 /// Bridges Riverpod's auth state to go_router's `refreshListenable`, so a
@@ -221,12 +254,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           }
         case AccountType.restaurant:
           // A restaurant account has no business on the runner or student
-          // shells — its only mobile surface is the vendor wizard/pending
-          // screen (see `postAuthDestination`).
+          // shells — its own mobile surface is the vendor wizard, first-run
+          // profile setup, and the Restaurant Dashboard shell (Task 12).
           if (AppRoutes._runnerShellRoutes.contains(loc) ||
               AppRoutes._runnerVerifiedOnlyRoutes.contains(loc) ||
               AppRoutes._studentShellRoutes.contains(loc)) {
-            return AppRoutes.vendorPending;
+            return AppRoutes.restaurantProfileSetup;
           }
         case AccountType.student:
           // A student account has no business on any runner or vendor
@@ -363,9 +396,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.runItPlus,
         builder: (context, state) => const RunItPlusScreen(),
       ),
+      // Task 14: `extra` is the real vendor id tapped on Home — `null`
+      // (e.g. the closing screen's "Order again") means "whatever vendor
+      // is already selected", not "pick one for me" — see
+      // EateryMenuScreen's own doc comment.
       GoRoute(
         path: AppRoutes.menu,
-        builder: (context, state) => const EateryMenuScreen(),
+        builder: (context, state) => EateryMenuScreen(vendorId: state.extra as String?),
       ),
       GoRoute(
         path: AppRoutes.basket,
@@ -419,12 +456,47 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             const RunnerShell(child: RunnerProfileScreen()),
       ),
       GoRoute(
+        path: AppRoutes.payoutAccount,
+        builder: (context, state) => const PayoutAccountScreen(),
+      ),
+      GoRoute(
         path: AppRoutes.vendorApplication,
         builder: (context, state) => const VendorApplicationScreen(),
       ),
       GoRoute(
-        path: AppRoutes.vendorPending,
-        builder: (context, state) => const VendorPendingScreen(),
+        path: AppRoutes.restaurantProfileSetup,
+        builder: (context, state) => const RestaurantProfileSetupScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.restaurantOrders,
+        builder: (context, state) =>
+            const RestaurantShell(child: RestaurantOrdersScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.restaurantMenu,
+        builder: (context, state) =>
+            const RestaurantShell(child: RestaurantMenuScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.restaurantMenuAdd,
+        builder: (context, state) => const RestaurantMenuEditScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.restaurantMenuEdit,
+        builder: (context, state) {
+          final extra = state.extra;
+          return RestaurantMenuEditScreen(item: extra is VendorMenuItem ? extra : null);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.restaurantMetrics,
+        builder: (context, state) =>
+            const RestaurantShell(child: RestaurantMetricsScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.restaurantProfile,
+        builder: (context, state) =>
+            const RestaurantShell(child: RestaurantProfileScreen()),
       ),
     ],
   );

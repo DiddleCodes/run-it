@@ -7,12 +7,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../../core/network/api_exception.dart';
+import '../../../core/network/demo_identity_service.dart';
+import '../../../core/network/orders_repository.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../ordering/application/order_tracking_controller.dart';
 import '../application/runner_controller.dart';
 import '../domain/runner_models.dart';
+import 'delivery_proof_capture_screen.dart';
 
 /// Which scan is expected right now, derived from the active delivery's
 /// own status — never a context-blind generic prompt when there IS a job
@@ -50,6 +55,7 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
   bool _handled = false;
   bool _torchOn = false;
   bool _success = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -72,27 +78,136 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
 
   void _handleDetect(BarcodeCapture capture) {
     if (_handled || capture.barcodes.isEmpty) return;
-    _completeScan();
+    final code = capture.barcodes.first.rawValue;
+    if (code == null || code.isEmpty) return;
+    _completeScan(code);
   }
 
-  Future<void> _completeScan() async {
+  /// Task 11: the scanned/entered value is now checked against the real
+  /// backend before anything advances — no optimistic UI. A mismatch (or
+  /// rate-limit) shows a clear error and leaves the scanner ready to try
+  /// again; it never silently "succeeds" the way the pre-Task-11 demo did.
+  Future<void> _completeScan(String code) async {
     if (_handled) return;
-    setState(() => _handled = true);
+    setState(() {
+      _handled = true;
+      _errorMessage = null;
+    });
     unawaited(_controller.stop());
     HapticFeedback.mediumImpact();
+
+    final active = ref.read(runnerControllerProvider).activeDelivery;
+    final orderId = ref.read(orderTrackingProvider).orderId;
+    final notifier = ref.read(runnerControllerProvider.notifier);
+
+    if (active == null || orderId == null) {
+      // Nothing real to verify against — same "just show success" fallback
+      // as before, since there is no active delivery/order in play.
+      await _showSuccessAndClose();
+      return;
+    }
+
+    final isPickup = active.status == DeliveryStage.accepted;
+    final verified = isPickup
+        ? await _verifyPickup(orderId, code)
+        : await _verifyDelivery(orderId, code);
+
+    if (!verified) {
+      if (!mounted) return;
+      setState(() => _handled = false);
+      unawaited(_controller.start());
+      return;
+    }
+
+    if (isPickup) {
+      notifier.confirmPickup();
+      ref.read(orderTrackingProvider.notifier).markPickedUp();
+    } else {
+      notifier.confirmDropoff();
+    }
+    await _showSuccessAndClose();
+  }
+
+  /// [OrderTrackingController]'s session and this runner's own session are
+  /// two independent local simulations with no real backend order registry
+  /// linking them (see `DemoIdentityService`'s doc comment) — reading
+  /// `orderTrackingProvider` here is the documented bridge for testing both
+  /// sides of one order end to end within a single app session. The human
+  /// holding the scanner is signed in under their own session, not this
+  /// demo runner identity — see `DemoIdentityService.mintTokenFor`'s doc
+  /// comment for why verification authenticates as the demo identity.
+  Future<String> _runnerToken() async {
+    final demoIdentity = ref.read(demoIdentityServiceProvider);
+    final runnerUserId = await demoIdentity.ensureRunnerUserId();
+    return demoIdentity.mintTokenFor(userId: runnerUserId, accountType: 'runner');
+  }
+
+  Future<bool> _verifyPickup(String orderId, String code) async {
+    try {
+      final token = await _runnerToken();
+      await ref
+          .read(ordersRepositoryProvider)
+          .verifyPickup(orderId: orderId, code: code, token: token);
+      return true;
+    } on ApiException catch (e) {
+      return _showVerificationError(e.message);
+    } catch (_) {
+      return _showVerificationError(
+        "Couldn't reach the server. Check your connection and try again.",
+      );
+    }
+  }
+
+  Future<bool> _verifyDelivery(String orderId, String code) async {
+    try {
+      final token = await _runnerToken();
+      final outcome = await ref
+          .read(ordersRepositoryProvider)
+          .verifyDelivery(orderId: orderId, code: code, token: token);
+      // Only a fully successful release reflects real confirmed backend
+      // state (no optimistic UI on order/payment state) — a stuck payout
+      // leg still means the PIN matched, but the student's own tracking
+      // session must not show "Delivered" until the backend actually says
+      // so.
+      if (outcome == DeliveryVerificationResult.delivered) {
+        ref.read(orderTrackingProvider.notifier).markDelivered();
+      }
+      _pendingSuccessMessage = outcome == DeliveryVerificationResult.delivered
+          ? 'Delivery confirmed — payout sent.'
+          : 'Delivery confirmed — payout processing.';
+      return true;
+    } on ApiException catch (e) {
+      return _showVerificationError(e.message);
+    } catch (_) {
+      return _showVerificationError(
+        "Couldn't reach the server. Check your connection and try again.",
+      );
+    }
+  }
+
+  String? _pendingSuccessMessage;
+
+  bool _showVerificationError(String message) {
+    if (!mounted) return false;
+    setState(() => _errorMessage = message);
+    ref.read(appNotificationProvider.notifier).error(message);
+    // Auto-dismisses the on-screen overlay so it never blocks the frame
+    // indefinitely — the toast above already gives a persistent record.
+    Future<void>.delayed(const Duration(milliseconds: 1800), () {
+      if (mounted && _errorMessage == message) setState(() => _errorMessage = null);
+    });
+    return false;
+  }
+
+  Future<void> _showSuccessAndClose() async {
+    if (!mounted) return;
     setState(() => _success = true);
     await Future<void>.delayed(const Duration(milliseconds: 900));
     if (!mounted) return;
-    final active = ref.read(runnerControllerProvider).activeDelivery;
-    if (active != null) {
-      final notifier = ref.read(runnerControllerProvider.notifier);
-      if (active.status == DeliveryStage.accepted) {
-        notifier.confirmPickup();
-      } else {
-        notifier.confirmDropoff();
-      }
+    final message = _pendingSuccessMessage;
+    if (message != null) {
+      ref.read(appNotificationProvider.notifier).success(message);
     }
-    if (!mounted) return;
     _close();
   }
 
@@ -104,12 +219,29 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
       ),
       builder: (sheetContext) => _ManualCodeSheet(
-        onSubmit: () {
+        onSubmit: (code) {
           Navigator.pop(sheetContext);
-          _completeScan();
+          _completeScan(code);
         },
       ),
     );
+  }
+
+  void _submitPhotoProofInstead() {
+    final orderId = ref.read(orderTrackingProvider).orderId;
+    if (orderId == null) {
+      _stubAction('No active delivery to submit proof for.');
+      return;
+    }
+    Navigator.of(context)
+        .push<bool>(
+          MaterialPageRoute(builder: (_) => DeliveryProofCaptureScreen(orderId: orderId)),
+        )
+        .then((submitted) {
+          if (!mounted || submitted != true) return;
+          ref.read(runnerControllerProvider.notifier).confirmDropoff();
+          _close();
+        });
   }
 
   void _stubAction(String message) =>
@@ -117,8 +249,13 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final active = ref.watch(runnerControllerProvider).activeDelivery;
+    // Task 10 performance audit: this screen has its own continuously
+    // animating scan-line (see _ScanFrameOverlay) — not rebuilding it on
+    // unrelated session churn (e.g. the per-second offer countdown) matters
+    // more here than most screens.
+    final active = ref.watch(runnerControllerProvider.select((s) => s.activeDelivery));
     final scanContext = scanContextFor(active);
+    final isDeliveryStep = active != null && active.status != DeliveryStage.accepted;
 
     return Scaffold(
       backgroundColor: AppColors.scannerBackground,
@@ -137,6 +274,13 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
                 ),
                 const SizedBox(height: 10),
                 _EnterCodePill(onTap: _handled ? null : _enterManually),
+                // Fallback when the student's phone is unavailable (Task
+                // 11) — delivery step only, since a missed pickup code has
+                // no equivalent "just take a photo" resolution.
+                if (isDeliveryStep) ...[
+                  const SizedBox(height: 8),
+                  _PhotoProofPill(onTap: _handled ? null : _submitPhotoProofInstead),
+                ],
                 const Spacer(),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
@@ -165,6 +309,7 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
             ),
           ),
           if (_success) const _ScanSuccessOverlay(),
+          if (_errorMessage != null) _ScanErrorOverlay(message: _errorMessage!),
         ],
       ),
     );
@@ -235,6 +380,46 @@ class _EnterCodePill extends StatelessWidget {
               style: Theme.of(
                 context,
               ).textTheme.labelMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Task 11's delivery-step fallback — visible only when a student's phone
+/// is unavailable and no PIN can be entered.
+class _PhotoProofPill extends StatelessWidget {
+  const _PhotoProofPill({required this.onTap});
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.pill),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 280),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: .5),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(CupertinoIcons.camera, size: 15, color: Colors.white),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                "Can't get the code? Submit photo proof",
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
             ),
           ],
         ),
@@ -382,28 +567,39 @@ class _ScanFrameOverlayState extends State<_ScanFrameOverlay>
                 child: Stack(
                   children: [
                     CustomPaint(size: Size(frame, frame), painter: _CornerBracketsPainter()),
+                    // Task 10 performance audit: this is the one part of the
+                    // scan screen repainting on every tick (1.8s repeat,
+                    // indefinitely for as long as the screen is open) —
+                    // RepaintBoundary wraps the moving content (not
+                    // Positioned itself: Positioned is a ParentDataWidget
+                    // and must stay Stack's direct child, or it can't hand
+                    // its offset to RenderStack) so that repaint stays
+                    // scoped to the line, off the static corner brackets and
+                    // the live camera preview beneath this overlay.
                     AnimatedBuilder(
                       animation: _controller,
                       builder: (context, _) => Positioned(
                         top: 10 + _controller.value * (frame - 20),
                         left: 10,
                         right: 10,
-                        child: Container(
-                          height: 2.5,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                AppColors.scannerGreen.withValues(alpha: 0),
-                                AppColors.scannerGreen,
-                                AppColors.scannerGreen.withValues(alpha: 0),
+                        child: RepaintBoundary(
+                          child: Container(
+                            height: 2.5,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  AppColors.scannerGreen.withValues(alpha: 0),
+                                  AppColors.scannerGreen,
+                                  AppColors.scannerGreen.withValues(alpha: 0),
+                                ],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.scannerGreen.withValues(alpha: .7),
+                                  blurRadius: 6,
+                                ),
                               ],
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.scannerGreen.withValues(alpha: .7),
-                                blurRadius: 6,
-                              ),
-                            ],
                           ),
                         ),
                       ),
@@ -496,9 +692,70 @@ class _ScanSuccessOverlay extends StatelessWidget {
   }
 }
 
+/// Task 11's "clear error state on mismatch — not a silent failure":
+/// same scale-in language as [_ScanSuccessOverlay], red/X instead of
+/// green/check, plus the message itself so it's legible without relying
+/// solely on the toast.
+class _ScanErrorOverlay extends StatelessWidget {
+  const _ScanErrorOverlay({required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.black.withValues(alpha: .55),
+      alignment: Alignment.center,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutBack,
+        builder: (context, value, child) =>
+            Transform.scale(scale: value, child: child),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.error,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.error.withValues(alpha: .5),
+                    blurRadius: 24,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                CupertinoIcons.xmark,
+                color: Colors.white,
+                size: 40,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                message,
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ManualCodeSheet extends StatefulWidget {
   const _ManualCodeSheet({required this.onSubmit});
-  final VoidCallback onSubmit;
+  final ValueChanged<String> onSubmit;
 
   @override
   State<_ManualCodeSheet> createState() => _ManualCodeSheetState();
@@ -542,9 +799,9 @@ class _ManualCodeSheetState extends State<_ManualCodeSheet> {
           TextField(
             controller: _controller,
             autofocus: true,
-            textCapitalization: TextCapitalization.characters,
-            decoration: const InputDecoration(hintText: 'e.g. RI-2048'),
-            onSubmitted: (_) => widget.onSubmit(),
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(hintText: 'e.g. 4821'),
+            onSubmitted: (_) => widget.onSubmit(_controller.text.trim()),
           ),
           const SizedBox(height: 14),
           ValueListenableBuilder<TextEditingValue>(
@@ -557,7 +814,9 @@ class _ManualCodeSheetState extends State<_ManualCodeSheet> {
                   foregroundColor: AppColors.onMaroon,
                   minimumSize: const Size.fromHeight(48),
                 ),
-                onPressed: value.text.trim().isEmpty ? null : widget.onSubmit,
+                onPressed: value.text.trim().isEmpty
+                    ? null
+                    : () => widget.onSubmit(value.text.trim()),
                 child: const Text('Confirm'),
               ),
             ),

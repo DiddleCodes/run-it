@@ -216,10 +216,14 @@ class RunnerController extends Notifier<RunnerSession> {
         : _GeofenceCheck.outside;
   }
 
-  /// Campus-scoped: only ever draws a job from the eateries on the
-  /// runner's own campus. If that campus has no active vendors, this
-  /// resolves to `noJobsInZone` and never schedules an offer — a runner
-  /// in one campus can never be offered a job tied to another.
+  /// Draws a job from every currently active vendor (Task 14: real vendor
+  /// data via [campusEateriesProvider], the same list Home's browsing pulls
+  /// from) — the backend has no per-vendor campus assignment yet, so there
+  /// is no real subset to scope this to. The synthesized job is still
+  /// tagged with the runner's OWN campusId below, purely so the existing
+  /// cross-campus defense-in-depth in `acceptOffer` keeps working. If there
+  /// are no active vendors at all, this resolves to `noJobsInZone` and
+  /// never schedules an offer.
   Future<void> _scheduleOffer() async {
     _offerDelay?.cancel();
     if (state.status.availability != RunnerAvailability.online ||
@@ -230,9 +234,7 @@ class RunnerController extends Notifier<RunnerSession> {
     final campusId = ref.read(authControllerProvider)?.user.campusId;
     if (campusId == null) return;
 
-    final eateries = await ref
-        .read(orderingRepositoryProvider)
-        .getEateries(campusId: campusId);
+    final eateries = await ref.read(campusEateriesProvider.future);
     if (_disposed) return;
     if (state.status.availability != RunnerAvailability.online ||
         state.activeDelivery != null ||

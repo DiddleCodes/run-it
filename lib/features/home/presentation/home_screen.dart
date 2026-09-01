@@ -1,14 +1,31 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/network/vendors_repository.dart';
 import '../../../core/routing/app_router.dart';
+import '../../vendor/domain/vendor_dashboard_models.dart' show VendorCategoryOption;
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/route_line.dart';
+import '../../../core/widgets/skeleton.dart';
 import '../../auth/application/auth_controller.dart';
+import '../../ordering/application/ordering_providers.dart';
+import '../../ordering/domain/ordering_models.dart';
+import '../../ordering/presentation/widgets/ordering_components.dart' show MenuImagePlaceholder;
+
+/// Task 14/15: the backend's controlled category vocabulary (`GET
+/// /vendors/categories`) — every vendor's own category is validated
+/// against this same list at signup, so a chip here is always something a
+/// vendor could actually be registered under, never a fragmented
+/// near-duplicate. Shows every category, not just ones with a vendor in
+/// them yet — an empty one just renders `_NoVendorsState`'s "No vendors in
+/// this category yet" rather than the chip not existing at all.
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -18,17 +35,48 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  int _category = 0;
-  static const _categories = <(String, IconData)>[
-    ('All', Icons.grid_view_rounded),
-    ('Meals', Icons.restaurant_rounded),
-    ('Snacks', Icons.cookie_rounded),
-    ('Drinks', Icons.local_drink_rounded),
-  ];
+  late final _searchController = TextEditingController(text: ref.read(vendorSearchQueryProvider));
+  Timer? _searchDebounce;
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // A keystroke-per-request would spam GET /vendors — this waits for a
+  // short pause in typing before actually updating the shared search
+  // query provider that drives the network fetch.
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      ref.read(vendorSearchQueryProvider.notifier).state = value;
+    });
+  }
+
+  Future<void> _orderNow() async {
+    final vendors = await ref.read(campusEateriesProvider.future);
+    if (!mounted) return;
+    if (vendors.isEmpty) {
+      _notify(context, 'No vendors are available right now — check back soon.');
+      return;
+    }
+    _openMenu(vendors.first.id);
+  }
+
+  void _openMenu(String vendorId) {
+    ref.read(selectedVendorIdProvider.notifier).state = vendorId;
+    context.push(AppRoutes.menu, extra: vendorId);
+  }
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final category = ref.watch(vendorCategoryFilterProvider);
+    final search = ref.watch(vendorSearchQueryProvider);
+    final categoriesAsync = ref.watch(vendorCategoriesProvider);
+    final vendorsAsync = ref.watch(campusEateriesProvider);
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,
       body: SafeArea(
@@ -55,7 +103,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     const SizedBox(height: 6),
                     Text(
                       'Good food. Closer than you think.',
-                      style: textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: AppColors.mutedText,
+                      ),
                     ),
                   ],
                 ),
@@ -65,71 +115,98 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               padding: const EdgeInsets.fromLTRB(22, 18, 22, 0),
               sliver: SliverToBoxAdapter(
                 child: _Search(
-                  onFilterTap: () => _notify(context, 'Filters are coming soon.'),
+                  controller: _searchController,
+                  onChanged: _onSearchChanged,
+                  onFilterTap: () =>
+                      _notify(context, 'Filters are coming soon.'),
                 ),
               ),
             ),
             SliverToBoxAdapter(
-              child: SizedBox(
-                height: 44,
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(22, 16, 22, 8),
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _categories.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 10),
-                  itemBuilder: (_, index) => _Category(
-                    item: _categories[index],
-                    selected: _category == index,
-                    onTap: () => setState(() => _category = index),
-                  ),
+              // Naturally-sized scroller, not a hardcoded height — see the
+              // vendor-card fix below and this task's overflow audit: a
+              // fixed cross-axis extent on a horizontal scroller of chips
+              // with real text has nowhere to grow at larger text scale.
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(22, 16, 22, 8),
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _Category(
+                      label: 'All',
+                      icon: Icons.grid_view_rounded,
+                      selected: category == null,
+                      onTap: () => ref.read(vendorCategoryFilterProvider.notifier).state = null,
+                    ),
+                    // The backend's controlled category vocabulary (Task
+                    // 15) — simply omitted while loading/empty/erroring —
+                    // "All" alone is still a usable filter bar.
+                    for (final option in categoriesAsync.valueOrNull ?? const <VendorCategoryOption>[]) ...[
+                      const SizedBox(width: 10),
+                      _Category(
+                        label: option.label,
+                        selected: category == option.label,
+                        onTap: () => ref.read(vendorCategoryFilterProvider.notifier).state = option.label,
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
               sliver: SliverToBoxAdapter(
-                child: _CampusPickCard(
-                  onOrderNow: () => context.push(AppRoutes.menu),
-                ),
+                child: _CampusPickCard(onOrderNow: _orderNow),
               ),
             ),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(22, 28, 22, 12),
               sliver: SliverToBoxAdapter(
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Popular around campus',
-                        style: textTheme.titleLarge?.copyWith(color: AppColors.inkText),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => _notify(context, 'A full vendor list is coming soon.'),
-                      child: const Text('See all'),
-                    ),
-                  ],
+                child: Text(
+                  'Popular around campus',
+                  style: textTheme.titleLarge?.copyWith(
+                    color: AppColors.inkText,
+                  ),
                 ),
               ),
             ),
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 182,
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(22, 0, 22, 124),
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _vendors.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 14),
-                  itemBuilder: (context, index) => GestureDetector(
-                    onTap: () => context.push(AppRoutes.menu),
-                    child: SizedBox(
-                      width: 150,
-                      child: _Vendor(vendor: _vendors[index])
-                          .animate(delay: (90 * index).ms)
-                          .fadeIn(duration: 360.ms)
-                          .moveX(begin: 12, end: 0, duration: 360.ms),
-                    ),
-                  ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(22, 0, 22, 124),
+              sliver: SliverToBoxAdapter(
+                child: vendorsAsync.when(
+                  loading: () => const _VendorRowSkeleton(),
+                  error: (_, _) => const _VendorsErrorState(),
+                  data: (vendors) => vendors.isEmpty
+                      ? _NoVendorsState(hasSearch: search.trim().isNotEmpty, hasCategory: category != null)
+                      // A horizontal ListView needs a bounded cross-axis
+                      // height from its parent — which used to be a
+                      // hardcoded SizedBox, the exact anti-pattern behind
+                      // this session's recurring overflow bug (fine at
+                      // default text scale, overflows once Dynamic Type
+                      // grows the card's name/rating text). A
+                      // SingleChildScrollView instead takes whatever
+                      // height its Row of cards naturally needs.
+                      : SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (var index = 0; index < vendors.length; index++) ...[
+                                if (index > 0) const SizedBox(width: 14),
+                                GestureDetector(
+                                  onTap: () => _openMenu(vendors[index].id),
+                                  child: SizedBox(
+                                    width: 150,
+                                    child: _Vendor(vendor: vendors[index])
+                                        .animate(delay: (90 * index).ms)
+                                        .fadeIn(duration: 360.ms)
+                                        .moveX(begin: 12, end: 0, duration: 360.ms),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                 ),
               ),
             ),
@@ -166,8 +243,14 @@ class _Header extends ConsumerWidget {
           // renders the icon in maroon — replaces the earlier generic
           // Material shopping-bag placeholder.
           child: ColorFiltered(
-            colorFilter: const ColorFilter.mode(AppColors.onMaroon, BlendMode.srcIn),
-            child: Image.asset('assets/images/runit_icon_mark.png', fit: BoxFit.contain),
+            colorFilter: const ColorFilter.mode(
+              AppColors.onMaroon,
+              BlendMode.srcIn,
+            ),
+            child: Image.asset(
+              'assets/images/runit_icon_mark.png',
+              fit: BoxFit.contain,
+            ),
           ),
         ),
         const SizedBox(width: 12),
@@ -177,9 +260,8 @@ class _Header extends ConsumerWidget {
             children: [
               Text(
                 'Delivering to',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.mutedText,
-                ),
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: AppColors.mutedText),
               ),
               const SizedBox(height: 2),
               Row(
@@ -204,9 +286,8 @@ class _Header extends ConsumerWidget {
           ),
         ),
         const SizedBox(width: 8),
-        _IconBadgeButton(
+        _HeaderIconButton(
           icon: CupertinoIcons.bell,
-          badged: true,
           onTap: () => ref
               .read(appNotificationProvider.notifier)
               .info('Notifications are coming soon.'),
@@ -221,11 +302,10 @@ class _Header extends ConsumerWidget {
   }
 }
 
-class _IconBadgeButton extends StatelessWidget {
-  const _IconBadgeButton({required this.icon, required this.onTap, this.badged = false});
+class _HeaderIconButton extends StatelessWidget {
+  const _HeaderIconButton({required this.icon, required this.onTap});
   final IconData icon;
   final VoidCallback onTap;
-  final bool badged;
 
   @override
   Widget build(BuildContext context) {
@@ -241,22 +321,7 @@ class _IconBadgeButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(15),
           border: Border.all(color: AppColors.borderSubtle),
         ),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Icon(icon, color: AppColors.inkText, size: 21),
-            if (badged)
-              Positioned(
-                right: -1,
-                top: -1,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
-                ),
-              ),
-          ],
-        ),
+        child: Icon(icon, color: AppColors.inkText, size: 21),
       ),
     );
   }
@@ -289,9 +354,8 @@ class _AvatarButton extends StatelessWidget {
             ),
             child: Text(
               name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase(),
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(color: AppColors.primaryMaroon),
+              style: Theme.of(context).textTheme.labelLarge
+                  ?.copyWith(color: AppColors.primaryMaroon),
             ),
           ),
           Positioned(
@@ -314,7 +378,9 @@ class _AvatarButton extends StatelessWidget {
 }
 
 class _Search extends StatelessWidget {
-  const _Search({required this.onFilterTap});
+  const _Search({required this.controller, required this.onChanged, required this.onFilterTap});
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
   final VoidCallback onFilterTap;
   @override
   Widget build(BuildContext context) => Container(
@@ -330,10 +396,18 @@ class _Search extends StatelessWidget {
         const Icon(CupertinoIcons.search, color: AppColors.mutedText, size: 20),
         const SizedBox(width: 12),
         Expanded(
-          child: Text(
-            'Search meals, stores, or cravings...',
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
+          child: TextField(
+            controller: controller,
+            onChanged: onChanged,
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: AppColors.inkText),
+            decoration: InputDecoration(
+              isCollapsed: true,
+              border: InputBorder.none,
+              hintText: 'Search meals, stores, or cravings...',
+              hintStyle: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: AppColors.mutedText),
+            ),
           ),
         ),
         InkWell(
@@ -354,8 +428,17 @@ class _Search extends StatelessWidget {
 }
 
 class _Category extends StatelessWidget {
-  const _Category({required this.item, required this.selected, required this.onTap});
-  final (String, IconData) item;
+  const _Category({
+    required this.label,
+    this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+  final String label;
+  // Only "All" gets a decorative icon — vendor categories are an
+  // open-ended, backend-managed vocabulary (Task 15), so there's no
+  // reliable icon to map an arbitrary one to without guessing.
+  final IconData? icon;
   final bool selected;
   final VoidCallback onTap;
   @override
@@ -373,16 +456,21 @@ class _Category extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            item.$2,
-            size: 18,
-            color: selected ? AppColors.onMaroon : AppColors.mutedText,
-          ),
-          const SizedBox(width: 8),
+          if (icon != null) ...[
+            Icon(
+              icon,
+              size: 18,
+              color: selected ? AppColors.onMaroon : AppColors.mutedText,
+            ),
+            const SizedBox(width: 8),
+          ],
           Text(
-            item.$1,
-            style: Theme.of(context).textTheme.labelLarge
-                ?.copyWith(color: selected ? AppColors.onMaroon : AppColors.inkText),
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: selected ? AppColors.onMaroon : AppColors.inkText,
+            ),
           ),
         ],
       ),
@@ -455,7 +543,10 @@ class _CampusPickCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 5,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primaryMaroon,
                           borderRadius: BorderRadius.circular(8),
@@ -484,9 +575,10 @@ class _CampusPickCard extends StatelessWidget {
                         width: 220,
                         child: Text(
                           'Fast drops from the spots you already love.',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.white.withValues(alpha: .72),
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Colors.white.withValues(alpha: .72),
+                              ),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -494,7 +586,10 @@ class _CampusPickCard extends StatelessWidget {
                         onTap: onOrderNow,
                         borderRadius: BorderRadius.circular(AppRadius.pill),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 11,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.gold,
                             borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -504,10 +599,11 @@ class _CampusPickCard extends StatelessWidget {
                             children: [
                               Text(
                                 'Order Now',
-                                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                  color: AppColors.primaryMaroonDeep,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                                style: Theme.of(context).textTheme.labelLarge
+                                    ?.copyWith(
+                                      color: AppColors.primaryMaroonDeep,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                               ),
                               const SizedBox(width: 6),
                               const Icon(
@@ -530,19 +626,14 @@ class _CampusPickCard extends StatelessWidget {
           .moveY(begin: 10, end: 0, duration: 500.ms);
 }
 
-typedef _VendorData = (String, String, String, int);
-const _vendors = <_VendorData>[
-  ('Tantalizers', 'Jollof rice · Chicken · Sides', '12 min', 0xFFE7B957),
-  ('Café 167', 'Coffee · Pastries · Breakfast', '8 min', 0xFFD8A58B),
-  ('Mama’s Kitchen', 'Local bowls · Soups · Swallows', '18 min', 0xFFA9B8A1),
-];
-
 /// A vertical card sized for the horizontal "Popular around campus"
-/// scroller — thumbnail on top, name/rating below, matching the reference
-/// layout rather than the old full-width list row.
+/// scroller — thumbnail on top, name/blurb below. Real vendor data (Task
+/// 14) has no star rating yet (see `Eatery.rating`'s own doc comment), so
+/// this shows the vendor's real blurb (description or category) where a
+/// fabricated "4.8" used to sit.
 class _Vendor extends StatelessWidget {
   const _Vendor({required this.vendor});
-  final _VendorData vendor;
+  final Eatery vendor;
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(10),
@@ -552,56 +643,112 @@ class _Vendor extends StatelessWidget {
       border: Border.all(color: AppColors.borderSubtle),
     ),
     child: Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          height: 84,
-          width: double.infinity,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: Color(vendor.$4),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Icon(
-            vendor.$1 == 'Café 167'
-                ? Icons.coffee_rounded
-                : Icons.restaurant_rounded,
-            size: 30,
-            color: AppColors.primaryMaroonDeep,
-          ),
-        ),
+        MenuImagePlaceholder(seed: vendor.id, imageUrl: vendor.bannerUrl, size: 130),
         const SizedBox(height: 9),
         Text(
-          vendor.$1,
+          vendor.name,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: Theme.of(context).textTheme.titleLarge
               ?.copyWith(fontSize: 15, color: AppColors.inkText),
         ),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            const Icon(Icons.star_rounded, size: 14, color: AppColors.primaryMaroon),
-            const SizedBox(width: 2),
-            Text(
-              '4.8',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.inkText),
+        if (vendor.blurb != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            vendor.blurb!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: AppColors.mutedText),
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
+/// Loading placeholder for "Popular around campus" — reuses [SkeletonBox]
+/// (Task 10) shaped like [_Vendor]'s own layout, rather than a bare
+/// spinner or a blank gap while `GET /vendors` resolves.
+class _VendorRowSkeleton extends StatelessWidget {
+  const _VendorRowSkeleton();
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    child: Row(
+      children: [
+        for (var i = 0; i < 3; i++) ...[
+          if (i > 0) const SizedBox(width: 14),
+          SizedBox(
+            width: 130,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                SkeletonBox(width: 130, height: 130, borderRadius: 16),
+                SizedBox(height: 9),
+                SkeletonBox(width: 90, height: 15),
+                SizedBox(height: 6),
+                SkeletonBox(width: 60, height: 12),
+              ],
             ),
-            const SizedBox(width: 6),
-            const Icon(Icons.circle, size: 3, color: AppColors.mutedText),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                vendor.$3,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(
-                  context,
-                ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
-              ),
-            ),
-          ],
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
+class _VendorsErrorState extends StatelessWidget {
+  const _VendorsErrorState();
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 20),
+    child: Row(
+      children: [
+        const Icon(Icons.error_outline_rounded, size: 20, color: AppColors.error),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            "Couldn't load vendors. Pull down to try again.",
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
+          ),
         ),
       ],
     ),
   );
+}
+
+/// Distinguishes "your search matched nothing" from "this category is
+/// genuinely empty" from "there's simply nothing here yet" — a single
+/// generic message would leave a student guessing whether to try a
+/// different word or a different filter.
+class _NoVendorsState extends StatelessWidget {
+  const _NoVendorsState({required this.hasSearch, required this.hasCategory});
+  final bool hasSearch;
+  final bool hasCategory;
+  @override
+  Widget build(BuildContext context) {
+    final message = hasSearch
+        ? 'No vendors found for your search.'
+        : hasCategory
+        ? 'No vendors in this category yet.'
+        : 'No vendors around campus yet.';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const RouteLineEmptyIllustration(width: 160, height: 90),
+          const SizedBox(height: 10),
+          Text(
+            message,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
+          ),
+        ],
+      ),
+    );
+  }
 }

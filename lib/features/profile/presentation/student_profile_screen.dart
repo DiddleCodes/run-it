@@ -27,10 +27,15 @@ class StudentProfileScreen extends ConsumerWidget {
     final user = ref.watch(authControllerProvider)?.user;
     if (user == null) return const SizedBox.shrink();
     final history = ref.watch(orderHistoryProvider);
-    final activeSession = ref.watch(orderTrackingProvider);
-    final ordersCount = history.length + (activeSession.isActive ? 1 : 0);
-    final totalSpent = history.fold(0, (sum, e) => sum + e.total) +
-        (activeSession.isActive ? activeSession.total : 0);
+    // Task 10 performance audit: this screen only cares whether an order is
+    // active and, if so, its total — not every intermediate stage change,
+    // which is what a plain watch of the whole session would rebuild on.
+    final (isActive, activeTotal) = ref.watch(
+      orderTrackingProvider.select((s) => (s.isActive, s.total)),
+    );
+    final ordersCount = history.length + (isActive ? 1 : 0);
+    final totalSpent =
+        history.fold(0, (sum, e) => sum + e.total) + (isActive ? activeTotal : 0);
 
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,

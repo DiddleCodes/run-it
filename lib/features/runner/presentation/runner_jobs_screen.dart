@@ -9,6 +9,7 @@ import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/skeleton.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../auth/domain/auth_models.dart';
 import '../../ordering/presentation/widgets/ordering_components.dart';
@@ -293,7 +294,10 @@ class _AvailableTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final jobs = ref.watch(availableJobsProvider);
     return jobs.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const Padding(
+        padding: EdgeInsets.fromLTRB(22, 14, 22, 24),
+        child: SkeletonList(count: 3),
+      ),
       error: (error, stack) => const _EmptyState(
         icon: Icons.error_outline_rounded,
         title: 'Couldn’t load jobs',

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -248,18 +249,22 @@ class PriceRow extends StatelessWidget {
     padding: const EdgeInsets.symmetric(vertical: 5),
     child: Row(
       children: [
-        Text(
-          label,
-          style:
-              (emphasized
-                      ? Theme.of(context).textTheme.titleLarge
-                      : Theme.of(context).textTheme.bodyMedium)
-                  ?.copyWith(
-                    color: emphasized
-                        ? OrderingColors.text(context)
-                        : OrderingColors.muted(context),
-                    fontSize: emphasized ? 17 : null,
-                  ),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style:
+                (emphasized
+                        ? Theme.of(context).textTheme.titleLarge
+                        : Theme.of(context).textTheme.bodyMedium)
+                    ?.copyWith(
+                      color: emphasized
+                          ? OrderingColors.text(context)
+                          : OrderingColors.muted(context),
+                      fontSize: emphasized ? 17 : null,
+                    ),
+          ),
         ),
         const Spacer(),
         Text(
@@ -278,8 +283,46 @@ class PriceRow extends StatelessWidget {
   );
 }
 
+/// Task 10 performance audit: no screen in this app loads a real remote
+/// image yet — every `imageUrl`/`bannerUrl` in the mock data is `''`, so
+/// this has always rendered the seeded-color placeholder below. [imageUrl]
+/// is accepted now so call sites don't need to change again the moment a
+/// real backend URL (e.g. Task 9's `menu_items.photo_url`) actually starts
+/// flowing into this data — `cached_network_image` gives disk+memory
+/// caching and an explicit decode size for free, so a thumbnail slot never
+/// loads a full-resolution image into memory.
 class MenuImagePlaceholder extends StatelessWidget {
-  const MenuImagePlaceholder({super.key, required this.seed, this.size = 82});
+  const MenuImagePlaceholder({super.key, required this.seed, this.size = 82, this.imageUrl});
+  final String seed;
+  final double size;
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final placeholder = _SeedPlaceholder(seed: seed, size: size);
+    if (imageUrl == null || imageUrl!.isEmpty) return placeholder;
+
+    final pixelSize = (size * MediaQuery.devicePixelRatioOf(context)).round();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: CachedNetworkImage(
+        imageUrl: imageUrl!,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        // Decodes at the actual display size (not the source resolution) —
+        // the point of "explicit sizing," not just a fixed layout box.
+        memCacheWidth: pixelSize,
+        memCacheHeight: pixelSize,
+        placeholder: (context, url) => placeholder,
+        errorWidget: (context, url, error) => placeholder,
+      ),
+    );
+  }
+}
+
+class _SeedPlaceholder extends StatelessWidget {
+  const _SeedPlaceholder({required this.seed, required this.size});
   final String seed;
   final double size;
   @override

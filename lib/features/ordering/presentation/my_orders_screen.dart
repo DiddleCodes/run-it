@@ -31,6 +31,42 @@ class OrderHistoryEntry {
   final DateTime deliveredAt;
 }
 
+/// A row in the Cancelled tab — real data (Task 8d), populated when
+/// [OrderTrackingScreen]'s Cancel action successfully refunds an order's
+/// escrow. Unlike [OrderHistoryEntry] above, [refundedAmount] reflects
+/// what the backend actually credited back, not just the order total —
+/// they're the same value today (a held order is always refunded in
+/// full), but keeping them distinct instead of assuming that equivalence
+/// forever is exactly the group of assumptions this task replaced.
+class CancelledOrder {
+  const CancelledOrder({
+    required this.id,
+    required this.eateryName,
+    required this.itemsSummary,
+    required this.refundedAmount,
+    required this.cancelledAt,
+  });
+  final String id;
+  final String eateryName;
+  final String itemsSummary;
+  final int refundedAmount;
+  final DateTime cancelledAt;
+}
+
+class CancelledOrdersController extends Notifier<List<CancelledOrder>> {
+  @override
+  List<CancelledOrder> build() => const [];
+
+  void recordCancellation(CancelledOrder order) {
+    state = [order, ...state];
+  }
+}
+
+final cancelledOrdersProvider =
+    NotifierProvider<CancelledOrdersController, List<CancelledOrder>>(
+      CancelledOrdersController.new,
+    );
+
 final orderHistoryProvider = Provider<List<OrderHistoryEntry>>((ref) {
   final now = DateTime.now();
   return [
@@ -82,8 +118,11 @@ class _MyOrdersScreenState extends ConsumerState<MyOrdersScreen> {
     // delivered it simply stops counting here (a known, honestly-scoped
     // limitation rather than fabricated history).
     final hasActiveOrder =
-        session.isActive && session.stage != OrderStage.delivered;
+        session.isActive &&
+        session.stage != OrderStage.delivered &&
+        session.stage != OrderStage.confirmed;
     final history = ref.watch(orderHistoryProvider);
+    final cancelled = ref.watch(cancelledOrdersProvider);
 
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,
@@ -169,11 +208,13 @@ class _MyOrdersScreenState extends ConsumerState<MyOrdersScreen> {
                         subtitle: 'Orders you complete will show up here.',
                       )
                     : _PastOrdersTab(history: history),
-                _OrdersTab.cancelled => const _EmptyState(
-                    icon: Icons.cancel_outlined,
-                    title: 'No cancelled orders',
-                    subtitle: 'Anything you cancel will be listed here.',
-                  ),
+                _OrdersTab.cancelled => cancelled.isEmpty
+                    ? const _EmptyState(
+                        icon: Icons.cancel_outlined,
+                        title: 'No cancelled orders',
+                        subtitle: 'Anything you cancel will be listed here.',
+                      )
+                    : _CancelledOrdersTab(cancelled: cancelled),
               },
             ),
           ],
@@ -242,10 +283,13 @@ class _SegmentedTabs extends StatelessWidget {
 const _stepLabels = ['Confirmed', 'Preparing', 'On the way', 'Arrived'];
 
 (int, String, IconData) _activeStepInfo(OrderStage stage) => switch (stage) {
-  OrderStage.placed => (0, 'Order confirmed', Icons.check_circle_outline_rounded),
+  OrderStage.placed => (0, 'Order received', Icons.check_circle_outline_rounded),
   OrderStage.runnerAssigned => (1, 'Preparing your order', Icons.restaurant_rounded),
   OrderStage.pickedUp => (2, 'On the way to you', Icons.two_wheeler_rounded),
+  // Neither of these ever actually renders here — hasActiveOrder excludes
+  // both stages above — but the switch must stay exhaustive.
   OrderStage.delivered => (3, 'Arrived', Icons.home_rounded),
+  OrderStage.confirmed => (4, 'Confirmed', Icons.celebration_rounded),
 };
 
 const _etaByStage = {
@@ -253,6 +297,7 @@ const _etaByStage = {
   OrderStage.runnerAssigned: '10–15 min',
   OrderStage.pickedUp: '5–10 min',
   OrderStage.delivered: 'Arrived',
+  OrderStage.confirmed: 'Arrived',
 };
 
 class _ActiveOrderTab extends ConsumerWidget {
@@ -575,6 +620,86 @@ class _PastOrdersTab extends ConsumerWidget {
                         .read(appNotificationProvider.notifier)
                         .info('Reordering is coming soon.'),
                     child: const Text('Reorder'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _CancelledOrdersTab extends StatelessWidget {
+  const _CancelledOrdersTab({required this.cancelled});
+  final List<CancelledOrder> cancelled;
+
+  @override
+  Widget build(BuildContext context) {
+    final formatter = DateFormat('MMM d');
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
+      itemCount: cancelled.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final entry = cancelled[index];
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceCard,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(color: AppColors.borderSubtle),
+          ),
+          child: Row(
+            children: [
+              MenuImagePlaceholder(seed: entry.eateryName, size: 56),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      entry.eateryName,
+                      style: Theme.of(context).textTheme.labelLarge
+                          ?.copyWith(color: AppColors.inkText),
+                    ),
+                    Text(
+                      entry.itemsSummary,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Cancelled ${formatter.format(entry.cancelledAt)}',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '+${naira(entry.refundedAmount)}',
+                    style: Theme.of(context).textTheme.labelLarge
+                        ?.copyWith(color: AppColors.success, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.successBackground,
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                    ),
+                    child: Text(
+                      'Refunded',
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(color: AppColors.success, fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ],
               ),

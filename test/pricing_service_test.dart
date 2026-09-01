@@ -1,7 +1,31 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:run_it/features/ordering/data/ordering_repository.dart';
 import 'package:run_it/features/ordering/domain/ordering_models.dart';
 import 'package:run_it/features/ordering/domain/pricing_service.dart';
+
+const _menuItems = <MenuItem>[
+  MenuItem(
+    id: 'jollof',
+    eateryId: 'tantalizers',
+    name: 'Signature jollof',
+    description: 'Smoky jollof rice, grilled chicken and plantain.',
+    price: 3100,
+    packagingCost: 100,
+    category: 'Mains',
+    imageUrl: '',
+    isAvailable: true,
+  ),
+  MenuItem(
+    id: 'malt',
+    eateryId: 'tantalizers',
+    name: 'Chilled malt',
+    description: 'Cold, bottled and ready for the walk back.',
+    price: 700,
+    packagingCost: 0,
+    category: 'Drinks',
+    imageUrl: '',
+    isAvailable: true,
+  ),
+];
 
 void main() {
   group('PricingService', () {
@@ -16,7 +40,7 @@ void main() {
 
       final result = PricingService.calculate(
         basket: basket,
-        menuItems: MockOrderingRepository.menu,
+        menuItems: _menuItems,
         zone: DeliveryFeeZone.central,
       );
 
@@ -30,7 +54,7 @@ void main() {
     test('does not apply fees to an empty basket', () {
       final result = PricingService.calculate(
         basket: const Basket(),
-        menuItems: MockOrderingRepository.menu,
+        menuItems: _menuItems,
         zone: DeliveryFeeZone.north,
       );
 

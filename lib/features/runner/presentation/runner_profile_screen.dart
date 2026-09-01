@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/network/ratings_repository.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/settings_row.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../auth/domain/auth_models.dart';
 import '../../auth/presentation/set_passcode_screen.dart';
@@ -19,11 +21,18 @@ String _vehicleLabel(VehicleType type) => switch (type) {
   VehicleType.keke => 'Keke',
 };
 
-/// Deterministic per-user demo rating — there's no ratings backend yet,
-/// so this is derived from the user's id rather than a hardcoded literal,
-/// at least varying sensibly between runners instead of always showing
-/// the exact same number.
-double _demoRating(String userId) => 4.5 + (userId.hashCode.abs() % 5) / 10;
+/// Task 14 Part D: the real aggregate behind Runner Profile's Rating stat —
+/// `GET /runners/:id/rating-summary`, replacing the old client-side
+/// `_demoRating` fake derived from `userId.hashCode`. `autoDispose` since
+/// this only matters while Profile is actually mounted.
+final runnerRatingSummaryProvider =
+    FutureProvider.autoDispose<RunnerRatingSummary?>((ref) async {
+      final userId = ref.watch(authControllerProvider)?.user.id;
+      if (userId == null) return null;
+      return ref
+          .watch(ratingsRepositoryProvider)
+          .fetchRunnerRatingSummary(userId);
+    });
 
 class RunnerProfileScreen extends ConsumerWidget {
   const RunnerProfileScreen({super.key});
@@ -43,6 +52,13 @@ class RunnerProfileScreen extends ConsumerWidget {
         ? '—'
         : '${(session.offersAccepted / session.offersReceived * 100).round()}%';
     final verified = user.kycStatus == KycStatus.verified;
+    // The real aggregate (Task 14) — a dash while it's loading/unreachable
+    // or genuinely has no ratings yet, never a fabricated number.
+    final ratingSummary = ref.watch(runnerRatingSummaryProvider).valueOrNull;
+    final ratingLabel =
+        (ratingSummary == null || ratingSummary.ratingCount == 0)
+        ? '—'
+        : ratingSummary.averageRating.toStringAsFixed(1);
 
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,
@@ -59,6 +75,7 @@ class RunnerProfileScreen extends ConsumerWidget {
             const SizedBox(height: 14),
             _ProfileHero(
               user: user,
+              ratingLabel: ratingLabel,
               onTap: () => _showPersonalInfo(context, user),
             ),
             const SizedBox(height: 14),
@@ -82,7 +99,7 @@ class RunnerProfileScreen extends ConsumerWidget {
                   child: _ProfileStat(
                     icon: Icons.star_rounded,
                     label: 'Rating',
-                    value: _demoRating(user.id).toStringAsFixed(1),
+                    value: ratingLabel,
                   ),
                 ),
               ],
@@ -105,21 +122,15 @@ class RunnerProfileScreen extends ConsumerWidget {
             // rows by what they're actually about rather than mixing
             // unrelated categories in one long scroll, matching how
             // Uber Driver/DoorDash Dasher organize the same information.
-            _SettingsGroup(
+            SettingsGroup(
               children: [
-                _SettingsRow(
+                SettingsRow(
                   icon: Icons.receipt_long_outlined,
                   title: 'Earnings',
                   onTap: () => context.push(AppRoutes.earnings),
                 ),
-                _SettingsRow(
-                  icon: Icons.account_balance_outlined,
-                  title: 'Payouts',
-                  onTap: () => ref
-                      .read(appNotificationProvider.notifier)
-                      .info('Payouts is coming soon.'),
-                ),
-                _SettingsRow(
+                const PayoutsRow(),
+                SettingsRow(
                   icon: Icons.bar_chart_rounded,
                   title: 'Performance',
                   onTap: () => ref
@@ -129,9 +140,9 @@ class RunnerProfileScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 22),
-            _SettingsGroup(
+            SettingsGroup(
               children: [
-                _SettingsRow(
+                SettingsRow(
                   icon: Icons.person_outline_rounded,
                   title: 'Personal Info',
                   onTap: () => _showPersonalInfo(context, user),
@@ -142,14 +153,15 @@ class RunnerProfileScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 22),
-            _SettingsGroup(
+            SettingsGroup(
               children: [
-                _SettingsRow(
+                SettingsRow(
                   icon: Icons.lock_outline_rounded,
                   title: 'Change passcode',
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => const SetPasscodeScreen(isChangingExisting: true),
+                      builder: (_) =>
+                          const SetPasscodeScreen(isChangingExisting: true),
                     ),
                   ),
                 ),
@@ -157,16 +169,16 @@ class RunnerProfileScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 22),
-            _SettingsGroup(
+            SettingsGroup(
               children: [
-                _SettingsRow(
+                SettingsRow(
                   icon: Icons.help_outline_rounded,
                   title: 'Help & Support',
                   onTap: () => ref
                       .read(appNotificationProvider.notifier)
                       .info('Reach us at support@run-it.app.'),
                 ),
-                _SettingsRow(
+                SettingsRow(
                   icon: Icons.info_outline_rounded,
                   title: 'About',
                   onTap: () => _showAbout(context),
@@ -174,9 +186,9 @@ class RunnerProfileScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 22),
-            _SettingsGroup(
+            SettingsGroup(
               children: [
-                _SettingsRow(
+                SettingsRow(
                   icon: Icons.logout_rounded,
                   title: 'Log out',
                   destructive: true,
@@ -293,7 +305,11 @@ class _ProfileHeader extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(CupertinoIcons.gear, color: AppColors.inkText, size: 19),
+            child: const Icon(
+              CupertinoIcons.gear,
+              color: AppColors.inkText,
+              size: 19,
+            ),
           ),
         ),
       ],
@@ -302,8 +318,13 @@ class _ProfileHeader extends StatelessWidget {
 }
 
 class _ProfileHero extends StatelessWidget {
-  const _ProfileHero({required this.user, required this.onTap});
+  const _ProfileHero({
+    required this.user,
+    required this.ratingLabel,
+    required this.onTap,
+  });
   final UserProfile user;
+  final String ratingLabel;
   final VoidCallback onTap;
 
   @override
@@ -343,9 +364,13 @@ class _ProfileHero extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   child: Text(
-                    user.name.trim().isEmpty ? '?' : user.name.trim()[0].toUpperCase(),
-                    style: Theme.of(context).textTheme.headlineLarge
-                        ?.copyWith(color: AppColors.primaryMaroon, fontSize: 26),
+                    user.name.trim().isEmpty
+                        ? '?'
+                        : user.name.trim()[0].toUpperCase(),
+                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                      color: AppColors.primaryMaroon,
+                      fontSize: 26,
+                    ),
                   ),
                 ),
                 if (verified)
@@ -359,7 +384,10 @@ class _ProfileHero extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: AppColors.success,
                         shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.surfaceCard, width: 2),
+                        border: Border.all(
+                          color: AppColors.surfaceCard,
+                          width: 2,
+                        ),
                       ),
                       child: const Icon(
                         CupertinoIcons.checkmark_alt,
@@ -389,12 +417,19 @@ class _ProfileHero extends StatelessWidget {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      const Icon(Icons.star_rounded, size: 15, color: AppColors.gold),
+                      const Icon(
+                        Icons.star_rounded,
+                        size: 15,
+                        color: AppColors.gold,
+                      ),
                       const SizedBox(width: 3),
                       Text(
-                        _demoRating(user.id).toStringAsFixed(1),
+                        ratingLabel,
                         style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w700),
+                            ?.copyWith(
+                              color: AppColors.inkText,
+                              fontWeight: FontWeight.w700,
+                            ),
                       ),
                       const SizedBox(width: 10),
                       // TASK 4g §4 deliberate deviation: the reference
@@ -404,19 +439,31 @@ class _ProfileHero extends StatelessWidget {
                       // vehicle info, KYC steps), so surfacing which one a
                       // runner is at a glance is worth the extra pill.
                       if (user.runnerType != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryMaroon.withValues(alpha: .1),
-                            borderRadius: BorderRadius.circular(AppRadius.pill),
-                          ),
-                          child: Text(
-                            user.runnerType == RunnerType.independentRider
-                                ? 'Independent Rider'
-                                : 'Student Runner',
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: AppColors.primaryMaroon,
-                              fontWeight: FontWeight.w700,
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryMaroon.withValues(
+                                alpha: .1,
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.pill,
+                              ),
+                            ),
+                            child: Text(
+                              user.runnerType == RunnerType.independentRider
+                                  ? 'Independent Rider'
+                                  : 'Student Runner',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: AppColors.primaryMaroon,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                             ),
                           ),
                         ),
@@ -438,7 +485,11 @@ class _ProfileHero extends StatelessWidget {
 }
 
 class _ProfileStat extends StatelessWidget {
-  const _ProfileStat({required this.icon, required this.label, required this.value});
+  const _ProfileStat({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
   final IconData icon;
   final String label;
   final String value;
@@ -451,7 +502,10 @@ class _ProfileStat extends StatelessWidget {
           width: 34,
           height: 34,
           alignment: Alignment.center,
-          decoration: const BoxDecoration(color: AppColors.accentRose, shape: BoxShape.circle),
+          decoration: const BoxDecoration(
+            color: AppColors.accentRose,
+            shape: BoxShape.circle,
+          ),
           child: Icon(icon, size: 16, color: AppColors.primaryMaroon),
         ),
         const SizedBox(height: 6),
@@ -465,9 +519,8 @@ class _ProfileStat extends StatelessWidget {
           label,
           textAlign: TextAlign.center,
           maxLines: 2,
-          style: Theme.of(
-            context,
-          ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: AppColors.mutedText),
         ),
       ],
     );
@@ -513,8 +566,9 @@ class _WalletBalanceCard extends StatelessWidget {
                 children: [
                   Text(
                     'Wallet balance',
-                    style: Theme.of(context).textTheme.labelMedium
-                        ?.copyWith(color: AppColors.onMaroon.withValues(alpha: .7)),
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: AppColors.onMaroon.withValues(alpha: .7),
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -569,7 +623,9 @@ class _PendingReviewCard extends StatelessWidget {
         child: Row(
           children: [
             Icon(
-              rejected ? Icons.error_outline_rounded : Icons.hourglass_top_rounded,
+              rejected
+                  ? Icons.error_outline_rounded
+                  : Icons.hourglass_top_rounded,
               color: rejected ? AppColors.error : AppColors.gold,
             ),
             const SizedBox(width: 12),
@@ -578,102 +634,28 @@ class _PendingReviewCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    rejected ? 'Verification needs another look' : 'Verification pending review',
-                    style: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w700),
+                    rejected
+                        ? 'Verification needs another look'
+                        : 'Verification pending review',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: AppColors.inkText,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    rejected
-                        ? 'Tap to see what needs fixing.'
-                        : "You can browse jobs, but can't go online until verified.",
+                    rejected ? 'Tap to see what needs fixing.' : "You can browse jobs, but can't go online until verified.",
                     style: Theme.of(context).textTheme.labelSmall
                         ?.copyWith(color: AppColors.mutedText),
                   ),
                 ],
               ),
             ),
-            const Icon(CupertinoIcons.chevron_right, color: AppColors.mutedText, size: 16),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingsGroup extends StatelessWidget {
-  const _SettingsGroup({required this.children});
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceCard,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.borderSubtle),
-      ),
-      child: Column(
-        children: [
-          for (var i = 0; i < children.length; i++) ...[
-            children[i],
-            if (i != children.length - 1)
-              const Divider(height: 1, color: AppColors.borderSubtle, indent: 54),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _SettingsRow extends StatelessWidget {
-  const _SettingsRow({
-    required this.icon,
-    required this.title,
-    this.trailingLabel,
-    this.destructive = false,
-    this.onTap,
-    this.trailing,
-  });
-  final IconData icon;
-  final String title;
-  final String? trailingLabel;
-  final bool destructive;
-  final VoidCallback? onTap;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = destructive ? AppColors.error : AppColors.inkText;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: destructive ? AppColors.error : AppColors.primaryMaroon),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                title,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: color),
-              ),
+            const Icon(
+              CupertinoIcons.chevron_right,
+              color: AppColors.mutedText,
+              size: 16,
             ),
-            if (trailing != null)
-              trailing!
-            else ...[
-              if (trailingLabel != null) ...[
-                Text(
-                  trailingLabel!,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelMedium?.copyWith(color: AppColors.mutedText),
-                ),
-                const SizedBox(width: 6),
-              ],
-              if (onTap != null)
-                const Icon(CupertinoIcons.chevron_right, color: AppColors.mutedText, size: 16),
-            ],
           ],
         ),
       ),
@@ -691,12 +673,24 @@ class _VerificationRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, bg, fg) = switch (user.kycStatus) {
-      KycStatus.verified => ('Verified', AppColors.successBackground, AppColors.success),
+      KycStatus.verified => (
+        'Verified',
+        AppColors.successBackground,
+        AppColors.success,
+      ),
       KycStatus.pending => ('Pending', AppColors.goldTint, AppColors.gold),
-      KycStatus.rejected => ('Action needed', AppColors.accentRose, AppColors.error),
-      KycStatus.none => ('Not started', AppColors.borderSubtle, AppColors.mutedText),
+      KycStatus.rejected => (
+        'Action needed',
+        AppColors.accentRose,
+        AppColors.error,
+      ),
+      KycStatus.none => (
+        'Not started',
+        AppColors.borderSubtle,
+        AppColors.mutedText,
+      ),
     };
-    return _SettingsRow(
+    return SettingsRow(
       icon: Icons.verified_user_outlined,
       title: 'Verification',
       onTap: () => context.push(AppRoutes.kycStatus),
@@ -705,16 +699,22 @@ class _VerificationRow extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(AppRadius.pill)),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+            ),
             child: Text(
               label,
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(color: fg, fontWeight: FontWeight.w700),
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: fg, fontWeight: FontWeight.w700),
             ),
           ),
           const SizedBox(width: 8),
-          const Icon(CupertinoIcons.chevron_right, color: AppColors.mutedText, size: 16),
+          const Icon(
+            CupertinoIcons.chevron_right,
+            color: AppColors.mutedText,
+            size: 16,
+          ),
         ],
       ),
     );
@@ -755,17 +755,15 @@ class _PersonalInfoSheet extends StatelessWidget {
                     width: 110,
                     child: Text(
                       label,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.labelMedium?.copyWith(color: AppColors.mutedText),
+                      style: Theme.of(context).textTheme.labelMedium
+                          ?.copyWith(color: AppColors.mutedText),
                     ),
                   ),
                   Expanded(
                     child: Text(
                       value,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyLarge?.copyWith(color: AppColors.inkText),
+                      style: Theme.of(context).textTheme.bodyLarge
+                          ?.copyWith(color: AppColors.inkText),
                     ),
                   ),
                 ],
@@ -794,7 +792,9 @@ class _BiometricRowState extends ConsumerState<_BiometricRow> {
     if (value) {
       final ok = await auth.enableBiometric();
       if (!ok && mounted) {
-        ref.read(appNotificationProvider.notifier).warning('Could not enable biometric login.');
+        ref
+            .read(appNotificationProvider.notifier)
+            .warning('Could not enable biometric login.');
       }
     } else {
       await auth.disableBiometric();
@@ -804,7 +804,7 @@ class _BiometricRowState extends ConsumerState<_BiometricRow> {
 
   @override
   Widget build(BuildContext context) {
-    return _SettingsRow(
+    return SettingsRow(
       icon: Icons.fingerprint_rounded,
       title: 'Biometric login',
       trailing: _busy
@@ -848,7 +848,7 @@ class _VehicleRow extends ConsumerWidget {
             if (user.vehiclePlate != null && user.vehiclePlate!.isNotEmpty)
               user.vehiclePlate!,
           ].join(' · ');
-    return _SettingsRow(
+    return SettingsRow(
       icon: Icons.two_wheeler_rounded,
       title: 'Vehicle / Mode',
       trailingLabel: subtitle,
@@ -867,7 +867,9 @@ class _EditVehicleSheet extends ConsumerStatefulWidget {
 
 class _EditVehicleSheetState extends ConsumerState<_EditVehicleSheet> {
   late VehicleType? _type = widget.user.vehicleType;
-  late final _plateController = TextEditingController(text: widget.user.vehiclePlate ?? '');
+  late final _plateController = TextEditingController(
+    text: widget.user.vehiclePlate ?? '',
+  );
   bool _showPlateError = false;
 
   @override
@@ -886,17 +888,24 @@ class _EditVehicleSheetState extends ConsumerState<_EditVehicleSheet> {
       setState(() => _showPlateError = true);
       return;
     }
-    await ref.read(authControllerProvider.notifier).updateVehicle(
-      vehicleType: type,
-      vehiclePlate: plate.isEmpty ? null : plate,
-    );
+    await ref
+        .read(authControllerProvider.notifier)
+        .updateVehicle(
+          vehicleType: type,
+          vehiclePlate: plate.isEmpty ? null : plate,
+        );
     if (mounted) Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(22, 20, 22, MediaQuery.of(context).viewInsets.bottom + 22),
+      padding: EdgeInsets.fromLTRB(
+        22,
+        20,
+        22,
+        MediaQuery.of(context).viewInsets.bottom + 22,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -926,20 +935,19 @@ class _EditVehicleSheetState extends ConsumerState<_EditVehicleSheet> {
                             : AppColors.backgroundCream,
                         borderRadius: BorderRadius.circular(AppRadius.md),
                         border: Border.all(
-                          color: _type == type ? AppColors.primaryMaroon : AppColors.borderSubtle,
+                          color: _type == type
+                              ? AppColors.primaryMaroon
+                              : AppColors.borderSubtle,
                           width: _type == type ? 2 : 1,
                         ),
                       ),
                       child: Column(
                         children: [
-                          Icon(
-                            switch (type) {
-                              VehicleType.bicycle => Icons.pedal_bike_rounded,
-                              VehicleType.motorbike => Icons.two_wheeler_rounded,
-                              VehicleType.keke => Icons.electric_rickshaw_rounded,
-                            },
-                            color: AppColors.primaryMaroon,
-                          ),
+                          Icon(switch (type) {
+                            VehicleType.bicycle => Icons.pedal_bike_rounded,
+                            VehicleType.motorbike => Icons.two_wheeler_rounded,
+                            VehicleType.keke => Icons.electric_rickshaw_rounded,
+                          }, color: AppColors.primaryMaroon),
                           const SizedBox(height: 4),
                           Text(
                             _vehicleLabel(type),
@@ -956,8 +964,11 @@ class _EditVehicleSheetState extends ConsumerState<_EditVehicleSheet> {
           ),
           const SizedBox(height: 16),
           Text(
-            _plateRequired ? 'Plate / registration number' : 'Plate / registration number (optional)',
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.mutedText),
+            _plateRequired
+                ? 'Plate / registration number'
+                : 'Plate / registration number (optional)',
+            style: Theme.of(context).textTheme.labelMedium
+                ?.copyWith(color: AppColors.mutedText),
           ),
           const SizedBox(height: 6),
           TextField(

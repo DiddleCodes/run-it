@@ -9,11 +9,11 @@ import '../theme/app_spacing.dart';
 import '../../features/ordering/application/ordering_providers.dart';
 
 /// Which persona is driving [AppNavShell] — determines the 4-tab set and
-/// the raised center action (Scan for a runner, Basket for a student)
-/// without duplicating the whole nav-bar widget per role. Add a case here
-/// (and to [_tabsFor]/[_centerFor]) rather than building a third
-/// standalone nav-bar widget for any future persona.
-enum AppRole { student, runner }
+/// the raised center action (Scan for a runner, Basket for a student, +
+/// Add Item for a restaurant) without duplicating the whole nav-bar widget
+/// per role. Add a case here (and to [_tabsFor]/[_centerFor]) rather than
+/// building a third standalone nav-bar widget for any future persona.
+enum AppRole { student, runner, restaurant }
 
 class _TabSpec {
   const _TabSpec({
@@ -92,6 +92,32 @@ List<_TabSpec> _tabsFor(AppRole role) => switch (role) {
       route: AppRoutes.studentProfile,
     ),
   ],
+  AppRole.restaurant => const [
+    _TabSpec(
+      icon: CupertinoIcons.doc_text,
+      filledIcon: CupertinoIcons.doc_text_fill,
+      label: 'Orders',
+      route: AppRoutes.restaurantOrders,
+    ),
+    _TabSpec(
+      icon: CupertinoIcons.square_list,
+      filledIcon: CupertinoIcons.square_list_fill,
+      label: 'Menu',
+      route: AppRoutes.restaurantMenu,
+    ),
+    _TabSpec(
+      icon: CupertinoIcons.chart_bar,
+      filledIcon: CupertinoIcons.chart_bar_fill,
+      label: 'Metrics',
+      route: AppRoutes.restaurantMetrics,
+    ),
+    _TabSpec(
+      icon: CupertinoIcons.person,
+      filledIcon: CupertinoIcons.person_fill,
+      label: 'Profile',
+      route: AppRoutes.restaurantProfile,
+    ),
+  ],
 };
 
 _CenterSpec _centerFor(AppRole role) => switch (role) {
@@ -104,6 +130,15 @@ _CenterSpec _centerFor(AppRole role) => switch (role) {
     icon: CupertinoIcons.bag_fill,
     label: 'Basket',
     route: AppRoutes.basket,
+  ),
+  // A quick-access shortcut, not a role-inappropriate borrowed icon
+  // (there's no scan/basket equivalent for a kitchen) — jumps straight
+  // into Add Item from anywhere in the shell, since that's the action a
+  // restaurant owner reaches for most often day to day.
+  AppRole.restaurant => const _CenterSpec(
+    icon: CupertinoIcons.add,
+    label: 'Add Item',
+    route: AppRoutes.restaurantMenuAdd,
   ),
 };
 
@@ -171,6 +206,18 @@ class StudentShell extends StatelessWidget {
       AppNavShell(role: AppRole.student, child: child);
 }
 
+/// Task 12's Restaurant Dashboard shell — wraps Orders/Menu/Metrics/
+/// Profile. The Add Item screen (this role's raised center action) stays
+/// unwrapped, same convention as the other two roles' own full-screen
+/// center destinations.
+class RestaurantShell extends StatelessWidget {
+  const RestaurantShell({super.key, required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) =>
+      AppNavShell(role: AppRole.restaurant, child: child);
+}
+
 class _AppNavBar extends StatelessWidget {
   const _AppNavBar({
     required this.tabs,
@@ -191,77 +238,90 @@ class _AppNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       top: false,
-      child: SizedBox(
-        height: 82,
-        child: Stack(
-          clipBehavior: Clip.none,
-          alignment: Alignment.topCenter,
-          children: [
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                height: 68,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceCard.withValues(alpha: .96),
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(AppRadius.xl),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.maroonShadow,
-                      blurRadius: 18,
-                      offset: const Offset(0, -4),
+      // This bar's height is intentionally fixed (it anchors the raised
+      // center button's positioning math) with very little vertical slack
+      // around each tab's icon + label — at full Dynamic Type scaling the
+      // label alone can exceed that slack and overflow. Compact,
+      // icon-anchored navigation chrome like this is exactly where iOS
+      // itself caps how far a tab bar's label grows, rather than letting
+      // it scale without bound, so clamp scaling here instead of fighting
+      // the fixed layout everywhere else in the app still scales freely.
+      child: MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.25,
+        child: SizedBox(
+          height: 82,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.topCenter,
+            children: [
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  height: 68,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceCard.withValues(alpha: .96),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(AppRadius.xl),
                     ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(AppRadius.xl),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.maroonShadow,
+                        blurRadius: 18,
+                        offset: const Offset(0, -4),
+                      ),
+                    ],
                   ),
-                  child: Row(
-                    children: [
-                      for (var i = 0; i < tabs.length; i++) ...[
-                        if (i == tabs.length ~/ 2)
-                          // Reserves the center gap the raised action
-                          // floats above — its own label lives here so all
-                          // 5 slots stay equal-width and evenly spaced.
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 38),
-                              child: Text(
-                                center.label,
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.labelSmall
-                                    ?.copyWith(
-                                      color: AppColors.mutedText,
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(AppRadius.xl),
+                    ),
+                    child: Row(
+                      children: [
+                        for (var i = 0; i < tabs.length; i++) ...[
+                          if (i == tabs.length ~/ 2)
+                            // Reserves the center gap the raised action
+                            // floats above — its own label lives here so all
+                            // 5 slots stay equal-width and evenly spaced.
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 38),
+                                child: Text(
+                                  center.label,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        color: AppColors.mutedText,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                ),
                               ),
                             ),
+                          Expanded(
+                            child: _NavTab(
+                              icon: tabs[i].icon,
+                              filledIcon: tabs[i].filledIcon,
+                              label: tabs[i].label,
+                              selected: activeIndex == i,
+                              onTap: () => onSelectTab(tabs[i]),
+                            ),
                           ),
-                        Expanded(
-                          child: _NavTab(
-                            icon: tabs[i].icon,
-                            filledIcon: tabs[i].filledIcon,
-                            label: tabs[i].label,
-                            selected: activeIndex == i,
-                            onTap: () => onSelectTab(tabs[i]),
-                          ),
-                        ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            _CenterButton(
-              icon: center.icon,
-              badgeCount: centerBadgeCount,
-              onTap: onSelectCenter,
-            ),
-          ],
+              _CenterButton(
+                icon: center.icon,
+                badgeCount: centerBadgeCount,
+                onTap: onSelectCenter,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -305,7 +365,10 @@ class _NavTabState extends State<_NavTab> {
         duration: const Duration(milliseconds: 120),
         curve: Curves.easeOut,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          // Tightened from 12 to leave the icon+label Column more of the
+          // bar's fixed 68px slot to grow into at larger Dynamic Type
+          // scale (paired with the clamp above) rather than overflowing.
+          padding: const EdgeInsets.symmetric(vertical: 8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -338,7 +401,11 @@ class _NavTabState extends State<_NavTab> {
                       ? FontWeight.w700
                       : FontWeight.w500,
                 ),
-                child: Text(widget.label),
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),

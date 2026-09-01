@@ -109,7 +109,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     }
 
     setState(() => _submitting = true);
-    await ref.read(authControllerProvider.notifier).sendOtp(args.contact);
+    await ref
+        .read(authControllerProvider.notifier)
+        .sendOtp(args.contact, accountType: args.accountType);
     if (!mounted) return;
     setState(() => _submitting = false);
     context.push(AppRoutes.otp, extra: args);

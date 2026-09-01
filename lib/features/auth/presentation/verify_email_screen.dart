@@ -32,7 +32,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     setState(() => _sending = true);
     await ref
         .read(authControllerProvider.notifier)
-        .sendOtp(widget.args.contact);
+        .sendOtp(widget.args.contact, accountType: widget.args.accountType);
     if (!mounted) return;
     setState(() => _sending = false);
     ref

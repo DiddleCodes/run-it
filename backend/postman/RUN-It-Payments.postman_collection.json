@@ -1,0 +1,1475 @@
+{
+  "info": {
+    "name": "RUN-It Payments",
+    "description": "Fund a student wallet, run the full hold\u2192release escrow cycle, and a hold\u2192refund cycle, against a locally running RUN-It Payments service. Run folders top-to-bottom (or use Collection Runner) \u2014 each request's test script feeds the variables the next request needs.\n\nBefore running:\n1. Set `paystackSecretKey` to the same PAYSTACK_SECRET_KEY the server is running with (needed to HMAC-sign the simulated webhook deliveries in this collection).\n2. Set `internalApiKey` to match INTERNAL_SERVICE_API_KEY.\n3. For the Payout Accounts folder to succeed against the real Paystack API, use Paystack's documented test-mode bank/account numbers for /bank/resolve.\n4. Folder 6 (Task 9) creates a real vendor + menu item and reuses the restaurant/runner payout accounts from folder 3 to reach a real 'delivered' order before rating it \u2014 run folder 3 first if running folder 6 standalone.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "paystackSecretKey",
+      "value": "sk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "key": "internalApiKey",
+      "value": "change-me-internal-key"
+    },
+    {
+      "key": "fundAmountKobo",
+      "value": "500000"
+    },
+    {
+      "key": "holdAmountKobo",
+      "value": "300000"
+    },
+    {
+      "key": "studentUserId",
+      "value": ""
+    },
+    {
+      "key": "restaurantUserId",
+      "value": ""
+    },
+    {
+      "key": "runnerUserId",
+      "value": ""
+    },
+    {
+      "key": "studentToken",
+      "value": ""
+    },
+    {
+      "key": "restaurantToken",
+      "value": ""
+    },
+    {
+      "key": "runnerToken",
+      "value": ""
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "walletFundReference",
+      "value": ""
+    },
+    {
+      "key": "orderId",
+      "value": ""
+    },
+    {
+      "key": "orderId2",
+      "value": ""
+    },
+    {
+      "key": "restaurantShare",
+      "value": ""
+    },
+    {
+      "key": "runnerShare",
+      "value": ""
+    },
+    {
+      "key": "restaurantTransferReference",
+      "value": ""
+    },
+    {
+      "key": "runnerTransferReference",
+      "value": ""
+    },
+    {
+      "key": "vendorId",
+      "value": ""
+    },
+    {
+      "key": "menuItemId",
+      "value": ""
+    },
+    {
+      "key": "task9OrderId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Setup",
+      "item": [
+        {
+          "name": "Create Student",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"student-{{$timestamp}}@campus.edu\",\n  \"accountType\": \"student\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('user created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('studentUserId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Restaurant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"resto-{{$timestamp}}@campus.edu\",\n  \"accountType\": \"restaurant\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('user created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('restaurantUserId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Runner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"runner-{{$timestamp}}@campus.edu\",\n  \"accountType\": \"runner\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('user created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('runnerUserId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Student Dev Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{studentUserId}}\",\n  \"accountType\": \"student\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/dev-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "dev-token"
+              ]
+            },
+            "description": "Dev-only token issuance \u2014 stands in for the app's real OTP-verified auth flow. Disabled when the server runs with NODE_ENV=production."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('studentToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Restaurant Dev Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{restaurantUserId}}\",\n  \"accountType\": \"restaurant\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/dev-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "dev-token"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('restaurantToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Runner Dev Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{runnerUserId}}\",\n  \"accountType\": \"runner\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/dev-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "dev-token"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('runnerToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Admin Dev Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{studentUserId}}\",\n  \"role\": \"admin\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/dev-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "dev-token"
+              ]
+            },
+            "description": "role=admin lets this token pass InternalOrAdminGuard, as an alternative to the x-internal-api-key header used elsewhere in this collection."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('adminToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Wallet Fund",
+      "item": [
+        {
+          "name": "Initialize Fund",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{studentUserId}}\",\n  \"email\": \"student@campus.edu\",\n  \"amountKobo\": {{fundAmountKobo}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/wallet/fund/initialize",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wallet",
+                "fund",
+                "initialize"
+              ]
+            },
+            "description": "Requires a real PAYSTACK_SECRET_KEY on the server \u2014 with the .env.example placeholder key this returns 502."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('walletFundReference', pm.response.json().reference);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Balance (before webhook)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wallet/{{studentUserId}}/balance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wallet",
+                "{{studentUserId}}",
+                "balance"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Simulate Webhook: charge.success",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-paystack-signature",
+                "value": "{{__computedSignature}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{__webhookBody}}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/paystack",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "paystack"
+              ]
+            },
+            "description": "Simulates Paystack delivering charge.success for the reference created by Initialize Fund. Run this request TWICE in a row to prove idempotency \u2014 the second delivery must not double-credit the wallet."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const body = JSON.stringify({",
+                  "  event: 'charge.success',",
+                  "  data: {",
+                  "    reference: pm.collectionVariables.get('walletFundReference'),",
+                  "    amount: Number(pm.collectionVariables.get('fundAmountKobo')),",
+                  "    status: 'success',",
+                  "    customer: { email: 'student@campus.edu' },",
+                  "    metadata: { purpose: 'wallet_topup' }",
+                  "  }",
+                  "});",
+                  "const signature = CryptoJS.HmacSHA512(body, pm.collectionVariables.get('paystackSecretKey')).toString(CryptoJS.enc.Hex);",
+                  "pm.collectionVariables.set('__webhookBody', body);",
+                  "pm.collectionVariables.set('__computedSignature', signature);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Balance (after webhook)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wallet/{{studentUserId}}/balance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wallet",
+                "{{studentUserId}}",
+                "balance"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('balance reflects exactly one credit of fundAmountKobo', () => {",
+                  "  pm.expect(pm.response.json().balanceKobo).to.eql(Number(pm.collectionVariables.get('fundAmountKobo')));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wallet/{{studentUserId}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wallet",
+                "{{studentUserId}}",
+                "transactions"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Payout Accounts",
+      "item": [
+        {
+          "name": "Register Restaurant Payout Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{restaurantToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{restaurantUserId}}\",\n  \"bankCode\": \"058\",\n  \"accountNumber\": \"0000000000\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payout-accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payout-accounts"
+              ]
+            },
+            "description": "accountNumber/bankCode are placeholders \u2014 substitute Paystack's documented test-mode values for /bank/resolve so verification actually succeeds."
+          }
+        },
+        {
+          "name": "Register Runner Payout Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{runnerUserId}}\",\n  \"bankCode\": \"058\",\n  \"accountNumber\": \"0000000000\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payout-accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payout-accounts"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Escrow: Hold \u2192 Release",
+      "item": [
+        {
+          "name": "Hold Escrow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentUserId\": \"{{studentUserId}}\",\n  \"restaurantUserId\": \"{{restaurantUserId}}\",\n  \"runnerUserId\": \"{{runnerUserId}}\",\n  \"grossAmountKobo\": {{holdAmountKobo}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/escrow/hold",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId}}",
+                "escrow",
+                "hold"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('orderId', 'order-demo-' + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('escrow held', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('restaurantShare', body.restaurantShare);",
+                  "pm.collectionVariables.set('runnerShare', body.runnerShare);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Release Escrow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-internal-api-key",
+                "value": "{{internalApiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/escrow/release",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId}}",
+                "escrow",
+                "release"
+              ]
+            },
+            "description": "Only callable with the internal service key (or an admin token) \u2014 this is the delivery-confirmation flow's call, never a direct client call. Requires payout accounts to already exist for both the restaurant and runner (see folder 3)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('restaurantTransferReference', body.restaurantTransferReference);",
+                  "  pm.collectionVariables.set('runnerTransferReference', body.runnerTransferReference);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Simulate Webhook: transfer.success (restaurant leg)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-paystack-signature",
+                "value": "{{__computedSignature}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{__webhookBody}}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/paystack",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "paystack"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const body = JSON.stringify({",
+                  "  event: 'transfer.success',",
+                  "  data: {",
+                  "    reference: pm.collectionVariables.get('restaurantTransferReference'),",
+                  "    transfer_code: 'TRF_demo_restaurant',",
+                  "    amount: Number(pm.collectionVariables.get('restaurantShare')),",
+                  "    status: 'success'",
+                  "  }",
+                  "});",
+                  "const signature = CryptoJS.HmacSHA512(body, pm.collectionVariables.get('paystackSecretKey')).toString(CryptoJS.enc.Hex);",
+                  "pm.collectionVariables.set('__webhookBody', body);",
+                  "pm.collectionVariables.set('__computedSignature', signature);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Simulate Webhook: transfer.success (runner leg)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-paystack-signature",
+                "value": "{{__computedSignature}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{__webhookBody}}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/paystack",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "paystack"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const body = JSON.stringify({",
+                  "  event: 'transfer.success',",
+                  "  data: {",
+                  "    reference: pm.collectionVariables.get('runnerTransferReference'),",
+                  "    transfer_code: 'TRF_demo_runner',",
+                  "    amount: Number(pm.collectionVariables.get('runnerShare')),",
+                  "    status: 'success'",
+                  "  }",
+                  "});",
+                  "const signature = CryptoJS.HmacSHA512(body, pm.collectionVariables.get('paystackSecretKey')).toString(CryptoJS.enc.Hex);",
+                  "pm.collectionVariables.set('__webhookBody', body);",
+                  "pm.collectionVariables.set('__computedSignature', signature);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Escrow: Hold \u2192 Refund",
+      "item": [
+        {
+          "name": "Hold Escrow (second order)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentUserId\": \"{{studentUserId}}\",\n  \"restaurantUserId\": \"{{restaurantUserId}}\",\n  \"runnerUserId\": \"{{runnerUserId}}\",\n  \"grossAmountKobo\": {{holdAmountKobo}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId2}}/escrow/hold",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId2}}",
+                "escrow",
+                "hold"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('orderId2', 'order-demo-refund-' + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('escrow held', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Balance (after second hold)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wallet/{{studentUserId}}/balance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wallet",
+                "{{studentUserId}}",
+                "balance"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Refund Escrow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-internal-api-key",
+                "value": "{{internalApiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId2}}/escrow/refund",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId2}}",
+                "escrow",
+                "refund"
+              ]
+            },
+            "description": "No Paystack call happens here \u2014 nothing was ever transferred out of escrow, so a refund is just a wallet credit."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('escrow refunded', () => pm.expect(pm.response.json().status).to.eql('refunded'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Balance (after refund)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wallet/{{studentUserId}}/balance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wallet",
+                "{{studentUserId}}",
+                "balance"
+              ]
+            },
+            "description": "Balance should be back to what it was before 'Hold Escrow (second order)' ran."
+          }
+        },
+        {
+          "name": "Refund Escrow Again (expect 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-internal-api-key",
+                "value": "{{internalApiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId2}}/escrow/refund",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId2}}",
+                "escrow",
+                "refund"
+              ]
+            },
+            "description": "Demonstrates that a refunded escrow can't be refunded twice."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('second refund rejected', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Vendors, Menu, Uploads & Ratings (Task 9)",
+      "description": "Real vendor/menu domain, S3 presigned uploads, and runner ratings. The Hold/Release step here reuses the restaurant/runner payout accounts registered in folder 3, so it only reaches a real 'delivered' order (and therefore a ratable one) when this collection is run against real Paystack test-mode credentials \u2014 same requirement as folder 4.",
+      "item": [
+        {
+          "name": "Create Vendor Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{restaurantToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vendors/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vendors",
+                "me"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessName\": \"Tantalizers UI\",\n  \"category\": \"Nigerian\",\n  \"description\": \"Campus jollof spot\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('vendor profile created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('vendorId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Menu Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{restaurantToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vendors/me/menu-items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vendors",
+                "me",
+                "menu-items"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jollof Rice\",\n  \"description\": \"Party jollof\",\n  \"price\": {{holdAmountKobo}},\n  \"category\": \"Mains\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('menu item created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('menuItemId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Vendor Menu (public)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vendors/{{vendorId}}/menu",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vendors",
+                "{{vendorId}}",
+                "menu"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('menu fetched with no auth', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('includes the created item', () => pm.expect(body.items.some(i => i.id === pm.collectionVariables.get('menuItemId'))).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Presign Menu Item Photo Upload",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{restaurantToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/uploads/presign",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "uploads",
+                "presign"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contentType\": \"image/png\",\n  \"purpose\": \"menu-item-photo\",\n  \"contentLengthBytes\": 200000\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('presigned URL issued', () => pm.response.to.have.status(201));",
+                  "pm.test('upload URL targets the declared bucket key', () => pm.expect(body.uploadUrl).to.include('menu-item-photo/'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Toggle Menu Item Sold Out",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{restaurantToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vendors/me/menu-items/{{menuItemId}}/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vendors",
+                "me",
+                "menu-items",
+                "{{menuItemId}}",
+                "availability"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isAvailable\": false\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('marked unavailable', () => pm.expect(body.isAvailable).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rival Vendor Cannot Edit This Item (expect 403)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vendors/me/menu-items/{{menuItemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vendors",
+                "me",
+                "menu-items",
+                "{{menuItemId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": 1\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('ownership enforced', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Hold Escrow With Vendor + Items (Task 9 order)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{task9OrderId}}/escrow/hold",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{task9OrderId}}",
+                "escrow",
+                "hold"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentUserId\": \"{{studentUserId}}\",\n  \"restaurantUserId\": \"{{restaurantUserId}}\",\n  \"runnerUserId\": \"{{runnerUserId}}\",\n  \"grossAmountKobo\": {{holdAmountKobo}},\n  \"vendorId\": \"{{vendorId}}\",\n  \"deliveryLocationLabel\": \"Hostel B\",\n  \"items\": [\n    {\n      \"menuItemId\": \"{{menuItemId}}\",\n      \"name\": \"Jollof Rice\",\n      \"priceKobo\": {{holdAmountKobo}},\n      \"quantity\": 1,\n      \"notes\": \"extra spicy\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('task9OrderId', 'order-task9-' + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('escrow held, order+order_items created', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Release Escrow (Task 9 order \u2192 delivered)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{task9OrderId}}/escrow/release",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{task9OrderId}}",
+                "escrow",
+                "release"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('released', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rate the Runner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{task9OrderId}}/rating",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{task9OrderId}}",
+                "rating"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stars\": 5,\n  \"comment\": \"Super fast, food still hot\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('rating recorded', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate Rating Attempt (expect 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{task9OrderId}}/rating",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{task9OrderId}}",
+                "rating"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stars\": 3\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('duplicate rejected', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Runner Rating Summary (public)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/runners/{{runnerUserId}}/rating-summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "runners",
+                "{{runnerUserId}}",
+                "rating-summary"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('reflects the new rating', () => pm.expect(body.ratingCount).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Vendor Metrics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{restaurantToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vendors/me/metrics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vendors",
+                "me",
+                "metrics"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('aggregated from real orders', () => pm.expect(body.totalOrders).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

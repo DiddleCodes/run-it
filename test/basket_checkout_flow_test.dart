@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:run_it/core/network/api_exception.dart';
+import 'package:run_it/core/network/demo_identity_service.dart';
+import 'package:run_it/core/network/escrow_repository.dart';
+import 'package:run_it/core/network/vendors_repository.dart';
 import 'package:run_it/core/routing/app_router.dart';
+import 'package:run_it/core/widgets/app_notification.dart';
 import 'package:run_it/core/widgets/primary_button.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
@@ -10,6 +15,7 @@ import 'package:run_it/features/ordering/application/ordering_providers.dart';
 import 'package:run_it/features/ordering/domain/ordering_models.dart';
 import 'package:run_it/features/ordering/presentation/my_orders_screen.dart';
 import 'package:run_it/features/ordering/presentation/ordering_screens.dart';
+import 'package:run_it/features/vendor/domain/vendor_dashboard_models.dart';
 import 'package:run_it/features/wallet/application/wallet_controller.dart';
 import 'package:run_it/features/wallet/presentation/wallet_screen.dart';
 
@@ -47,8 +53,98 @@ class _SeededBasket extends BasketNotifier {
 
 class _LowBalanceWallet extends WalletBalanceController {
   @override
-  int build() => 100;
+  Future<int> build() async => 100;
 }
+
+class _SufficientBalanceWallet extends WalletBalanceController {
+  @override
+  Future<int> build() async => 50000;
+}
+
+/// Always resolves to the same fixed ids — a real `DemoIdentityService`
+/// would hit the network (`POST /users`); tests just need any stable
+/// strings, not real backend provisioning.
+class _FakeDemoIdentityService extends DemoIdentityService {
+  const _FakeDemoIdentityService();
+  @override
+  Future<String> ensureRestaurantUserId() async => 'demo-restaurant-1';
+  @override
+  Future<String> ensureRunnerUserId() async => 'demo-runner-1';
+}
+
+class _SucceedingEscrowRepository extends EscrowRepository {
+  const _SucceedingEscrowRepository();
+  @override
+  Future<void> hold({
+    required String orderId,
+    required String studentUserId,
+    required String restaurantUserId,
+    required String runnerUserId,
+    required int grossAmountKobo,
+    required String token,
+    String? vendorId,
+    List<EscrowOrderItem>? items,
+    int? deliveryFeeKobo,
+  }) async {}
+}
+
+/// Mirrors the backend's real 402 Payment Required rejection from
+/// `OrderEscrowService.hold` (insufficient wallet balance at the moment of
+/// the write) — the exact real failure case Task 8d asks to be handled.
+class _InsufficientBalanceEscrowRepository extends EscrowRepository {
+  const _InsufficientBalanceEscrowRepository();
+  @override
+  Future<void> hold({
+    required String orderId,
+    required String studentUserId,
+    required String restaurantUserId,
+    required String runnerUserId,
+    required int grossAmountKobo,
+    required String token,
+    String? vendorId,
+    List<EscrowOrderItem>? items,
+    int? deliveryFeeKobo,
+  }) async {
+    throw const ApiException(402, 'Insufficient wallet balance');
+  }
+}
+
+/// Task 14: `menuProvider`/`selectedEateryProvider` now fetch real data via
+/// `VendorsRepository.fetchMenu` (`GET /vendors/:id/menu`) instead of the
+/// old `MockOrderingRepository` — this fake stands in for that network
+/// call so Checkout/Basket tests keep resolving `jollof` without hitting a
+/// real backend. Paired with `selectedVendorIdProvider.overrideWith` in
+/// each test below, mirroring `_SeededBasket`'s own `eateryId: 'tantalizers'`.
+class _FakeVendorsRepository extends VendorsRepository {
+  const _FakeVendorsRepository();
+
+  static const _vendor = MyVendorProfile(
+    id: 'tantalizers',
+    businessName: 'Tantalizers',
+    category: 'Meals',
+    userId: 'demo-restaurant-1',
+  );
+
+  static const _items = [
+    VendorMenuItem(
+      id: 'jollof',
+      name: 'Signature jollof',
+      description: 'Smoky jollof rice, grilled chicken and plantain.',
+      priceKobo: 310000,
+      category: 'Mains',
+      isAvailable: true,
+    ),
+  ];
+
+  @override
+  Future<VendorWithMenu> fetchMenu(String vendorId) async =>
+      const VendorWithMenu(vendor: _vendor, items: _items);
+}
+
+final _vendorOverrides = [
+  vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository()),
+  selectedVendorIdProvider.overrideWith((ref) => 'tantalizers'),
+];
 
 void main() {
   group('BasketNotifier', () {
@@ -166,6 +262,7 @@ void main() {
               walletBalanceProvider.overrideWith(
                 () => _LowBalanceWallet(),
               ), // ₦100
+              ..._vendorOverrides,
             ],
             child: MaterialApp.router(routerConfig: router),
           ),
@@ -186,7 +283,64 @@ void main() {
     );
 
     testWidgets(
-      'happy path: add an item, view basket, checkout, and land in My Orders Active tab',
+      'a hold failure (e.g. insufficient balance at write time) blocks order creation — never navigates to OrderTrackingScreen',
+      (tester) async {
+        final router = GoRouter(
+          initialLocation: AppRoutes.checkout,
+          routes: [
+            GoRoute(
+              path: AppRoutes.checkout,
+              builder: (_, _) => const CheckoutScreen(),
+            ),
+            GoRoute(
+              path: AppRoutes.orderTracking,
+              builder: (_, _) => const OrderTrackingScreen(),
+            ),
+          ],
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              authControllerProvider.overrideWith(
+                () => _FakeAuthController(_studentSession()),
+              ),
+              basketProvider.overrideWith(() => _SeededBasket('jollof')),
+              walletBalanceProvider.overrideWith(() => _SufficientBalanceWallet()),
+              demoIdentityServiceProvider.overrideWithValue(
+                const _FakeDemoIdentityService(),
+              ),
+              escrowRepositoryProvider.overrideWithValue(
+                const _InsufficientBalanceEscrowRepository(),
+              ),
+              ..._vendorOverrides,
+            ],
+            child: MaterialApp.router(
+              routerConfig: router,
+              builder: (context, child) =>
+                  AppNotificationHost(child: child ?? const SizedBox.shrink()),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 1200));
+
+        final placeOrderFinder = find.textContaining('Place order');
+        expect(placeOrderFinder, findsOneWidget);
+        await tester.tap(placeOrderFinder);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+
+        // Never got to OrderTrackingScreen — still on Checkout, and the
+        // backend's own rejection message is surfaced rather than a
+        // generic one.
+        expect(find.text('Track your order'), findsNothing);
+        expect(find.text('Checkout'), findsOneWidget);
+        expect(find.text('Insufficient wallet balance'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'happy path: add an item, view basket, checkout with a real hold, and land in My Orders Active tab',
       (tester) async {
         final router = GoRouter(
           initialLocation: AppRoutes.menu,
@@ -219,12 +373,20 @@ void main() {
               authControllerProvider.overrideWith(
                 () => _FakeAuthController(_studentSession()),
               ),
+              walletBalanceProvider.overrideWith(() => _SufficientBalanceWallet()),
+              demoIdentityServiceProvider.overrideWithValue(
+                const _FakeDemoIdentityService(),
+              ),
+              escrowRepositoryProvider.overrideWithValue(
+                const _SucceedingEscrowRepository(),
+              ),
+              ..._vendorOverrides,
             ],
             child: MaterialApp.router(routerConfig: router),
           ),
         );
         await tester.pump();
-        // Lets the mock eatery + menu FutureProviders resolve.
+        // Lets the eatery + menu FutureProviders resolve.
         await tester.pump(const Duration(milliseconds: 1200));
 
         expect(find.text('Signature jollof'), findsOneWidget);
@@ -247,7 +409,7 @@ void main() {
         expect(placeOrderFinder, findsOneWidget);
         await tester.tap(placeOrderFinder);
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
+        await tester.pump(const Duration(milliseconds: 200));
 
         // Checkout->OrderTracking is a context.go(), then we jump straight
         // to My Orders the same way tapping its nav tab would.
@@ -257,8 +419,16 @@ void main() {
         await tester.pump(const Duration(milliseconds: 50));
 
         expect(find.text('Active (1)'), findsOneWidget);
-        expect(find.text('Order confirmed'), findsOneWidget);
-        expect(find.text('Confirmed'), findsOneWidget);
+        expect(find.text('Order received'), findsOneWidget);
+        // Scoped to MyOrdersScreen: OrderTrackingScreen is still mounted in
+        // a background shell branch, and its own Task 10 step labels
+        // ('Preparing', 'Confirmed', ...) now legitimately share text with
+        // this screen's separate compact mini-stepper — an unscoped
+        // find.text would match both.
+        expect(
+          find.descendant(of: find.byType(MyOrdersScreen), matching: find.text('Confirmed')),
+          findsOneWidget,
+        );
       },
     );
   });

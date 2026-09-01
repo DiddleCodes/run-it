@@ -8,14 +8,16 @@ import 'package:go_router/go_router.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
-import '../../../core/widgets/app_notification.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/segmented_progress_bar.dart';
 import '../../auth/presentation/kyc/camera_capture_step.dart';
 import '../../auth/presentation/widgets/campus_picker_field.dart';
 import '../../auth/presentation/widgets/validated_field.dart';
+import '../../payout/domain/payout_models.dart';
+import '../../payout/presentation/widgets/payout_account_form.dart';
 import '../application/vendor_application_controller.dart';
 import '../domain/vendor_models.dart';
+import 'widgets/category_picker_field.dart';
 
 /// Business Info → Contact & Location → Review, one route/screen with an
 /// internal step index — same wizard shape as [KycCaptureScreen] (shared
@@ -100,6 +102,12 @@ class _VendorApplicationScreenState
           application: application,
           onContinue: () => setState(() => _step += 1),
         );
+      case VendorStepKind.payoutDetails:
+        return _PayoutDetailsStep(
+          key: const ValueKey('vendor-payout-details'),
+          application: application,
+          onContinue: () => setState(() => _step += 1),
+        );
       case VendorStepKind.review:
         return _ReviewStep(
           application: application,
@@ -108,6 +116,9 @@ class _VendorApplicationScreenState
           ),
           onEditContact: () => setState(
             () => _step = vendorSteps.indexOf(VendorStepKind.contactLocation),
+          ),
+          onEditPayout: () => setState(
+            () => _step = vendorSteps.indexOf(VendorStepKind.payoutDetails),
           ),
         );
     }
@@ -164,8 +175,8 @@ class _BusinessInfoStepState extends ConsumerState<_BusinessInfoStep> {
     text: widget.application.description,
   );
   final _nameFieldKey = GlobalKey<ValidatedFieldState>();
-  late VendorCategory? _category = widget.application.category;
-  bool _categoryError = false;
+  late String? _category = widget.application.category;
+  String? _categoryError;
 
   @override
   void dispose() {
@@ -174,18 +185,12 @@ class _BusinessInfoStepState extends ConsumerState<_BusinessInfoStep> {
     super.dispose();
   }
 
-  void _selectCategory(VendorCategory category) {
-    HapticFeedback.selectionClick();
-    setState(() {
-      _category = category;
-      _categoryError = false;
-    });
-  }
-
   void _continue() {
     final nameOk = _nameFieldKey.currentState?.validateNow() ?? false;
     final category = _category;
-    setState(() => _categoryError = category == null);
+    setState(
+      () => _categoryError = category == null ? 'Choose a category to continue.' : null,
+    );
     if (!nameOk || category == null) return;
 
     ref
@@ -259,31 +264,17 @@ class _BusinessInfoStepState extends ConsumerState<_BusinessInfoStep> {
           ),
           const SizedBox(height: AppSpacing.sm),
           staggered(
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
-              children: [
-                for (final category in VendorCategory.values)
-                  _CategoryChip(
-                    label: category.label,
-                    selected: _category == category,
-                    onTap: () => _selectCategory(category),
-                  ),
-              ],
+            CategoryPickerField(
+              selected: _category,
+              errorText: _categoryError,
+              onChanged: (category) {
+                HapticFeedback.selectionClick();
+                setState(() {
+                  _category = category;
+                  _categoryError = null;
+                });
+              },
             ),
-          ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 180),
-            child: _categoryError
-                ? Padding(
-                    padding: const EdgeInsets.only(top: 6, left: 4),
-                    child: Text(
-                      'Choose a category to continue.',
-                      style: Theme.of(context).textTheme.labelSmall
-                          ?.copyWith(color: AppColors.error),
-                    ),
-                  )
-                : const SizedBox.shrink(),
           ),
           const SizedBox(height: AppSpacing.lg),
           staggered(
@@ -304,74 +295,6 @@ class _BusinessInfoStepState extends ConsumerState<_BusinessInfoStep> {
           const SizedBox(height: AppSpacing.xl),
           staggered(PrimaryButton(label: 'Continue', onPressed: _continue)),
         ],
-      ),
-    );
-  }
-}
-
-class _CategoryChip extends StatefulWidget {
-  const _CategoryChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  State<_CategoryChip> createState() => _CategoryChipState();
-}
-
-class _CategoryChipState extends State<_CategoryChip> {
-  bool _pressed = false;
-  void _setPressed(bool value) => setState(() => _pressed = value);
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      selected: widget.selected,
-      label: widget.label,
-      child: GestureDetector(
-        onTapDown: (_) => _setPressed(true),
-        onTapUp: (_) => _setPressed(false),
-        onTapCancel: () => _setPressed(false),
-        onTap: widget.onTap,
-        child: AnimatedScale(
-          scale: _pressed
-              ? 0.95
-              : widget.selected
-              ? 1.04
-              : 1,
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOut,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: widget.selected
-                  ? AppColors.accentForest
-                  : AppColors.surfaceCard,
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-              border: Border.all(
-                color: widget.selected
-                    ? AppColors.accentForest
-                    : AppColors.borderSubtle,
-                width: widget.selected ? 1.4 : 1,
-              ),
-              boxShadow: widget.selected ? AppElevation.raised(false) : null,
-            ),
-            child: Text(
-              widget.label,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: widget.selected ? Colors.white : AppColors.inkText,
-                fontWeight: widget.selected ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -554,15 +477,86 @@ class _ContactLocationStepState extends ConsumerState<_ContactLocationStep> {
   }
 }
 
+/// Task 8c Part C: the wizard's new third step, built on the same shared
+/// [PayoutAccountForm] Runner Profile uses (Part A/B) — a restaurant
+/// account reaches this already authenticated (see [AuthSession]'s doc
+/// comment: it goes through the same session-creating funnel as
+/// student/runner, just branching into this wizard afterward instead of
+/// KYC/Home), so the form's backend call has a real user id/token to work
+/// with here too.
+class _PayoutDetailsStep extends ConsumerWidget {
+  const _PayoutDetailsStep({
+    super.key,
+    required this.application,
+    required this.onContinue,
+  });
+  final VendorApplication application;
+  final VoidCallback onContinue;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    const onBg = AppColors.inkText;
+    const secondary = AppColors.mutedText;
+    final initialAccount = application.payoutBankCode == null
+        ? null
+        : PayoutAccount(
+            bankCode: application.payoutBankCode!,
+            bankName: application.payoutBankName!,
+            accountNumber: application.payoutAccountNumber!,
+            accountName: application.payoutAccountName!,
+          );
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Center(child: _StepHero(icon: Icons.account_balance_rounded)),
+          const SizedBox(height: AppSpacing.lg),
+          Text(
+            'Payout details',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineLarge
+                ?.copyWith(color: onBg, fontSize: 25),
+          ).animate().fadeIn(duration: 260.ms).moveY(begin: 8, end: 0),
+          const SizedBox(height: 6),
+          Text(
+            "Where we'll send your share of every order.",
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: secondary),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          PayoutAccountForm(
+            initialAccount: initialAccount,
+            onSaved: (account) {
+              ref
+                  .read(vendorApplicationProvider.notifier)
+                  .setPayoutInfo(
+                    bankCode: account.bankCode,
+                    bankName: account.bankName,
+                    accountNumber: account.accountNumber,
+                    accountName: account.accountName,
+                  );
+              onContinue();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ReviewStep extends ConsumerWidget {
   const _ReviewStep({
     required this.application,
     required this.onEditBusiness,
     required this.onEditContact,
+    required this.onEditPayout,
   });
   final VendorApplication application;
   final VoidCallback onEditBusiness;
   final VoidCallback onEditContact;
+  final VoidCallback onEditPayout;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -595,7 +589,7 @@ class _ReviewStep extends ConsumerWidget {
             onEdit: onEditBusiness,
             rows: [
               ('Name', application.businessName),
-              ('Category', application.category?.label ?? '—'),
+              ('Category', application.category ?? '—'),
               if (application.description.trim().isNotEmpty)
                 ('Description', application.description.trim()),
             ],
@@ -615,16 +609,35 @@ class _ReviewStep extends ConsumerWidget {
               ),
             ],
           ),
+          const SizedBox(height: AppSpacing.md),
+          _ReviewCard(
+            icon: Icons.account_balance_rounded,
+            title: 'Payout Details',
+            onEdit: onEditPayout,
+            rows: [
+              ('Bank', application.payoutBankName ?? '—'),
+              (
+                'Account number',
+                application.payoutAccountNumber == null
+                    ? '—'
+                    : '•••• ${application.payoutAccountNumber!.substring(application.payoutAccountNumber!.length - 4)}',
+              ),
+              ('Account name', application.payoutAccountName ?? '—'),
+            ],
+          ),
           const SizedBox(height: AppSpacing.xl),
           PrimaryButton(
-            label: 'Submit for Review',
+            label: 'Submit',
             onPressed: application.isSubmittable
                 ? () {
+                    // Task 12: auto-approved on submission (temporary
+                    // stopgap — see VendorsService.upsertMyVendor's own
+                    // doc comment for the tracked follow-up) — there's no
+                    // review wait to hand off to, so this goes straight
+                    // into confirming the real business profile instead of
+                    // a dead-end pending screen.
                     ref.read(vendorApplicationProvider.notifier).submit();
-                    ref
-                        .read(appNotificationProvider.notifier)
-                        .info('Application submitted for review.');
-                    context.go(AppRoutes.vendorPending);
+                    context.go(AppRoutes.restaurantProfileSetup);
                   }
                 : null,
           ),

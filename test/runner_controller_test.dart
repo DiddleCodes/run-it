@@ -1,15 +1,36 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:run_it/core/network/vendors_repository.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
 import 'package:run_it/features/runner/application/runner_controller.dart';
 import 'package:run_it/features/runner/domain/runner_models.dart';
+import 'package:run_it/features/vendor/domain/vendor_dashboard_models.dart';
 
 class _FakeAuthController extends AuthController {
   _FakeAuthController(this._session);
   final AuthSession _session;
   @override
   AuthSession? build() => _session;
+}
+
+/// In-memory stand-in for the real, network-backed `VendorsRepository` —
+/// every test that goes online (`toggleAvailability`) exercises
+/// `RunnerController._scheduleOffer`, which now fetches from
+/// `campusEateriesProvider` (real `GET /vendors`, Task 14) instead of the
+/// old `MockOrderingRepository`. [vendors] defaults to one active vendor so
+/// existing offer-flow tests keep receiving an offer; the "no active
+/// vendors" test overrides it with an empty list instead.
+class _FakeVendorsRepository extends VendorsRepository {
+  const _FakeVendorsRepository([this.vendors = const [_defaultVendor]]);
+  final List<MyVendorProfile> vendors;
+
+  static const _defaultVendor = MyVendorProfile(id: 'tantalizers', businessName: 'Tantalizers', category: 'Meals');
+
+  @override
+  Future<VendorsPage> listVendors({String? category, String? search, int page = 1, int limit = 20}) async {
+    return VendorsPage(items: vendors, total: vendors.length, page: page, limit: limit);
+  }
 }
 
 AuthSession _sessionForCampus(
@@ -38,6 +59,7 @@ void main() {
         authControllerProvider.overrideWith(
           () => _FakeAuthController(_sessionForCampus('ui')),
         ),
+        vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository()),
       ],
     );
     addTearDown(container.dispose);
@@ -65,14 +87,18 @@ void main() {
   });
 
   test(
-    'a runner in a campus with no active vendors never receives an offer',
+    // Task 14: the backend has no per-campus vendor assignment, so there's
+    // no longer a "this campus has no vendors" case to scope to — the only
+    // remaining "no jobs" condition is genuinely zero active vendors
+    // anywhere.
+    'a runner never receives an offer when there are no active vendors at all',
     () async {
       final container = ProviderContainer(
         overrides: [
-          // 'bu' has zero eateries in the mock ordering data.
           authControllerProvider.overrideWith(
-            () => _FakeAuthController(_sessionForCampus('bu')),
+            () => _FakeAuthController(_sessionForCampus('ui')),
           ),
+          vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository([])),
         ],
       );
       addTearDown(container.dispose);
@@ -97,6 +123,7 @@ void main() {
           authControllerProvider.overrideWith(
             () => _FakeAuthController(_sessionForCampus('ui')),
           ),
+          vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository()),
         ],
       );
       addTearDown(container.dispose);
@@ -201,6 +228,7 @@ void main() {
               _sessionForCampus('ui', kycStatus: KycStatus.verified),
             ),
           ),
+          vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository()),
         ],
       );
       addTearDown(container.dispose);
@@ -222,6 +250,7 @@ void main() {
         authControllerProvider.overrideWith(
           () => _FakeAuthController(_sessionForCampus('ui')),
         ),
+        vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository()),
       ],
     );
     addTearDown(container.dispose);

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:run_it/core/network/ratings_repository.dart';
+import 'package:run_it/core/network/vendors_repository.dart';
 import 'package:run_it/core/routing/app_router.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
@@ -12,6 +14,7 @@ import 'package:run_it/features/runner/presentation/runner_messages_screen.dart'
 import 'package:run_it/features/runner/presentation/runner_profile_screen.dart';
 import 'package:run_it/features/runner/presentation/runner_scan_screen.dart';
 import 'package:run_it/features/runner/presentation/runner_screens.dart';
+import 'package:run_it/features/vendor/domain/vendor_dashboard_models.dart';
 
 class _FakeAuthController extends AuthController {
   _FakeAuthController(this._session);
@@ -37,6 +40,33 @@ AuthSession _runnerSession({
     runnerType: runnerType,
   ),
 );
+
+/// Task 14: `RunnerJobsScreen`'s Available tab now draws its job previews
+/// from real vendor data (`campusEateriesProvider`, `GET /vendors`)
+/// instead of the old `MockOrderingRepository`'s fixed "Tantalizers" entry
+/// — this fake keeps that same name so the test's own assertions don't
+/// need to change, while keeping the test network-free.
+class _FakeVendorsRepository extends VendorsRepository {
+  const _FakeVendorsRepository();
+  @override
+  Future<VendorsPage> listVendors({String? category, String? search, int page = 1, int limit = 20}) async {
+    return const VendorsPage(
+      items: [MyVendorProfile(id: 'tantalizers', businessName: 'Tantalizers', category: 'Meals')],
+      total: 1,
+      page: 1,
+      limit: 20,
+    );
+  }
+}
+
+/// Task 14: Runner Profile now fetches its real rating aggregate — a fixed
+/// stub keeps these unrelated tests network-free.
+class _FakeRatingsRepository extends RatingsRepository {
+  const _FakeRatingsRepository();
+  @override
+  Future<RunnerRatingSummary> fetchRunnerRatingSummary(String runnerId) async =>
+      RunnerRatingSummary(runnerId: runnerId, averageRating: 4.8, ratingCount: 12);
+}
 
 DeliveryJob _job() => DeliveryJob(
   id: 'job-1',
@@ -108,6 +138,7 @@ void main() {
           authControllerProvider.overrideWith(
             () => _FakeAuthController(_runnerSession(runnerType: RunnerType.studentRunner)),
           ),
+          vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository()),
         ],
         child: const MaterialApp(home: RunnerJobsScreen()),
       ),
@@ -166,6 +197,7 @@ void main() {
             authControllerProvider.overrideWith(
               () => _FakeAuthController(_runnerSession(runnerType: RunnerType.studentRunner)),
             ),
+            ratingsRepositoryProvider.overrideWithValue(const _FakeRatingsRepository()),
           ],
           child: const MaterialApp(home: RunnerProfileScreen()),
         ),
@@ -189,6 +221,7 @@ void main() {
                 _runnerSession(runnerType: RunnerType.independentRider),
               ),
             ),
+            ratingsRepositoryProvider.overrideWithValue(const _FakeRatingsRepository()),
           ],
           child: const MaterialApp(home: RunnerProfileScreen()),
         ),
@@ -258,6 +291,8 @@ void main() {
               authControllerProvider.overrideWith(
                 () => _FakeAuthController(_runnerSession(runnerType: RunnerType.studentRunner)),
               ),
+              vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository()),
+              ratingsRepositoryProvider.overrideWithValue(const _FakeRatingsRepository()),
             ],
             child: MaterialApp(home: screen),
           ),
@@ -285,6 +320,7 @@ void main() {
                 ),
               ),
             ),
+            vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository()),
           ],
           child: const MaterialApp(home: RunnerJobsScreen()),
         ),
@@ -316,6 +352,7 @@ void main() {
                 ),
               ),
             ),
+            ratingsRepositoryProvider.overrideWithValue(const _FakeRatingsRepository()),
           ],
           child: const MaterialApp(home: RunnerProfileScreen()),
         ),

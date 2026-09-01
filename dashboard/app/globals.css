@@ -1,0 +1,244 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+  --font-fraunces: var(--font-fraunces);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/*
+ * RUN-It dashboard brand palette — ported verbatim from the Figma Make
+ * prototype's index.css so the real app matches its visual direction
+ * exactly (burgundy/gold on a neutral surface), mapped onto shadcn's
+ * standard token names so shadcn/ui primitives pick it up automatically.
+ */
+:root {
+  --background: #f4f2ee;
+  --foreground: #1a1410;
+  --card: #ffffff;
+  --card-foreground: #1a1410;
+  --popover: #ffffff;
+  --popover-foreground: #1a1410;
+  --primary: #7a1636;
+  --primary-foreground: #ffffff;
+  --secondary: #ede8e1;
+  --secondary-foreground: #4a3828;
+  --muted: #e4ddd5;
+  --muted-foreground: #7a6a58;
+  --accent: #d99a18;
+  --accent-foreground: #1a1410;
+  --destructive: #dc2626;
+  --border: rgba(26, 20, 16, 0.1);
+  --input: rgba(26, 20, 16, 0.15);
+  --ring: #7a1636;
+  --radius: 10px;
+
+  --burgundy: #7a1636;
+  --dark-burgundy: #5a0e25;
+  --gold: #d99a18;
+  --dark-gold: #b07d0e;
+
+  --sidebar: #1a0e12;
+  --sidebar-foreground: #f4f2ee;
+  --sidebar-primary: #7a1636;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #d99a18;
+  --sidebar-accent-foreground: #1a1410;
+  --sidebar-border: rgba(255, 255, 255, 0.05);
+  --sidebar-ring: #9b2040;
+}
+
+.dark {
+  --background: #0f0d0b;
+  --foreground: #f4f2ee;
+  --card: #1c1814;
+  --card-foreground: #f4f2ee;
+  --popover: #1c1814;
+  --popover-foreground: #f4f2ee;
+  --primary: #9b2040;
+  --primary-foreground: #ffffff;
+  --secondary: #2a231c;
+  --secondary-foreground: #c8b8a2;
+  --muted: #231e18;
+  --muted-foreground: #9a8a78;
+  --accent: #d99a18;
+  --accent-foreground: #1a1410;
+  --destructive: #f87171;
+  --border: rgba(244, 242, 238, 0.1);
+  --input: rgba(244, 242, 238, 0.15);
+  --ring: #9b2040;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-fraunces {
+  font-family: var(--font-fraunces), serif;
+}
+
+/* Scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 3px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* Sidebar collapse transition */
+.sidebar-transition {
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Page transition */
+@keyframes pageIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.page-enter {
+  animation: pageIn 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Ambient login background */
+@keyframes floatOrb {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(30px, -20px) scale(1.05);
+  }
+  66% {
+    transform: translate(-15px, 15px) scale(0.97);
+  }
+}
+.orb-1 {
+  animation: floatOrb 12s ease-in-out infinite;
+}
+.orb-2 {
+  animation: floatOrb 16s ease-in-out infinite reverse;
+  animation-delay: -4s;
+}
+.orb-3 {
+  animation: floatOrb 20s ease-in-out infinite;
+  animation-delay: -8s;
+}
+
+/* Skeleton shimmer (used by our shared Skeleton component) */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--muted) 25%, var(--secondary) 50%, var(--muted) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Glass effect for top bar */
+.glass-bar {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.dark .glass-bar {
+  background: rgba(28, 24, 20, 0.82);
+}
+
+/* Table row hover */
+.table-row-hover:hover {
+  background: linear-gradient(90deg, rgba(122, 22, 54, 0.03) 0%, transparent 100%);
+  transition: background 0.15s ease;
+}
+
+/* Gold accent underline for active nav */
+.nav-active-indicator {
+  position: relative;
+}
+.nav-active-indicator::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--gold);
+  border-radius: 0 2px 2px 0;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}

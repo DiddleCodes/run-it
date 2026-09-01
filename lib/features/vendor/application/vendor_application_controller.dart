@@ -10,7 +10,7 @@ class VendorApplicationController extends Notifier<VendorApplication> {
 
   void setBusinessInfo({
     required String businessName,
-    required VendorCategory category,
+    required String category,
     String description = '',
   }) => state = state.copyWith(
     businessName: businessName,
@@ -32,6 +32,18 @@ class VendorApplicationController extends Notifier<VendorApplication> {
       state = state.copyWith(storefrontPhoto: bytes);
   void clearStorefrontPhoto() =>
       state = state.copyWith(clearStorefrontPhoto: true);
+
+  void setPayoutInfo({
+    required String bankCode,
+    required String bankName,
+    required String accountNumber,
+    required String accountName,
+  }) => state = state.copyWith(
+    payoutBankCode: bankCode,
+    payoutBankName: bankName,
+    payoutAccountNumber: accountNumber,
+    payoutAccountName: accountName,
+  );
 
   /// STUB — see [VendorApplication]'s doc comment. Only moves local state
   /// to pending; no request is actually sent anywhere.

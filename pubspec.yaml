@@ -22,6 +22,10 @@ dependencies:
   # Motion — declarative micro-animations used throughout
   flutter_animate: ^4.5.2
 
+  # HTTP — the payments backend (Task 8b/8c) is the app's first real network
+  # boundary; everything else is still a client-mocked repository.
+  http: ^1.2.2
+
   # Vector assets (illustrations, icons)
   flutter_svg: ^2.0.17
 
@@ -42,11 +46,15 @@ dependencies:
   crypto: ^3.0.6
   geolocator: ^13.0.2
   mobile_scanner: ^7.4.0
+  flutter_paystack_plus: ^2.6.0
+  cached_network_image: ^4.0.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
+  flutter_native_splash: ^2.4.3
 
 flutter:
   uses-material-design: true
@@ -58,3 +66,27 @@ flutter:
   # Plus Jakarta Sans + Inter are loaded at runtime via google_fonts, so no
   # bundled font files are declared here. (GeneralSans/Satoshi OTFs remain
   # under assets/fonts/ but are no longer referenced.)
+
+# Task 22: real app icon, generated from the run-it. wordmark's own dome
+# glyph (assets/images/02_run-it_logo.png) composited onto the app's
+# actual cream background (AppColors.backgroundCream) — see
+# assets/icons/app_icon.png/app_icon_foreground.png. Regenerate with
+# `dart run flutter_launcher_icons` after changing either source image.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icons/app_icon.png"
+  remove_alpha_ios: true
+  adaptive_icon_background: "#FBF4E9"
+  adaptive_icon_foreground: "assets/icons/app_icon_foreground.png"
+
+# Native launch screen (the brief flash before the in-Flutter SplashScreen
+# widget takes over) — same cream background and dome mark so there's no
+# color discontinuity between the OS launch screen and SplashScreen's own
+# backgroundCream base. Regenerate with `dart run flutter_native_splash:create`.
+flutter_native_splash:
+  color: "#FBF4E9"
+  image: assets/icons/app_icon_foreground.png
+  android_12:
+    color: "#FBF4E9"
+    image: assets/icons/app_icon_foreground.png

@@ -4,37 +4,21 @@ import '../../auth/domain/auth_models.dart' show Campus;
 
 export '../../auth/domain/auth_models.dart' show Campus;
 
-/// Fixed set a vendor picks one of on Business Info — deliberately a short,
-/// closed list (not free text) since these double as the filter chips
-/// students already browse Home by, so a vendor's category has to land on
-/// a value the student side actually understands.
-enum VendorCategory { nigerian, fastFood, snacks, drinks, bakery, other }
-
-extension VendorCategoryLabel on VendorCategory {
-  String get label => switch (this) {
-    VendorCategory.nigerian => 'Nigerian',
-    VendorCategory.fastFood => 'Fast Food',
-    VendorCategory.snacks => 'Snacks',
-    VendorCategory.drinks => 'Drinks',
-    VendorCategory.bakery => 'Bakery',
-    VendorCategory.other => 'Other',
-  };
-}
-
 enum VendorApplicationStatus { draft, pending }
 
 /// A prospective vendor's registration application — built up across the
 /// Business Info / Contact & Location steps of the wizard and, on submit,
 /// flipped to [VendorApplicationStatus.pending].
 ///
-/// STUB: there is no real application-review backend yet. `submit()` just
-/// moves this local, in-memory record to `pending` — same convention as
-/// `AuthController.submitKyc`, which moves a runner/student to
-/// [KycStatus.pending] with no real review queue behind it either. A real
-/// implementation would POST this and track a server-issued application
-/// id; approval would arrive by email with dashboard access, not by any
-/// further mobile screen (menu/order management is explicitly web-app
-/// scope — see `vendor_pending_screen.dart`).
+/// STUB: `submit()` just moves this local, in-memory record to `pending` —
+/// nothing here is sent to the backend yet. The real `POST /vendors/me`
+/// call happens right after, on `RestaurantProfileSetupScreen` (Task 12),
+/// which prefills itself from this same record rather than asking the
+/// restaurant to re-enter business name/category/description. Submission
+/// is auto-approved (temporary stopgap — see
+/// `VendorsService.upsertMyVendor`'s doc comment backend-side) straight
+/// into that screen, then the Restaurant Dashboard shell — order/menu
+/// management is genuinely mobile scope now (Task 12), not web-app-only.
 class VendorApplication {
   const VendorApplication({
     this.businessName = '',
@@ -44,16 +28,34 @@ class VendorApplication {
     this.contactPhone = '',
     this.campus,
     this.storefrontPhoto,
+    this.payoutBankCode,
+    this.payoutBankName,
+    this.payoutAccountNumber,
+    this.payoutAccountName,
     this.status = VendorApplicationStatus.draft,
   });
 
   final String businessName;
-  final VendorCategory? category;
+  // The canonical label of one of the backend's controlled vendor
+  // categories (`GET /vendors/categories`) — these double as the filter
+  // chips students already browse Home by, so a vendor's category has to
+  // land on a value the student side actually understands. Picked via
+  // `CategoryPickerField`, never typed free text, so it always matches
+  // one of the backend's own values.
+  final String? category;
   final String description;
   final String contactName;
   final String contactPhone;
   final Campus? campus;
   final Uint8List? storefrontPhoto;
+
+  /// Set together, from the shared `PayoutAccountForm`'s resolved result
+  /// (Task 8c Part A) — `payoutAccountName` is always what Paystack
+  /// resolved, never typed by the vendor.
+  final String? payoutBankCode;
+  final String? payoutBankName;
+  final String? payoutAccountNumber;
+  final String? payoutAccountName;
   final VendorApplicationStatus status;
 
   bool get businessInfoComplete =>
@@ -62,17 +64,26 @@ class VendorApplication {
       contactName.trim().isNotEmpty &&
       contactPhone.trim().isNotEmpty &&
       campus != null;
-  bool get isSubmittable => businessInfoComplete && contactInfoComplete;
+  bool get payoutInfoComplete =>
+      payoutBankCode != null &&
+      payoutAccountNumber != null &&
+      payoutAccountName != null;
+  bool get isSubmittable =>
+      businessInfoComplete && contactInfoComplete && payoutInfoComplete;
 
   VendorApplication copyWith({
     String? businessName,
-    VendorCategory? category,
+    String? category,
     String? description,
     String? contactName,
     String? contactPhone,
     Campus? campus,
     Uint8List? storefrontPhoto,
     bool clearStorefrontPhoto = false,
+    String? payoutBankCode,
+    String? payoutBankName,
+    String? payoutAccountNumber,
+    String? payoutAccountName,
     VendorApplicationStatus? status,
   }) => VendorApplication(
     businessName: businessName ?? this.businessName,
@@ -84,6 +95,10 @@ class VendorApplication {
     storefrontPhoto: clearStorefrontPhoto
         ? null
         : storefrontPhoto ?? this.storefrontPhoto,
+    payoutBankCode: payoutBankCode ?? this.payoutBankCode,
+    payoutBankName: payoutBankName ?? this.payoutBankName,
+    payoutAccountNumber: payoutAccountNumber ?? this.payoutAccountNumber,
+    payoutAccountName: payoutAccountName ?? this.payoutAccountName,
     status: status ?? this.status,
   );
 }
@@ -94,10 +109,11 @@ class VendorApplication {
 /// branches (there's no runner-type-style fork for a vendor application),
 /// but it's still centralized here rather than each step hardcoding its
 /// own index/count.
-enum VendorStepKind { businessInfo, contactLocation, review }
+enum VendorStepKind { businessInfo, contactLocation, payoutDetails, review }
 
 const vendorSteps = [
   VendorStepKind.businessInfo,
   VendorStepKind.contactLocation,
+  VendorStepKind.payoutDetails,
   VendorStepKind.review,
 ];

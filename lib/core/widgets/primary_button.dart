@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../theme/app_colors.dart';
 
 /// A rounded-rect CTA with a tactile press response (scale + haptic) and a
@@ -61,7 +62,10 @@ class _PrimaryButtonState extends State<PrimaryButton> {
             borderRadius: BorderRadius.circular(16),
             gradient: enabled
                 ? const LinearGradient(
-                    colors: [AppColors.primaryMaroon, AppColors.primaryMaroonDeep],
+                    colors: [
+                      AppColors.primaryMaroon,
+                      AppColors.primaryMaroonDeep,
+                    ],
                   )
                 : null,
             color: enabled ? null : disabledBg,
@@ -87,10 +91,21 @@ class _PrimaryButtonState extends State<PrimaryButton> {
               : Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      widget.label,
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: enabled ? AppColors.onMaroon : disabledText,
+                    // Flexible, not a bare Text: several call sites build
+                    // this label dynamically (basket subtotal, order
+                    // total) and can run long — at larger Dynamic Type
+                    // scale that combined with a fixed-width button can
+                    // need more horizontal room than's available. Flexible
+                    // lets it shrink to a single ellipsized line instead
+                    // of overflowing the row.
+                    Flexible(
+                      child: Text(
+                        widget.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: enabled ? AppColors.onMaroon : disabledText,
+                        ),
                       ),
                     ),
                     if (widget.icon != null) ...[

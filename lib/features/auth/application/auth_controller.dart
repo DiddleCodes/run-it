@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
+import '../../../core/widgets/app_notification.dart';
 import '../data/auth_repository.dart';
 import '../domain/auth_models.dart';
 
@@ -18,26 +19,56 @@ const _passcodeUserKey = 'runit_passcode_user_v1';
 // database where salting defends against a leaked hash table.
 const _passcodeSalt = 'runit_passcode_pepper_v1';
 
+// Task 17: the real, backend-issued session token — persisted so
+// passcode/biometric unlock can resume a still-valid session locally
+// (no network call) instead of blindly re-minting one via the now
+// production-disabled dev-token bridge. Written at setPasscode()/
+// enableBiometric() time (the same moments the credential snapshots
+// above are written), not at OTP-verify time — whatever session is live
+// when a quick-unlock credential is set up is exactly what that
+// credential should resume later.
+const _sessionTokenKey = 'runit_session_token_v1';
+const _sessionExpiryKey = 'runit_session_expiry_v1';
+
+/// Thrown by [AuthController.loginWithPasscode]/[loginWithBiometric] when
+/// the local credential check passes but there's no still-valid persisted
+/// session to resume (it expired, or Task 17's [AuthController.handleUnauthorized]
+/// cleared it after a suspension). The caller must route to a full
+/// re-authentication (OTP) — retrying the same passcode/biometric can
+/// never fix this.
+class SessionRecoveryRequiredException implements Exception {
+  const SessionRecoveryRequiredException();
+}
+
 class AuthController extends Notifier<AuthSession?> {
-  final _repository = const AuthRepository();
+  /// Deliberately not private/final — tests that need to exercise real
+  /// controller logic (passcode hashing, biometric-credential storage) but
+  /// stub out the network boundary reassign this in a subclass's `build()`,
+  /// mirroring how `_FakeAuthController` subclasses elsewhere in this app
+  /// override individual methods rather than requiring constructor
+  /// injection (which `NotifierProvider` can't supply — it always calls
+  /// `AuthController.new` with no arguments).
+  AuthRepository repository = const AuthRepository();
   final _localAuth = LocalAuthentication();
   final _secureStorage = const FlutterSecureStorage();
   final _random = Random();
-  Timer? _refreshTimer;
   Timer? _kycTimer;
 
   @override
   AuthSession? build() {
     ref.onDispose(() {
-      _refreshTimer?.cancel();
       _kycTimer?.cancel();
     });
     return null;
   }
 
-  Future<void> sendOtp(String contact) => _repository.sendOtp(contact);
+  Future<void> sendOtp(String contact, {required AccountType accountType}) =>
+      repository.sendOtp(contact, accountType: accountType);
 
-  Future<bool> verifyOtpAndLogin({
+  /// Throws [ApiException] on a wrong/expired code or a suspended account
+  /// (the backend deliberately makes these indistinguishable) — the
+  /// caller shows the backend's own message rather than a hardcoded one.
+  Future<void> verifyOtpAndLogin({
     required String contact,
     required String code,
     required String name,
@@ -45,53 +76,120 @@ class AuthController extends Notifier<AuthSession?> {
     required String campusId,
     String? classOrGrade,
   }) async {
-    final ok = await _repository.verifyOtp(contact, code);
-    if (!ok) return false;
-    final user = await _repository.register(
-      name: name,
+    final result = await repository.verifyOtp(
       contact: contact,
+      code: code,
       accountType: accountType,
-      campusId: campusId,
-      classOrGrade: classOrGrade,
+      name: name,
     );
-    state = await _repository.issueSession(user);
-    _scheduleSilentRefresh();
-    return true;
-  }
-
-  void _scheduleSilentRefresh() {
-    _refreshTimer?.cancel();
-    final session = state;
-    if (session == null) return;
-    final lead =
-        session.expiresAt.difference(DateTime.now()) -
-        const Duration(seconds: 6);
-    _refreshTimer = Timer(
-      lead.isNegative ? Duration.zero : lead,
-      _silentRefresh,
+    state = AuthSession(
+      accessToken: result.accessToken,
+      // The backend has no distinct refresh-token concept — see
+      // AuthRepository's own doc comment.
+      refreshToken: result.accessToken,
+      expiresAt: result.expiresAt,
+      user: UserProfile(
+        id: result.userId,
+        name: name,
+        contact: contact,
+        accountType: accountType,
+        campusId: campusId,
+        classOrGrade: classOrGrade,
+      ),
     );
   }
 
-  Future<void> _silentRefresh() async {
-    final session = state;
-    if (session == null) return;
-    try {
-      state = await _repository.refresh(session);
-      _scheduleSilentRefresh();
-    } catch (_) {
-      logout(expired: true);
-    }
+  Future<void> _persistSession(AuthSession session) async {
+    await _secureStorage.write(key: _sessionTokenKey, value: session.accessToken);
+    await _secureStorage.write(
+      key: _sessionExpiryKey,
+      value: session.expiresAt.toIso8601String(),
+    );
+  }
+
+  /// Null when there's nothing stored, or what's stored has since expired
+  /// — either way, the caller (loginWithPasscode/loginWithBiometric) must
+  /// treat that as "needs a full re-authentication," never re-mint a
+  /// token out of thin air for [user].
+  Future<AuthSession?> _loadPersistedSession(UserProfile user) async {
+    final token = await _secureStorage.read(key: _sessionTokenKey);
+    final expiryRaw = await _secureStorage.read(key: _sessionExpiryKey);
+    if (token == null || expiryRaw == null) return null;
+    final expiresAt = DateTime.tryParse(expiryRaw);
+    if (expiresAt == null) return null;
+    final session = AuthSession(
+      accessToken: token,
+      refreshToken: token,
+      expiresAt: expiresAt,
+      user: user,
+    );
+    return session.isExpired ? null : session;
   }
 
   /// Lets the UI/tests trigger the "session expired" path deterministically
-  /// instead of waiting out the real (short, demo-only) token lifetime.
+  /// instead of waiting out the real token's day-long lifetime.
   bool expired = false;
   void debugExpireSession() => logout(expired: true);
 
-  void logout({bool expired = false}) {
-    _refreshTimer?.cancel();
+  /// Task 17: the single place a backend-confirmed-invalid session
+  /// (expired, or suspended mid-session — [ApiClient.onUnauthorized]
+  /// never distinguishes which) becomes a clean logout instead of a raw
+  /// error left for whatever screen happened to be mid-request. Wired
+  /// once, at app startup (`main.dart`), to every `ApiClient` call.
+  /// Idempotent: already-logged-out is a no-op, so a burst of concurrent
+  /// requests failing at once only logs out and notifies once.
+  ///
+  /// Unlike a plain [logout] (`expired: true`, e.g. a genuinely-elapsed
+  /// day-long token after an app relaunch), this also clears the
+  /// *persisted* session — the backend has just said this exact token is
+  /// no good, which a suspended-but-not-yet-time-expired token wouldn't
+  /// otherwise reveal locally. Without this, the very next passcode/
+  /// biometric unlock would silently reload the same bad token and hit
+  /// the same rejection again in a loop instead of routing to a real
+  /// re-authentication.
+  Future<void> handleUnauthorized() async {
+    if (state == null) return;
+    await Future.wait([
+      _secureStorage.delete(key: _sessionTokenKey),
+      _secureStorage.delete(key: _sessionExpiryKey),
+    ]);
+    await logout(expired: true);
+    ref
+        .read(appNotificationProvider.notifier)
+        .error('Your session has ended. Please sign in again.');
+  }
+
+  /// An *expired* logout (app relaunch losing the in-memory session, a
+  /// debug trigger, or [handleUnauthorized] which separately also clears
+  /// the persisted token) drops the in-memory session but keeps the
+  /// stored passcode/biometric credentials *and* — unless
+  /// [handleUnauthorized] already cleared it — the persisted session
+  /// token. That's exactly what lets [WelcomeBackScreen] offer a quick
+  /// way back in: [loginWithPasscode]/[loginWithBiometric] resume that
+  /// persisted token locally (no network call) when it's still valid, or
+  /// discover (via [_loadPersistedSession] returning null) that a real
+  /// re-authentication is needed when it isn't.
+  ///
+  /// An *explicit* logout (the "Log out" row on every profile/pending
+  /// screen) is different: the user is deliberately signing out of this
+  /// device, so it wipes every stored credential too — the persisted
+  /// session token, passcode hash, the passcode's user snapshot, and any
+  /// biometric-login snapshot — not just this in-memory session. Without
+  /// this, "Log out" was really just "hide the app until you re-enter
+  /// your passcode," which isn't what a destructive "sign out" action
+  /// should mean.
+  Future<void> logout({bool expired = false}) async {
     _kycTimer?.cancel();
     this.expired = expired;
+    if (!expired) {
+      await Future.wait([
+        _secureStorage.delete(key: _sessionTokenKey),
+        _secureStorage.delete(key: _sessionExpiryKey),
+        _secureStorage.delete(key: _biometricUserKey),
+        _secureStorage.delete(key: _passcodeHashKey),
+        _secureStorage.delete(key: _passcodeUserKey),
+      ]);
+    }
     state = null;
   }
 
@@ -135,7 +233,9 @@ class AuthController extends Notifier<AuthSession?> {
       key: _biometricUserKey,
       value: jsonEncode(_encodeUser(updatedUser)),
     );
-    state = session.copyWith(user: updatedUser);
+    final updatedSession = session.copyWith(user: updatedUser);
+    await _persistSession(updatedSession);
+    state = updatedSession;
     return true;
   }
 
@@ -149,14 +249,18 @@ class AuthController extends Notifier<AuthSession?> {
     }
   }
 
+  /// Throws [SessionRecoveryRequiredException] when the biometric check
+  /// itself passes but there's no still-valid persisted session to
+  /// resume — see the exception's own doc comment.
   Future<bool> loginWithBiometric() async {
     final stored = await _secureStorage.read(key: _biometricUserKey);
     if (stored == null) return false;
     final ok = await _authenticateBiometric('Sign in to RUN-It');
     if (!ok) return false;
     final user = _decodeUser(jsonDecode(stored) as Map<String, dynamic>);
-    state = await _repository.issueSession(user);
-    _scheduleSilentRefresh();
+    final session = await _loadPersistedSession(user);
+    if (session == null) throw const SessionRecoveryRequiredException();
+    state = session;
     return true;
   }
 
@@ -230,7 +334,9 @@ class AuthController extends Notifier<AuthSession?> {
       key: _passcodeUserKey,
       value: jsonEncode(_encodeUser(updatedUser)),
     );
-    state = session.copyWith(user: updatedUser);
+    final updatedSession = session.copyWith(user: updatedUser);
+    await _persistSession(updatedSession);
+    state = updatedSession;
   }
 
   Future<bool> hasStoredPasscode() async {
@@ -238,16 +344,74 @@ class AuthController extends Notifier<AuthSession?> {
     return stored != null;
   }
 
+  /// The contact (email/phone) of whichever user's passcode is stored on
+  /// this device, if any — [WelcomeBackScreen]'s "Forgot passcode?" link
+  /// needs it to know who to re-verify via OTP before it can even show
+  /// that flow. Null when no passcode has ever been set on this device.
+  Future<String?> storedPasscodeContact() async {
+    final stored = await _secureStorage.read(key: _passcodeUserKey);
+    if (stored == null) return null;
+    return _decodeUser(jsonDecode(stored) as Map<String, dynamic>).contact;
+  }
+
+  /// Task 20: the account type of whichever user's passcode is stored on
+  /// this device — [WelcomeBackScreen]'s "Forgot passcode?" recovery needs
+  /// it alongside [storedPasscodeContact] so a resend on the recovery OTP
+  /// screen knows whether to route through real email delivery or the
+  /// runner phone path. Null exactly when [storedPasscodeContact] is null.
+  Future<AccountType?> storedPasscodeAccountType() async {
+    final stored = await _secureStorage.read(key: _passcodeUserKey);
+    if (stored == null) return null;
+    return _decodeUser(jsonDecode(stored) as Map<String, dynamic>).accountType;
+  }
+
+  /// "Forgot passcode?" recovery: re-verifies identity via a real OTP
+  /// round-trip (the same backend endpoint signup uses) against the
+  /// contact already on file for this device's stored passcode
+  /// credential, then re-issues a real session for that stored user —
+  /// mirrors [loginWithPasscode]'s tail, just gated on a fresh OTP
+  /// instead of the (now-forgotten) passcode hash. Once this returns
+  /// true, the caller has an active session again and can route into
+  /// [SetPasscodeScreen] (`isChangingExisting: true`), whose own
+  /// [setPasscode] call is what actually persists this fresh session for
+  /// next time. Throws [ApiException] on a wrong/expired code or a
+  /// suspended account, same as [verifyOtpAndLogin].
+  Future<bool> recoverSessionForPasscodeReset({
+    required String contact,
+    required String code,
+  }) async {
+    final storedUserJson = await _secureStorage.read(key: _passcodeUserKey);
+    if (storedUserJson == null) return false;
+    final storedUser = _decodeUser(
+      jsonDecode(storedUserJson) as Map<String, dynamic>,
+    );
+    final result = await repository.verifyOtp(
+      contact: contact,
+      code: code,
+      accountType: storedUser.accountType,
+    );
+    state = AuthSession(
+      accessToken: result.accessToken,
+      refreshToken: result.accessToken,
+      expiresAt: result.expiresAt,
+      user: storedUser,
+    );
+    return true;
+  }
+
   /// Never a dead end: a wrong passcode simply returns `false` so the UI
-  /// can show a mismatch and let the user retry.
+  /// can show a mismatch and let the user retry. Throws
+  /// [SessionRecoveryRequiredException] when the passcode itself is
+  /// correct but there's no still-valid persisted session to resume.
   Future<bool> loginWithPasscode(String passcode) async {
     final storedHash = await _secureStorage.read(key: _passcodeHashKey);
     final storedUser = await _secureStorage.read(key: _passcodeUserKey);
     if (storedHash == null || storedUser == null) return false;
     if (storedHash != _hashPasscode(passcode)) return false;
     final user = _decodeUser(jsonDecode(storedUser) as Map<String, dynamic>);
-    state = await _repository.issueSession(user);
-    _scheduleSilentRefresh();
+    final session = await _loadPersistedSession(user);
+    if (session == null) throw const SessionRecoveryRequiredException();
+    state = session;
     return true;
   }
 

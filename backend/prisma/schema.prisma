@@ -1,0 +1,526 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountType {
+  student
+  runner
+  restaurant
+  admin
+}
+
+// A controlled list of vendor business categories, so "Nigerian Food",
+// "nigerian food", and "Naija Dishes" can never coexist as separate,
+// un-mergeable values. `label` (not `slug`) is what `Vendor.category`
+// stores — VendorsService validates every write against this table and
+// persists the canonical label, so category chips stay well-formed as the
+// vendor list grows without needing every existing consumer of
+// `Vendor.category` (filters, chips, search) to change.
+model VendorCategory {
+  slug      String   @id
+  label     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("vendor_categories")
+}
+
+enum WalletTransactionType {
+  credit
+  debit
+}
+
+enum WalletTransactionStatus {
+  pending
+  success
+  failed
+}
+
+enum EscrowStatus {
+  held
+  released
+  refunded
+}
+
+enum TransferLegStatus {
+  not_applicable
+  pending
+  success
+  failed
+}
+
+enum VendorStatus {
+  pending
+  active
+  rejected
+  inactive
+}
+
+enum DisputeStatus {
+  open
+  resolved
+}
+
+enum DisputeResolutionType {
+  release
+  refund
+  deny
+}
+
+// `placed` at escrow hold time; `preparing`/`ready_for_pickup` are
+// vendor-driven (Task 12, VendorsService.advanceOrderStatus — forward-only,
+// exactly those two transitions); `picked_up` at pickup-code verification
+// (Task 11) — now gated on `ready_for_pickup`, not `placed`, so a runner
+// can't verify pickup before the vendor says the food is actually ready;
+// `delivered` at delivery-PIN verification / escrow release; `cancelled` at
+// escrow refund time (see OrderEscrowService, OrdersService).
+enum OrderStatus {
+  placed
+  preparing
+  ready_for_pickup
+  picked_up
+  delivered
+  cancelled
+}
+
+model User {
+  id            String      @id @default(uuid())
+  email         String?     @unique
+  phone         String?     @unique
+  // Display name. Populated for dashboard (restaurant/admin) accounts today;
+  // mobile student/runner accounts created via the OTP flow don't collect
+  // one yet.
+  name          String?
+  // Bcrypt hash. Only ever set for restaurant/admin accounts, which
+  // authenticate into the web dashboard with email+password — student/runner
+  // accounts stay on the mobile app's OTP flow and never get a password.
+  password      String?
+  accountType   AccountType @map("account_type")
+  // Cached on RunnerRatingsService.rate(), recalculated from runner_ratings
+  // on every new rating — not a live aggregate query on every profile read.
+  averageRating Float?      @map("average_rating")
+  ratingCount   Int         @default(0) @map("rating_count")
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  // Task 13c: admin suspend/reinstate. Null = active. Enforced at login
+  // (AuthService) — there's no session store to revoke an already-issued
+  // JWT, so this blocks the *next* login, not an active session.
+  suspendedAt DateTime? @map("suspended_at")
+
+  wallet              Wallet?
+  payoutAccount       PayoutAccount?
+  vendor              Vendor?
+  passwordResetTokens PasswordResetToken[]
+
+  studentOrders   Order[]        @relation("StudentOrders")
+  runnerOrders    Order[]        @relation("RunnerOrders")
+  ratingsReceived RunnerRating[] @relation("RunnerRatingsReceived")
+  ratingsGiven    RunnerRating[] @relation("StudentRatingsGiven")
+
+  notifications Notification[]
+  deviceTokens  DeviceToken[]
+
+  @@map("users")
+}
+
+// Dashboard (restaurant/admin) forgot-password flow. The raw token is
+// emailed/logged to the user once and never stored — only its hash lives
+// here, so a DB read alone can't be used to reset someone's password.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// Task 17: the mobile student/runner OTP flow's own backend-verified
+// codes — replaces the old client-only "any 6-digit code succeeds"
+// stopgap and the dev-token bridge that followed it. Keyed on `contact`
+// (email/phone), not a user id, since the contact may not have a User row
+// yet on a first-time signup. Same hash-only, short-lived shape as
+// PasswordResetToken; delivery is logged rather than sent through a real
+// SMS/email provider, mirroring this app's existing "OTP delivery stays
+// client-mocked" architecture note — only the verification step itself
+// needed to become real.
+model OtpVerification {
+  id         String    @id @default(uuid())
+  contact    String
+  codeHash   String    @map("code_hash")
+  expiresAt  DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([contact])
+  @@map("otp_verifications")
+}
+
+model Vendor {
+  id           String       @id @default(uuid())
+  userId       String       @unique @map("user_id")
+  user         User         @relation(fields: [userId], references: [id])
+  businessName String       @map("business_name")
+  category     String
+  description  String?
+  logoUrl      String?      @map("logo_url")
+  status       VendorStatus @default(active)
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  // Task 13c: set on admin reject, cleared on approve or on a rejected
+  // vendor's own resubmit.
+  rejectionReason String? @map("rejection_reason")
+
+  // Task 15: negotiated per-vendor commission rate (0-1, applied to food
+  // subtotal only), overriding RESTAURANT_COMMISSION_RATE when set. Null
+  // means "use the platform default" — most vendors never set this.
+  commissionRateOverride Float? @map("commission_rate_override")
+
+  menuItems MenuItem[]
+  orders    Order[]
+
+  @@map("vendors")
+}
+
+model MenuItem {
+  id          String   @id @default(uuid())
+  vendorId    String   @map("vendor_id")
+  vendor      Vendor   @relation(fields: [vendorId], references: [id])
+  name        String
+  description String?
+  // Integer kobo. Never a float.
+  price       Int
+  photoUrl    String?  @map("photo_url")
+  category    String
+  isAvailable Boolean  @default(true) @map("is_available")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  orderItems OrderItem[]
+
+  @@index([vendorId])
+  @@map("menu_items")
+}
+
+// Created by OrderEscrowService.hold() itself (see its doc comment) rather
+// than a separate order-creation endpoint — that keeps `/escrow/hold`'s
+// existing single-request-per-order contract intact instead of requiring a
+// second call the already-shipped Flutter client doesn't make.
+model Order {
+  id                    String      @id @default(uuid())
+  studentUserId         String      @map("student_user_id")
+  studentUser           User        @relation("StudentOrders", fields: [studentUserId], references: [id])
+  vendorId              String      @map("vendor_id")
+  vendor                Vendor      @relation(fields: [vendorId], references: [id])
+  // Task 21a: nullable since order creation — a broadcast-and-claim runner
+  // may not exist yet. Kept in sync with OrderEscrow.runnerUserId (the
+  // authorization/payout source of truth — see its own doc comment) by
+  // every writer of either: hold() sets both at creation, claim() (Task
+  // 21a) sets both atomically on a successful claim. This copy exists for
+  // ownership checks on the Order side (e.g. getOrderForViewer) without a
+  // join back to OrderEscrow.
+  runnerUserId          String?     @map("runner_user_id")
+  runnerUser            User?       @relation("RunnerOrders", fields: [runnerUserId], references: [id])
+  status                OrderStatus @default(placed)
+  // Integer kobo. Never a float.
+  totalAmount           Int         @map("total_amount")
+  deliveryLocationLabel String?     @map("delivery_location_label")
+
+  // Task 11: short, human-enterable codes generated server-side at order
+  // creation (OrderEscrowService.hold()) — never derived from the order id
+  // itself, so they can't be guessed from anything the runner/student can
+  // already see elsewhere. pickupCode is what the vendor shows the runner
+  // at pickup; deliveryPin is what the student shows the runner at
+  // drop-off. Both are plain strings (not hashed) since they're short-lived,
+  // single-order-scoped, and rate-limited against guessing (OrdersService)
+  // rather than security-critical secrets.
+  pickupCode  String @map("pickup_code")
+  deliveryPin String @map("delivery_pin")
+
+  // Fallback path when PIN verification isn't possible (student's phone
+  // unavailable) — set by OrdersService.submitDeliveryProof(). Submitting a
+  // photo never advances status to `delivered` on its own; it only flags
+  // the order for a human to resolve (via the existing admin-authorized
+  // /escrow/release call once reviewed).
+  deliveryProofUrl         String?   @map("delivery_proof_url")
+  deliveryProofSubmittedAt DateTime? @map("delivery_proof_submitted_at")
+  needsManualReview        Boolean   @default(false) @map("needs_manual_review")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items   OrderItem[]
+  escrow  OrderEscrow?
+  rating  RunnerRating?
+  dispute Dispute?
+
+  @@index([vendorId, createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id            String    @id @default(uuid())
+  orderId       String    @map("order_id")
+  order         Order     @relation(fields: [orderId], references: [id])
+  // Nullable: the menu item may since have been edited or deleted; the
+  // snapshot fields below are the source of truth for this line, same as
+  // any order-line-item pattern.
+  menuItemId    String?   @map("menu_item_id")
+  menuItem      MenuItem? @relation(fields: [menuItemId], references: [id])
+  nameSnapshot  String    @map("name_snapshot")
+  priceSnapshot Int       @map("price_snapshot")
+  quantity      Int
+  // Student customization request, e.g. "no onions". Capped at 280 chars
+  // by CreateOrderItemDto — not enforced at the DB layer.
+  notes         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// One rating per completed order, enforced by orderId's uniqueness here.
+model RunnerRating {
+  id        String   @id @default(uuid())
+  orderId   String   @unique @map("order_id")
+  order     Order    @relation(fields: [orderId], references: [id])
+  runnerId  String   @map("runner_id")
+  runner    User     @relation("RunnerRatingsReceived", fields: [runnerId], references: [id])
+  studentId String   @map("student_id")
+  student   User     @relation("StudentRatingsGiven", fields: [studentId], references: [id])
+  stars     Int
+  comment   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([runnerId])
+  @@map("runner_ratings")
+}
+
+model Wallet {
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+  // Integer kobo. Never a float.
+  balance   Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  transactions WalletTransaction[]
+
+  @@map("wallets")
+}
+
+// Append-only ledger. Rows are never mutated except pending -> success/failed
+// on the single row created at initialization time (webhook idempotency).
+model WalletTransaction {
+  id        String                  @id @default(uuid())
+  walletId  String                  @map("wallet_id")
+  wallet    Wallet                  @relation(fields: [walletId], references: [id])
+  type      WalletTransactionType
+  amount    Int
+  reference String                  @unique
+  status    WalletTransactionStatus @default(pending)
+  metadata  Json?
+  createdAt DateTime                @default(now()) @map("created_at")
+
+  fundedEscrow OrderEscrow?
+
+  // Task 9b: what the reconciliation sweep's stale-pending scan filters on.
+  @@index([status, createdAt])
+  @@map("wallet_transactions")
+}
+
+model PayoutAccount {
+  id                    String   @id @default(uuid())
+  userId                String   @unique @map("user_id")
+  user                  User     @relation(fields: [userId], references: [id])
+  bankCode              String   @map("bank_code")
+  accountNumber         String   @map("account_number")
+  accountName           String   @map("account_name")
+  paystackRecipientCode String   @map("paystack_recipient_code")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@map("payout_accounts")
+}
+
+model OrderEscrow {
+  id                         String            @id @default(uuid())
+  orderId                    String            @unique @map("order_id")
+  // Safe as a hard FK (not just a loose string) because hold() always
+  // creates the Order row itself, in the same transaction, before creating
+  // this row — see Order's doc comment.
+  order                      Order             @relation(fields: [orderId], references: [id])
+  studentWalletTransactionId String            @unique @map("student_wallet_transaction_id")
+  studentWalletTransaction   WalletTransaction @relation(fields: [studentWalletTransactionId], references: [id])
+
+  // Not in the original spec table, but required for /release to look up
+  // "the restaurant's and runner's payout_accounts" without a second request
+  // body at release time. Captured once, at hold time.
+  restaurantUserId String  @map("restaurant_user_id")
+  // Task 21a: nullable — an order can now be held before any runner is
+  // attached (broadcast-and-claim). This is the authorization/payout
+  // source of truth: EscrowPartyGuard's 'runner' check and release()'s
+  // payout-account lookup both read this column directly, so a claim must
+  // always write here (Order.runnerUserId is kept in sync as a denormalized
+  // copy for the Order side's own ownership checks — see its own doc
+  // comment).
+  runnerUserId     String? @map("runner_user_id")
+
+  status EscrowStatus @default(held)
+
+  grossAmount     Int @map("gross_amount")
+  platformFee     Int @map("platform_fee")
+  restaurantShare Int @map("restaurant_share")
+  runnerShare     Int @map("runner_share")
+
+  restaurantTransferReference String? @map("restaurant_transfer_reference")
+  runnerTransferReference     String? @map("runner_transfer_reference")
+
+  // Per-leg confirmation state, updated by the transfer.success/transfer.failed
+  // webhook. status stays "released" once both transfers are initiated; these
+  // two columns are what the webhook actually reconciles.
+  restaurantTransferStatus TransferLegStatus @default(not_applicable) @map("restaurant_transfer_status")
+  runnerTransferStatus     TransferLegStatus @default(not_applicable) @map("runner_transfer_status")
+
+  createdAt  DateTime  @default(now()) @map("created_at")
+  releasedAt DateTime? @map("released_at")
+
+  // Task 9b: what the reconciliation sweep's stale-transfer-leg scan filters on.
+  @@index([status, releasedAt])
+  @@map("order_escrows")
+}
+
+// Task 13c: one dispute per order. Auto-opened whenever
+// Order.needsManualReview is set (Task 11's photo-proof fallback — until
+// now a dead end with no resolution path); an admin can also open one
+// directly. Resolving as release/refund calls OrderEscrowService's
+// existing release()/refund() directly — no separate payment logic here.
+model Dispute {
+  id      String @id @default(uuid())
+  orderId String @unique @map("order_id")
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  status DisputeStatus @default(open)
+  reason String
+
+  resolutionType DisputeResolutionType? @map("resolution_type")
+  resolutionNote String?                @map("resolution_note")
+
+  resolvedBy String?   @map("resolved_by")
+  resolvedAt DateTime? @map("resolved_at")
+
+  openedAt DateTime @default(now()) @map("opened_at")
+
+  @@index([status, openedAt])
+  @@map("disputes")
+}
+
+// Task 13c: generic audit trail for every admin mutation (vendor
+// approve/reject, dispute resolve, user suspend/reinstate). Field/column
+// names match the brief's own naming exactly.
+model AdminAuditLog {
+  id         String   @id @default(uuid())
+  actorId    String   @map("actor_id")
+  action     String
+  targetType String   @map("target_type")
+  targetId   String   @map("target_id")
+  reason     String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([targetType, targetId])
+  @@index([createdAt])
+  @@map("admin_audit_logs")
+}
+
+// Task 13c: extends Task 9b's ReconciliationService — one row per
+// runReconciliation() invocation (both the existing cron and the new
+// admin-triggered manual run funnel through that one method), so "past
+// reconciliation runs" is a real, queryable log instead of log-only.
+model ReconciliationRun {
+  id                  String   @id @default(uuid())
+  startedAt           DateTime @map("started_at")
+  finishedAt          DateTime @map("finished_at")
+  walletChecked       Int      @map("wallet_checked")
+  transferLegsChecked Int      @map("transfer_legs_checked")
+  mismatchCount       Int      @map("mismatch_count")
+  // Null = the scheduled cron; a userId when triggered from the new
+  // admin-facing manual endpoint.
+  triggeredBy         String?  @map("triggered_by")
+
+  @@index([startedAt])
+  @@map("reconciliation_runs")
+}
+
+// Task 13c: compareAgainstPaystack() is computed live (read-only) against
+// Paystack's real transaction list every call — mismatches aren't
+// otherwise persisted. This exists purely so an admin's "mark resolved"
+// survives across repeated compare calls; compareAgainstPaystack() joins
+// against it to flag items resolved rather than hiding them.
+model ReconciliationResolution {
+  reference  String   @id
+  resolvedBy String   @map("resolved_by")
+  note       String
+  resolvedAt DateTime @default(now()) @map("resolved_at")
+
+  @@map("reconciliation_resolutions")
+}
+
+// Task 19a: every event NotificationsService.emit() fires gets a row here,
+// independent of whether the push actually reached a device — this is what
+// survives a missed/failed FCM send and what a notification center (client
+// follow-up task) reads from. Deliberately just these six values for now
+// (order lifecycle + suspend/reinstate); a later runner-dispatch event type
+// is a matter of adding a value here, not restructuring the model.
+enum NotificationType {
+  order_placed
+  order_accepted
+  order_picked_up
+  order_delivered
+  account_suspended
+  account_reinstated
+}
+
+model Notification {
+  id     String           @id @default(uuid())
+  userId String           @map("user_id")
+  user   User             @relation(fields: [userId], references: [id])
+  type   NotificationType
+  title  String
+  body   String
+  // Event-specific context (e.g. { orderId, vendorId }) — kept generic
+  // rather than per-type columns so a new event type never needs a schema
+  // change here, only a new NotificationType value.
+  data   Json?
+
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+// FCM registration tokens. One row per (user, device) — a user can hold
+// several (phone + tablet), a token moves rows if it's ever re-registered
+// under a different user (token @unique, upsert-by-token on registration)
+// since FCM tokens are only ever valid for the app instance that generated
+// them, never shared.
+model DeviceToken {
+  id       String  @id @default(uuid())
+  userId   String  @map("user_id")
+  user     User    @relation(fields: [userId], references: [id])
+  token    String  @unique
+  platform String?
+
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+
+  @@index([userId])
+  @@map("device_tokens")
+}

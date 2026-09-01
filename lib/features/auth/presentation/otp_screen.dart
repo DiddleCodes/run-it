@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_motion.dart';
@@ -13,14 +14,39 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_notification.dart';
 import '../application/auth_controller.dart';
+import '../domain/auth_models.dart';
+import 'set_passcode_screen.dart';
 import 'signup_screen.dart';
 
 const _codeLength = 6;
 const _resendWindow = Duration(seconds: 30);
 
 class OtpScreen extends ConsumerStatefulWidget {
-  const OtpScreen({super.key, required this.args});
-  final SignupArgs args;
+  const OtpScreen({super.key, required this.args})
+    : recoveryContact = null,
+      recoveryAccountType = null;
+
+  /// "Forgot passcode?" recovery mode: same boxed-code UI, but re-verifies
+  /// an *existing* account's contact instead of registering a new one —
+  /// pushed directly via `Navigator` from [WelcomeBackScreen] rather than
+  /// through go_router's `otp` route, mirroring how Profile's "Change
+  /// passcode" row reuses [SetPasscodeScreen] outside the router stack.
+  const OtpScreen.recovery({
+    super.key,
+    required String contact,
+    required AccountType accountType,
+  }) : recoveryContact = contact,
+       recoveryAccountType = accountType,
+       args = null;
+
+  final SignupArgs? args;
+  final String? recoveryContact;
+  final AccountType? recoveryAccountType;
+
+  bool get isRecovery => recoveryContact != null;
+  String get contact => isRecovery ? recoveryContact! : args!.contact;
+  AccountType get accountType =>
+      isRecovery ? recoveryAccountType! : args!.accountType;
 
   @override
   ConsumerState<OtpScreen> createState() => _OtpScreenState();
@@ -89,30 +115,74 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
   Future<void> _submit() async {
     setState(() => _verifying = true);
-    final ok = await ref
-        .read(authControllerProvider.notifier)
-        .verifyOtpAndLogin(
-          contact: widget.args.contact,
-          code: _controller.text,
-          name: widget.args.name,
-          accountType: widget.args.accountType,
-          campusId: widget.args.campus.id,
-          classOrGrade: widget.args.classOrGrade,
-        );
-    if (!mounted) return;
-    setState(() => _verifying = false);
-    if (!ok) {
+    try {
+      if (widget.isRecovery) {
+        final foundAccount = await ref
+            .read(authControllerProvider.notifier)
+            .recoverSessionForPasscodeReset(
+              contact: widget.contact,
+              code: _controller.text,
+            );
+        if (!foundAccount) {
+          if (!mounted) return;
+          setState(() => _verifying = false);
+          ref
+              .read(appNotificationProvider.notifier)
+              .error("Couldn't find an account on this device.");
+          _controller.clear();
+          _autoSubmitted = false;
+          return;
+        }
+      } else {
+        await ref
+            .read(authControllerProvider.notifier)
+            .verifyOtpAndLogin(
+              contact: widget.args!.contact,
+              code: _controller.text,
+              name: widget.args!.name,
+              accountType: widget.args!.accountType,
+              campusId: widget.args!.campus.id,
+              classOrGrade: widget.args!.classOrGrade,
+            );
+      }
+    } on ApiException catch (e) {
+      // The backend's own message ("Invalid or expired code") — deliberately
+      // the same whether the code was simply wrong/expired or the account
+      // is suspended, mirroring the dashboard login's identical convention.
+      if (!mounted) return;
+      setState(() => _verifying = false);
+      ref.read(appNotificationProvider.notifier).error(e.message);
+      _controller.clear();
+      _autoSubmitted = false;
+      return;
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _verifying = false);
       ref
           .read(appNotificationProvider.notifier)
-          .error("That code didn't match. Try again.");
+          .error("Couldn't reach the server. Check your connection and try again.");
       _controller.clear();
       _autoSubmitted = false;
       return;
     }
-
+    if (!mounted) return;
+    setState(() => _verifying = false);
     setState(() => _verified = true);
     await Future<void>.delayed(const Duration(milliseconds: 550));
     if (!mounted) return;
+
+    if (widget.isRecovery) {
+      // Identity re-verified — hand off to the same Set Passcode screen
+      // Profile's "Change passcode" row reuses, then unwind straight back
+      // to Welcome Back once a new passcode is saved.
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const SetPasscodeScreen(isChangingExisting: true),
+        ),
+      );
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
 
     // Every fresh signup — student or runner — sets a passcode next
     // (their real login credential) and gets the same optional
@@ -125,7 +195,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     if (_remaining > Duration.zero) return;
     await ref
         .read(authControllerProvider.notifier)
-        .sendOtp(widget.args.contact);
+        .sendOtp(widget.contact, accountType: widget.accountType);
     if (!mounted) return;
     ref.read(appNotificationProvider.notifier).info('New code sent.');
     _startResendTimer();
@@ -145,7 +215,14 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               IconButton(
-                onPressed: () => context.pop(),
+                // Pushed via a plain Navigator route (not go_router's own
+                // stack) in recovery mode — `context.pop()` would pop
+                // go_router's stack instead of this pushed route, same
+                // reasoning as SetPasscodeScreen's `isChangingExisting` back
+                // button.
+                onPressed: widget.isRecovery
+                    ? () => Navigator.of(context).pop()
+                    : () => context.pop(),
                 icon: const Icon(Icons.arrow_back_rounded),
               ),
               const SizedBox(height: 4),
@@ -156,7 +233,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
               ).animate().fadeIn(duration: 300.ms).moveY(begin: 8, end: 0),
               const SizedBox(height: 6),
               Text(
-                'Sent to ${widget.args.contact}',
+                'Sent to ${widget.contact}',
                 style: Theme.of(context).textTheme.bodyMedium
                     ?.copyWith(color: secondary),
               ),

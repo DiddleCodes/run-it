@@ -21,10 +21,14 @@ class AppTextField extends StatefulWidget {
     this.obscureText = false,
     this.onChanged,
     this.focusNode,
+    this.maxLength,
+    this.maxLines = 1,
   });
 
   final TextEditingController? controller;
   final String? hintText;
+  final int? maxLength;
+  final int? maxLines;
 
   /// Rendered as a permanently-visible label before the input (e.g. a
   /// country code) — unlike [InputDecoration.prefixText], which Material
@@ -125,6 +129,8 @@ class _AppTextFieldState extends State<AppTextField> {
               keyboardType: widget.keyboardType,
               obscureText: widget.obscureText,
               onChanged: widget.onChanged,
+              maxLength: widget.maxLength,
+              maxLines: widget.maxLines,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: AppColors.inkText,
               ),

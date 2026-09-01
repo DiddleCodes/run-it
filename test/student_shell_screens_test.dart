@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:run_it/core/network/vendors_repository.dart';
 import 'package:run_it/core/routing/app_router.dart';
 import 'package:run_it/core/widgets/app_nav_shell.dart';
+import 'package:run_it/core/widgets/app_notification.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
 import 'package:run_it/features/home/presentation/home_screen.dart';
@@ -12,7 +14,31 @@ import 'package:run_it/features/ordering/application/ordering_providers.dart';
 import 'package:run_it/features/ordering/domain/ordering_models.dart';
 import 'package:run_it/features/ordering/presentation/my_orders_screen.dart';
 import 'package:run_it/features/profile/presentation/student_profile_screen.dart';
+import 'package:run_it/features/vendor/domain/vendor_dashboard_models.dart';
+import 'package:run_it/features/wallet/application/wallet_controller.dart';
+import 'package:run_it/features/wallet/domain/wallet_models.dart';
 import 'package:run_it/features/wallet/presentation/wallet_screen.dart';
+
+class _FixedBalanceWallet extends WalletBalanceController {
+  @override
+  Future<int> build() async => 8450;
+}
+
+class _EmptyWalletTransactions extends WalletTransactionsController {
+  @override
+  Future<List<WalletTransaction>> build() async => const [];
+}
+
+/// Task 14: Home now fetches real vendor data (`GET /vendors`) instead of
+/// its old hardcoded card list — this fake keeps the Home-screen test
+/// network-free. Empty is a fine default here: the test only asserts on
+/// the always-static Campus Pick card, not the vendor list.
+class _FakeVendorsRepository extends VendorsRepository {
+  const _FakeVendorsRepository();
+  @override
+  Future<VendorsPage> listVendors({String? category, String? search, int page = 1, int limit = 20}) async =>
+      VendorsPage(items: const [], total: 0, page: page, limit: limit);
+}
 
 class _FakeAuthController extends AuthController {
   _FakeAuthController(this._session);
@@ -60,7 +86,11 @@ Widget _withStudentSession(
       ),
       ...extraOverrides,
     ],
-    child: MaterialApp(home: child),
+    child: MaterialApp(
+      home: child,
+      builder: (context, widget) =>
+          AppNotificationHost(child: widget ?? const SizedBox.shrink()),
+    ),
   );
 }
 
@@ -141,7 +171,12 @@ void main() {
     testWidgets('renders the fixed Campus Pick card with no layout overflow', (
       tester,
     ) async {
-      await tester.pumpWidget(_withStudentSession(const HomeScreen()));
+      await tester.pumpWidget(
+        _withStudentSession(
+          const HomeScreen(),
+          extraOverrides: [vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository())],
+        ),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 600));
 
@@ -176,10 +211,19 @@ void main() {
 
   group('Wallet screen', () {
     testWidgets(
-      'a mock Add Funds updates the displayed balance locally, no network call',
+      'shows the real fetched balance (Task 8d), not a fabricated local starting value',
       (tester) async {
-        await tester.pumpWidget(_withStudentSession(const WalletScreen()));
+        await tester.pumpWidget(
+          _withStudentSession(
+            const WalletScreen(),
+            extraOverrides: [
+              walletBalanceProvider.overrideWith(() => _FixedBalanceWallet()),
+              walletTransactionsProvider.overrideWith(() => _EmptyWalletTransactions()),
+            ],
+          ),
+        );
         await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
 
         expect(find.text('₦8450'), findsOneWidget);
 
@@ -190,25 +234,42 @@ void main() {
           (w) => w.runtimeType.toString() == '_AmountSheet',
         );
         expect(sheet, findsOneWidget);
+        // The sheet now points at the real Paystack checkout, not the old
+        // "this is a stub" copy.
+        expect(find.text('Pay securely with Paystack.'), findsOneWidget);
+        expect(find.textContaining('stub'), findsNothing);
+      },
+    );
 
-        // Quick-amount chip for ₦500, then the sheet's own confirm button.
-        await tester.tap(
-          find.descendant(of: sheet, matching: find.text('₦500')),
-        );
-        await tester.pump();
-        await tester.tap(
-          find.descendant(
-            of: sheet,
-            matching: find.widgetWithText(FilledButton, 'Add Funds'),
+    testWidgets(
+      'Withdraw is honestly stubbed — no backend student-payout endpoint exists yet',
+      (tester) async {
+        await tester.pumpWidget(
+          _withStudentSession(
+            const WalletScreen(),
+            extraOverrides: [
+              walletBalanceProvider.overrideWith(() => _FixedBalanceWallet()),
+              walletTransactionsProvider.overrideWith(() => _EmptyWalletTransactions()),
+            ],
           ),
         );
         await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
 
-        expect(find.text('₦500 added'), findsOneWidget);
-        await tester.tap(find.text('Done'));
+        await tester.tap(find.text('Withdraw'));
         await tester.pumpAndSettle();
 
-        expect(find.text('₦8950'), findsOneWidget);
+        await tester.tap(find.text('₦500'));
+        await tester.pump();
+        await tester.tap(find.widgetWithText(FilledButton, 'Withdraw'));
+        await tester.pump(const Duration(milliseconds: 400));
+
+        expect(
+          find.textContaining("Withdrawals aren't available yet"),
+          findsWidgets,
+        );
+        // The balance never silently changed under a fake local withdrawal.
+        expect(find.text('₦8450'), findsOneWidget);
       },
     );
   });

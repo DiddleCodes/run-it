@@ -39,8 +39,13 @@ class CampusPickerField extends StatelessWidget {
           child: GestureDetector(
             onTap: () => _openPicker(context),
             child: Container(
-              height: 58,
-              padding: const EdgeInsets.symmetric(horizontal: 18),
+              // Padding-driven height, not a fixed one — a long campus
+              // name (there's no length cap on `Campus.name`) shouldn't be
+              // able to overflow a hardcoded box at larger Dynamic Type
+              // scale; maxLines/ellipsis below keeps it visually a single
+              // "field" regardless.
+              constraints: const BoxConstraints(minHeight: 58),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
@@ -62,6 +67,8 @@ class CampusPickerField extends StatelessWidget {
                   Expanded(
                     child: Text(
                       selected?.name ?? 'Choose your campus',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyLarge
                           ?.copyWith(color: selected == null ? muted : onBg),
                     ),
