@@ -9,6 +9,7 @@ import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/settings_row.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../auth/domain/auth_models.dart';
@@ -1003,15 +1004,7 @@ class _EditVehicleSheetState extends ConsumerState<_EditVehicleSheet> {
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primaryMaroon,
-                foregroundColor: AppColors.onMaroon,
-                minimumSize: const Size.fromHeight(48),
-              ),
-              onPressed: _type == null ? null : _save,
-              child: const Text('Save'),
-            ),
+            child: PrimaryButton(label: 'Save', onPressed: _type == null ? null : _save),
           ),
         ],
       ),

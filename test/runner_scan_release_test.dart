@@ -6,6 +6,7 @@ import 'package:run_it/core/network/api_exception.dart';
 import 'package:run_it/core/network/orders_repository.dart';
 import 'package:run_it/core/routing/app_router.dart';
 import 'package:run_it/core/widgets/app_notification.dart';
+import 'package:run_it/core/widgets/primary_button.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
 import 'package:run_it/features/ordering/application/order_tracking_controller.dart';
@@ -132,8 +133,8 @@ Future<void> _submitManualDeliveryCode(WidgetTester tester, String code) async {
   // `ensureVisible`/`tap` can't reliably land on the Confirm button once
   // the sheet's height exceeds this test's viewport — invoke its callback
   // directly instead of depending on hit-test geometry.
-  final confirmButton = tester.widget<FilledButton>(
-    find.widgetWithText(FilledButton, 'Confirm'),
+  final confirmButton = tester.widget<PrimaryButton>(
+    find.widgetWithText(PrimaryButton, 'Confirm'),
   );
   confirmButton.onPressed!();
   await tester.pump(); // sheet pop

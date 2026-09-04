@@ -9,6 +9,7 @@ import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/skeleton.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../auth/domain/auth_models.dart';
@@ -599,17 +600,10 @@ class _AvailableJobCard extends StatelessWidget {
                           ?.copyWith(color: AppColors.mutedText, fontWeight: FontWeight.w600),
                     ),
                   )
-                : _PressableButton(
+                : PrimaryButton(
+                    label: 'Accept Job',
+                    icon: CupertinoIcons.arrow_right,
                     onPressed: onAccept,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('Accept Job'),
-                        const SizedBox(width: 6),
-                        const Icon(CupertinoIcons.arrow_right, size: 16),
-                      ],
-                    ),
                   ),
           ),
         ],
@@ -650,49 +644,6 @@ class _JobStatDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       Container(width: 1, height: 30, color: AppColors.borderSubtle);
-}
-
-/// A [FilledButton] that also scales down ~0.97 on press — the motion
-/// spec's "buttons scale to ~0.97 on press" applied without pulling in a
-/// third-party button package.
-class _PressableButton extends StatefulWidget {
-  const _PressableButton({required this.onPressed, required this.child});
-  final VoidCallback onPressed;
-  final Widget child;
-
-  @override
-  State<_PressableButton> createState() => _PressableButtonState();
-}
-
-class _PressableButtonState extends State<_PressableButton> {
-  bool _pressed = false;
-  void _setPressed(bool value) => setState(() => _pressed = value);
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => _setPressed(true),
-      onTapUp: (_) => _setPressed(false),
-      onTapCancel: () => _setPressed(false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.97 : 1,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
-        child: FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.primaryMaroon,
-            foregroundColor: AppColors.onMaroon,
-            minimumSize: const Size.fromHeight(46),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-            ),
-          ),
-          onPressed: widget.onPressed,
-          child: widget.child,
-        ),
-      ),
-    );
-  }
 }
 
 class _ActiveTab extends StatelessWidget {
@@ -775,17 +726,10 @@ class _ActiveTab extends StatelessWidget {
               const SizedBox(height: AppSpacing.ml),
               SizedBox(
                 width: double.infinity,
-                child: _PressableButton(
+                child: PrimaryButton(
+                  label: pickup ? 'Scan pickup code' : 'Scan delivery code',
+                  icon: CupertinoIcons.viewfinder,
                   onPressed: () => context.push(AppRoutes.runnerScan),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(CupertinoIcons.viewfinder, size: 18),
-                      const SizedBox(width: 8),
-                      Text(pickup ? 'Scan pickup code' : 'Scan delivery code'),
-                    ],
-                  ),
                 ),
               ),
             ],

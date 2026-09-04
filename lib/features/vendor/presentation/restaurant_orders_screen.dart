@@ -5,6 +5,7 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/skeleton.dart';
 import '../../ordering/presentation/widgets/ordering_components.dart' show naira;
 import '../application/restaurant_orders_controller.dart';
@@ -176,21 +177,10 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
             const SizedBox(height: AppSpacing.md),
             SizedBox(
               width: double.infinity,
-              child: FilledButton(
+              child: PrimaryButton(
+                label: order.status.nextActionLabel,
+                loading: _advancing,
                 onPressed: _advancing ? null : () => _advance(nextAction),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accentForest,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(46),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
-                ),
-                child: _advancing
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : Text(order.status.nextActionLabel),
               ),
             ),
           ],

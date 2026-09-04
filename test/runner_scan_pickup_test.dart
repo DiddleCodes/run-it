@@ -9,6 +9,7 @@ import 'package:run_it/core/network/orders_repository.dart';
 import 'package:run_it/core/network/uploads_repository.dart';
 import 'package:run_it/core/routing/app_router.dart';
 import 'package:run_it/core/widgets/app_notification.dart';
+import 'package:run_it/core/widgets/primary_button.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
 import 'package:run_it/features/auth/presentation/kyc/camera_capture_step.dart';
@@ -147,8 +148,8 @@ Future<void> _submitManualPickupCode(WidgetTester tester, String code) async {
   await tester.pump(const Duration(milliseconds: 300));
   await tester.enterText(find.byType(TextField), code);
   await tester.pump();
-  final confirmButton = tester.widget<FilledButton>(
-    find.widgetWithText(FilledButton, 'Confirm'),
+  final confirmButton = tester.widget<PrimaryButton>(
+    find.widgetWithText(PrimaryButton, 'Confirm'),
   );
   confirmButton.onPressed!();
   await tester.pump(); // sheet pop

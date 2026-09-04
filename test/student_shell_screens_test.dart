@@ -7,6 +7,7 @@ import 'package:run_it/core/network/vendors_repository.dart';
 import 'package:run_it/core/routing/app_router.dart';
 import 'package:run_it/core/widgets/app_nav_shell.dart';
 import 'package:run_it/core/widgets/app_notification.dart';
+import 'package:run_it/core/widgets/primary_button.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
 import 'package:run_it/features/home/presentation/home_screen.dart';
@@ -386,7 +387,7 @@ void main() {
 
         await tester.tap(find.text('₦500'));
         await tester.pump();
-        await tester.tap(find.widgetWithText(FilledButton, 'Withdraw'));
+        await tester.tap(find.byKey(const Key('walletAmountSheetConfirm')));
         await tester.pump(); // launchingCheckout
         await tester.pump(const Duration(seconds: 3)); // poll tick fires
         await tester.pump();
@@ -418,7 +419,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('₦500'));
         await tester.pump();
-        await tester.tap(find.widgetWithText(FilledButton, 'Withdraw'));
+        await tester.tap(find.byKey(const Key('walletAmountSheetConfirm')));
         await tester.pump();
         await tester.pump(const Duration(seconds: 3));
         await tester.pump();
@@ -453,7 +454,7 @@ void main() {
         await tester.pump();
 
         expect(find.text("That's more than your ₦8450 balance."), findsOneWidget);
-        final button = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Withdraw'));
+        final button = tester.widget<PrimaryButton>(find.byKey(const Key('walletAmountSheetConfirm')));
         expect(button.onPressed, isNull);
         expect(repository.capturedAmountNaira, isNull);
       },

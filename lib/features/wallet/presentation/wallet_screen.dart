@@ -11,6 +11,7 @@ import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/skeleton.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../ordering/presentation/widgets/ordering_components.dart';
@@ -82,7 +83,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           child: CustomScrollView(
             slivers: [
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(22, 6, 22, 0),
+                padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 6, AppSpacing.lg, 0),
                 sliver: SliverToBoxAdapter(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,14 +93,14 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                         style: Theme.of(context).textTheme.headlineLarge
                             ?.copyWith(color: AppColors.inkText, fontSize: 28),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: AppSpacing.xs),
                       Text(
                         'Add funds, track spending, enjoy more.',
                         style: Theme.of(
                           context,
                         ).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: AppSpacing.ml),
                       _BalanceCard(
                         balance: balance,
                         loading: balanceAsync.isLoading && !balanceAsync.hasValue,
@@ -110,7 +111,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                       ),
                       if (balanceAsync.hasError)
                         Padding(
-                          padding: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.only(top: AppSpacing.sm),
                           child: Text(
                             "Couldn't load your balance. Pull down to retry.",
                             style: Theme.of(
@@ -192,13 +193,13 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: AppSpacing.xs),
                     ],
                   ),
                 ),
               ),
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(22, 0, 22, 32),
+                padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, 32),
                 sliver: transactionsAsync.isLoading && !transactionsAsync.hasValue
                     ? const SliverToBoxAdapter(child: SkeletonList(count: 4))
                     : transactions.isEmpty
@@ -295,7 +296,7 @@ class _BalanceCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               if (loading && !hidden)
                 SkeletonBox(
                   width: 140,
@@ -312,33 +313,24 @@ class _BalanceCard extends StatelessWidget {
               const SizedBox(height: 20),
               Row(
                 children: [
+                  // Gold fill, not the default maroon gradient: this card
+                  // is already maroon, and a maroon-on-maroon button would
+                  // have no contrast against it (Task 40).
                   Expanded(
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.gold,
-                        foregroundColor: AppColors.primaryMaroonDeep,
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppRadius.sm),
-                        ),
-                      ),
+                    child: PrimaryButton(
+                      label: 'Add Funds',
+                      color: AppColors.gold,
+                      foregroundColor: AppColors.primaryMaroonDeep,
                       onPressed: onAddFunds,
-                      child: const Text('Add Funds'),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.onMaroon,
-                        side: BorderSide(color: AppColors.onMaroon.withValues(alpha: .5)),
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppRadius.sm),
-                        ),
-                      ),
+                    child: PrimaryButton(
+                      label: 'Withdraw',
+                      style: PrimaryButtonStyle.outlined,
+                      foregroundColor: AppColors.onMaroon,
                       onPressed: onWithdraw,
-                      child: const Text('Withdraw'),
                     ),
                   ),
                 ],
@@ -361,7 +353,7 @@ class _ReferralBanner extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.lg),
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
           color: AppColors.goldTint,
           borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -414,7 +406,7 @@ class _QuickAction extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.lg),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
         decoration: BoxDecoration(
           color: AppColors.surfaceCard,
           borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -527,7 +519,7 @@ class _EmptyTransactions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 28),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
       child: Center(
         child: Text(
           'No transactions yet.',
@@ -812,7 +804,7 @@ class _AmountSheetState extends ConsumerState<_AmountSheet> {
     final balance = ref.watch(walletBalanceProvider).valueOrNull;
     final amountExceedsBalance = widget.isWithdraw && _amount != null && balance != null && _amount! > balance;
     return Padding(
-      padding: EdgeInsets.fromLTRB(22, 20, 22, MediaQuery.of(context).viewInsets.bottom + 24),
+      padding: EdgeInsets.fromLTRB(AppSpacing.lg, 20, AppSpacing.lg, MediaQuery.of(context).viewInsets.bottom + 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -822,7 +814,7 @@ class _AmountSheetState extends ConsumerState<_AmountSheet> {
             style: Theme.of(context).textTheme.headlineMedium
                 ?.copyWith(color: AppColors.inkText, fontSize: 20),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             widget.isWithdraw
                 ? 'Sent to ${payoutAccount!.maskedAccountNumber} — ${payoutAccount.bankName}.'
@@ -864,33 +856,21 @@ class _AmountSheetState extends ConsumerState<_AmountSheet> {
                 ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: AppSpacing.md),
           TextField(
             controller: _customController,
             keyboardType: TextInputType.number,
             onChanged: (_) => setState(() {}),
             decoration: const InputDecoration(hintText: 'Or enter a custom amount'),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: AppSpacing.ml),
           SizedBox(
             width: double.infinity,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primaryMaroon,
-                foregroundColor: AppColors.onMaroon,
-                minimumSize: const Size.fromHeight(48),
-              ),
+            child: PrimaryButton(
+              key: const Key('walletAmountSheetConfirm'),
+              label: widget.isWithdraw ? 'Withdraw' : 'Add Funds',
+              loading: launching,
               onPressed: (_amount == null || launching || amountExceedsBalance) ? null : _confirm,
-              child: launching
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.4,
-                        color: AppColors.onMaroon,
-                      ),
-                    )
-                  : Text(widget.isWithdraw ? 'Withdraw' : 'Add Funds'),
             ),
           ),
         ],
@@ -906,7 +886,7 @@ class _ConfirmingPaymentState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 40, 22, 44),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xxl, AppSpacing.lg, 44),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -918,7 +898,7 @@ class _ConfirmingPaymentState extends StatelessWidget {
               color: AppColors.primaryMaroon,
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: AppSpacing.ml),
           Text(
             isWithdraw ? 'Processing your withdrawal…' : 'Confirming payment…',
             style: Theme.of(context).textTheme.headlineMedium
@@ -951,7 +931,7 @@ class _NoPayoutAccountState extends StatelessWidget {
     const onBg = AppColors.inkText;
     const secondary = AppColors.mutedText;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 32, 22, 36),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 32, AppSpacing.lg, 36),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -977,15 +957,7 @@ class _NoPayoutAccountState extends StatelessWidget {
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primaryMaroon,
-                foregroundColor: AppColors.onMaroon,
-                minimumSize: const Size.fromHeight(48),
-              ),
-              onPressed: onAddAccount,
-              child: const Text('Add bank account'),
-            ),
+            child: PrimaryButton(label: 'Add bank account', onPressed: onAddAccount),
           ),
         ],
       ),
@@ -1057,7 +1029,7 @@ class _ConfirmationState extends StatelessWidget {
         ? AppColors.error.withValues(alpha: 0.12)
         : (stillProcessing ? AppColors.goldTint : AppColors.successBackground);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 32, 22, 36),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 32, AppSpacing.lg, 36),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1100,15 +1072,7 @@ class _ConfirmationState extends StatelessWidget {
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primaryMaroon,
-                foregroundColor: AppColors.onMaroon,
-                minimumSize: const Size.fromHeight(48),
-              ),
-              onPressed: onDone,
-              child: const Text('Done'),
-            ),
+            child: PrimaryButton(label: 'Done', onPressed: onDone),
           ),
         ],
       ),
@@ -1141,7 +1105,7 @@ class _TransferStubSheetState extends ConsumerState<_TransferStubSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(22, 20, 22, MediaQuery.of(context).viewInsets.bottom + 24),
+      padding: EdgeInsets.fromLTRB(AppSpacing.lg, 20, AppSpacing.lg, MediaQuery.of(context).viewInsets.bottom + 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1151,7 +1115,7 @@ class _TransferStubSheetState extends ConsumerState<_TransferStubSheet> {
             style: Theme.of(context).textTheme.headlineMedium
                 ?.copyWith(color: AppColors.inkText, fontSize: 20),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             'This is a stub — transfers aren’t sent anywhere yet.',
             style: Theme.of(
@@ -1169,22 +1133,17 @@ class _TransferStubSheetState extends ConsumerState<_TransferStubSheet> {
             keyboardType: TextInputType.number,
             decoration: const InputDecoration(hintText: 'Amount'),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: AppSpacing.ml),
           SizedBox(
             width: double.infinity,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primaryMaroon,
-                foregroundColor: AppColors.onMaroon,
-                minimumSize: const Size.fromHeight(48),
-              ),
+            child: PrimaryButton(
+              label: 'Send',
               onPressed: () {
                 Navigator.of(context).pop();
                 ref
                     .read(appNotificationProvider.notifier)
                     .success('Transfer flow is a stub for now — nothing was sent.');
               },
-              child: const Text('Send'),
             ),
           ),
         ],

@@ -13,6 +13,7 @@ import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/primary_button.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../ordering/application/order_tracking_controller.dart';
 import '../application/runner_controller.dart';
@@ -862,16 +863,11 @@ class _ManualCodeSheetState extends State<_ManualCodeSheet> {
             valueListenable: _controller,
             builder: (context, value, _) => SizedBox(
               width: double.infinity,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primaryMaroon,
-                  foregroundColor: AppColors.onMaroon,
-                  minimumSize: const Size.fromHeight(48),
-                ),
+              child: PrimaryButton(
+                label: 'Confirm',
                 onPressed: value.text.trim().isEmpty
                     ? null
                     : () => widget.onSubmit(value.text.trim()),
-                child: const Text('Confirm'),
               ),
             ),
           ),
