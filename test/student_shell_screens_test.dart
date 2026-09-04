@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -26,6 +27,19 @@ import 'package:run_it/features/wallet/presentation/wallet_screen.dart';
 class _FixedBalanceWallet extends WalletBalanceController {
   @override
   Future<int> build() async => 8450;
+}
+
+/// Task 42: a balance that genuinely moves across a real `.refresh()` — the
+/// same trigger real top-ups/withdrawals/order payments already call —
+/// unlike [_FixedBalanceWallet], which never numerically changes and so
+/// can't exercise the balance-change animation.
+class _SteppedBalanceWallet extends WalletBalanceController {
+  int _calls = 0;
+  @override
+  Future<int> build() async {
+    _calls++;
+    return _calls == 1 ? 8450 : 7950;
+  }
 }
 
 class _EmptyWalletTransactions extends WalletTransactionsController {
@@ -395,6 +409,64 @@ void main() {
         expect(repository.capturedUserId, 'student-1');
         expect(repository.capturedAmountNaira, 500);
         expect(find.text('₦500 withdrawn'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a real balance change (Task 42) animates the count to the new real value and fires one haptic when it lands',
+      (tester) async {
+        final hapticCalls = <String>[];
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (
+          call,
+        ) async {
+          if (call.method == 'HapticFeedback.vibrate') hapticCalls.add(call.arguments as String);
+          return null;
+        });
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+
+        final repository = _SucceedingWithdrawalRepository();
+        await tester.pumpWidget(
+          _withStudentSession(
+            const WalletScreen(),
+            extraOverrides: [
+              walletBalanceProvider.overrideWith(() => _SteppedBalanceWallet()),
+              walletTransactionsProvider.overrideWith(() => _EmptyWalletTransactions()),
+              payoutControllerProvider.overrideWith(() => _SavedPayoutAccountController()),
+              walletRepositoryProvider.overrideWithValue(repository),
+            ],
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+
+        // The real fetched starting balance shows instantly — no count-up
+        // from 0 on first load.
+        expect(find.text('₦8450'), findsOneWidget);
+        expect(hapticCalls, isEmpty);
+
+        await tester.tap(find.text('Withdraw'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('₦500'));
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('walletAmountSheetConfirm')));
+        // The button tap itself fires PrimaryButton's own haptic — clear it
+        // so only the balance-landing haptic below is being asserted.
+        hapticCalls.clear();
+        await tester.pump(); // launchingCheckout — debit fires a real refresh immediately
+        await tester.pump(const Duration(seconds: 3)); // poll tick fires
+        await tester.pump();
+        // Let the count/pulse animations (AppMotion.slower + AppMotion.base)
+        // finish settling on the real new value.
+        await tester.pumpAndSettle(const Duration(milliseconds: 50));
+
+        expect(find.text('₦7950'), findsOneWidget);
+        expect(find.text('₦8450'), findsNothing);
+        expect(hapticCalls, ['HapticFeedbackType.lightImpact']);
       },
     );
 

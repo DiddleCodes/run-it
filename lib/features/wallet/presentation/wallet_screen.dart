@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_paystack_plus/flutter_paystack_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +10,7 @@ import '../../../core/network/api_config.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
 import '../../../core/widgets/primary_button.dart';
@@ -218,7 +220,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   }
 }
 
-class _BalanceCard extends StatelessWidget {
+class _BalanceCard extends StatefulWidget {
   const _BalanceCard({
     required this.balance,
     required this.loading,
@@ -235,109 +237,196 @@ class _BalanceCard extends StatelessWidget {
   final VoidCallback onWithdraw;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primaryMaroon, AppColors.primaryMaroonDeep],
-        ),
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primaryMaroon.withValues(alpha: .32),
-            blurRadius: 26,
-            offset: const Offset(0, 14),
-          ),
-        ],
+  State<_BalanceCard> createState() => _BalanceCardState();
+}
+
+class _BalanceCardState extends State<_BalanceCard> with TickerProviderStateMixin {
+  late final AnimationController _countController;
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulse;
+
+  /// The real, settled balance last shown — distinct from [widget.balance]
+  /// while a count animation is mid-flight. `null` until the first real
+  /// (non-loading) value lands, so that arrival is never itself treated as
+  /// a "change" to animate away from 0.
+  int? _lastKnownBalance;
+  int _displayedBalance = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _countController = AnimationController(vsync: this, duration: AppMotion.slower);
+    _pulseController = AnimationController(vsync: this, duration: AppMotion.base);
+    // A brief up-then-settle bump on the card itself, landing right as the
+    // count finishes — `bouncy` is reserved for confirmation/success
+    // moments elsewhere in the app, and a real balance change (top-up,
+    // withdrawal, order payment) is exactly that kind of moment.
+    _pulse = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 1.03).chain(CurveTween(curve: AppMotion.bouncy)),
+        weight: 1,
       ),
-      child: Stack(
-        children: [
-          // A decorative wallet/cash motif, faint in the corner — there's
-          // no illustration asset for this yet, so this is a deliberately
-          // simple vector placeholder rather than a fake photo.
-          Positioned(
-            right: -18,
-            bottom: -18,
-            child: Opacity(
-              opacity: .14,
-              child: Icon(
-                CupertinoIcons.money_dollar_circle_fill,
-                size: 140,
-                color: AppColors.onMaroon,
+      TweenSequenceItem(
+        tween: Tween(begin: 1.03, end: 1.0).chain(CurveTween(curve: AppMotion.emphasized)),
+        weight: 1,
+      ),
+    ]).animate(_pulseController);
+    if (!widget.loading) {
+      _lastKnownBalance = widget.balance;
+      _displayedBalance = widget.balance;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _BalanceCard old) {
+    super.didUpdateWidget(old);
+    if (widget.balance == old.balance) return;
+    if (widget.loading) return;
+    if (_lastKnownBalance == null || old.loading) {
+      // The first real value landing (fresh mount, or the initial fetch
+      // finishing) — show it directly, nothing to animate from.
+      setState(() {
+        _lastKnownBalance = widget.balance;
+        _displayedBalance = widget.balance;
+      });
+      return;
+    }
+    final from = _lastKnownBalance!;
+    final to = widget.balance;
+    _lastKnownBalance = to;
+    final count = Tween<double>(
+      begin: from.toDouble(),
+      end: to.toDouble(),
+    ).chain(CurveTween(curve: AppMotion.emphasized)).animate(_countController);
+    late final VoidCallback listener;
+    listener = () => setState(() => _displayedBalance = count.value.round());
+    count.addListener(listener);
+    _countController.forward(from: 0).whenComplete(() {
+      count.removeListener(listener);
+      if (!mounted) return;
+      // Lands the moment the count settles on the real new balance — a
+      // real-money moment gets the same weight PrimaryButton gives every
+      // tap, not something louder or quieter.
+      HapticFeedback.lightImpact();
+      _pulseController.forward(from: 0);
+    });
+  }
+
+  @override
+  void dispose() {
+    _countController.dispose();
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, child) => Transform.scale(scale: _pulse.value, child: child),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppColors.primaryMaroon, AppColors.primaryMaroonDeep],
+          ),
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primaryMaroon.withValues(alpha: .32),
+              blurRadius: 26,
+              offset: const Offset(0, 14),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            // A decorative wallet/cash motif, faint in the corner — there's
+            // no illustration asset for this yet, so this is a deliberately
+            // simple vector placeholder rather than a fake photo.
+            Positioned(
+              right: -18,
+              bottom: -18,
+              child: Opacity(
+                opacity: .14,
+                child: Icon(
+                  CupertinoIcons.money_dollar_circle_fill,
+                  size: 140,
+                  color: AppColors.onMaroon,
+                ),
               ),
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    'Available Balance',
-                    style: Theme.of(context).textTheme.labelMedium
-                        ?.copyWith(color: AppColors.onMaroon.withValues(alpha: .78)),
-                  ),
-                  const SizedBox(width: 6),
-                  InkWell(
-                    onTap: onToggleHidden,
-                    customBorder: const CircleBorder(),
-                    child: Padding(
-                      padding: const EdgeInsets.all(2),
-                      child: Icon(
-                        hidden ? CupertinoIcons.eye_slash_fill : CupertinoIcons.eye_fill,
-                        size: 16,
-                        color: AppColors.onMaroon.withValues(alpha: .78),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Available Balance',
+                      style: Theme.of(context).textTheme.labelMedium
+                          ?.copyWith(color: AppColors.onMaroon.withValues(alpha: .78)),
+                    ),
+                    const SizedBox(width: 6),
+                    InkWell(
+                      onTap: widget.onToggleHidden,
+                      customBorder: const CircleBorder(),
+                      child: Padding(
+                        padding: const EdgeInsets.all(2),
+                        child: Icon(
+                          widget.hidden ? CupertinoIcons.eye_slash_fill : CupertinoIcons.eye_fill,
+                          size: 16,
+                          color: AppColors.onMaroon.withValues(alpha: .78),
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              if (loading && !hidden)
-                SkeletonBox(
-                  width: 140,
-                  height: 30,
-                  baseColor: AppColors.onMaroon.withValues(alpha: 0.18),
-                  shimmerColor: AppColors.onMaroon.withValues(alpha: 0.35),
-                )
-              else
-                Text(
-                  hidden ? '₦••••••' : naira(balance),
-                  style: Theme.of(context).textTheme.displayLarge
-                      ?.copyWith(color: AppColors.onMaroon, fontSize: 34),
+                  ],
                 ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  // Gold fill, not the default maroon gradient: this card
-                  // is already maroon, and a maroon-on-maroon button would
-                  // have no contrast against it (Task 40).
-                  Expanded(
-                    child: PrimaryButton(
-                      label: 'Add Funds',
-                      color: AppColors.gold,
-                      foregroundColor: AppColors.primaryMaroonDeep,
-                      onPressed: onAddFunds,
-                    ),
+                const SizedBox(height: AppSpacing.sm),
+                if (widget.loading && !widget.hidden)
+                  SkeletonBox(
+                    width: 140,
+                    height: 30,
+                    baseColor: AppColors.onMaroon.withValues(alpha: 0.18),
+                    shimmerColor: AppColors.onMaroon.withValues(alpha: 0.35),
+                  )
+                else
+                  Text(
+                    widget.hidden ? '₦••••••' : naira(_displayedBalance),
+                    style: Theme.of(context).textTheme.displayLarge
+                        ?.copyWith(color: AppColors.onMaroon, fontSize: 34),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: PrimaryButton(
-                      label: 'Withdraw',
-                      style: PrimaryButtonStyle.outlined,
-                      foregroundColor: AppColors.onMaroon,
-                      onPressed: onWithdraw,
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    // Gold fill, not the default maroon gradient: this card
+                    // is already maroon, and a maroon-on-maroon button would
+                    // have no contrast against it (Task 40).
+                    Expanded(
+                      child: PrimaryButton(
+                        label: 'Add Funds',
+                        color: AppColors.gold,
+                        foregroundColor: AppColors.primaryMaroonDeep,
+                        onPressed: widget.onAddFunds,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: PrimaryButton(
+                        label: 'Withdraw',
+                        style: PrimaryButtonStyle.outlined,
+                        foregroundColor: AppColors.onMaroon,
+                        onPressed: widget.onWithdraw,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
