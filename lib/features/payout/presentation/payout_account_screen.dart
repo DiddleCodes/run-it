@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/app_spinner.dart';
 import '../application/payout_controller.dart';
 import '../domain/payout_models.dart';
 import 'widgets/payout_account_form.dart';
@@ -85,7 +86,7 @@ class _PayoutAccountScreenState extends ConsumerState<PayoutAccountScreen> {
               const SizedBox(height: AppSpacing.lg),
               Expanded(
                 child: _loading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? const Center(child: AppSpinner())
                     : SingleChildScrollView(
                         child: _editing || account == null
                             ? _EditForm(initialAccount: account, onSaved: _handleSaved)

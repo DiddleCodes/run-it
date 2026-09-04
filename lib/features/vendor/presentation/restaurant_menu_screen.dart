@@ -118,7 +118,7 @@ class _MenuItemRowState extends ConsumerState<_MenuItemRow> {
   Future<void> _confirmDelete() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => AlertDialog.adaptive(
         title: Text('Delete "${widget.item.name}"?'),
         content: const Text('This removes it from your menu for good.'),
         actions: [
@@ -204,7 +204,7 @@ class _MenuItemRowState extends ConsumerState<_MenuItemRow> {
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Switch(
+              Switch.adaptive(
                 value: item.isAvailable,
                 activeThumbColor: AppColors.accentForest,
                 onChanged: _togglingAvailability ? null : _toggleAvailability,
@@ -426,7 +426,7 @@ class _RestaurantMenuEditScreenState extends ConsumerState<RestaurantMenuEditScr
   Future<void> _delete() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => AlertDialog.adaptive(
         title: Text('Delete "${widget.item!.name}"?'),
         content: const Text('This removes it from your menu for good.'),
         actions: [

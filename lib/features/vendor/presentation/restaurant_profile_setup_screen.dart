@@ -8,6 +8,7 @@ import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/app_spinner.dart';
 import '../application/my_vendor_profile_controller.dart';
 import '../application/vendor_application_controller.dart';
 import 'widgets/vendor_profile_form.dart';
@@ -27,7 +28,7 @@ class RestaurantProfileSetupScreen extends ConsumerWidget {
     final existing = ref.watch(myVendorProfileProvider);
 
     return existing.when(
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      loading: () => const Scaffold(body: Center(child: AppSpinner())),
       error: (error, stack) {
         // A 404 genuinely means "no real vendor row yet" — first-run,
         // show the confirm form. Anything else (a connectivity blip, a
@@ -61,7 +62,7 @@ class RestaurantProfileSetupScreen extends ConsumerWidget {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (context.mounted) context.go(AppRoutes.restaurantOrders);
         });
-        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        return const Scaffold(body: Center(child: AppSpinner()));
       },
     );
   }

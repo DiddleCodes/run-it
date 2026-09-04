@@ -9,6 +9,7 @@ import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/app_spinner.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/settings_row.dart';
 import '../../auth/application/auth_controller.dart';
@@ -258,7 +259,7 @@ class RunnerProfileScreen extends ConsumerWidget {
   void _confirmLogout(BuildContext context, WidgetRef ref) {
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => AlertDialog.adaptive(
         title: const Text('Log out?'),
         content: const Text("You'll need your passcode to sign back in."),
         actions: [
@@ -825,12 +826,8 @@ class _BiometricRowState extends ConsumerState<_BiometricRow> {
       icon: Icons.fingerprint_rounded,
       title: 'Biometric login',
       trailing: _busy
-          ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2.2),
-            )
-          : Switch(
+          ? const AppSpinner(size: 20, strokeWidth: 2.2)
+          : Switch.adaptive(
               value: widget.user.biometricEnabled,
               activeThumbColor: AppColors.primaryMaroon,
               onChanged: _toggle,

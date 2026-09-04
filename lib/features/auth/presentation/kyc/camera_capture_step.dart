@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/widgets/app_spinner.dart';
 import '../../../../core/widgets/primary_button.dart';
 
 enum CaptureGuide { document, face }
@@ -378,7 +379,7 @@ class _CenteredMessage extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (spinner)
-            const CircularProgressIndicator(color: AppColors.primaryMaroon)
+            const AppSpinner(color: AppColors.primaryMaroon)
           else if (isError)
             Icon(Icons.error_outline_rounded, color: color, size: 36),
           const SizedBox(height: AppSpacing.md),

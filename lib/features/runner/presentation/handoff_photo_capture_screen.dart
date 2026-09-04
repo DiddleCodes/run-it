@@ -8,6 +8,7 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/network/uploads_repository.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/app_spinner.dart';
 import '../../auth/presentation/kyc/camera_capture_step.dart';
 
 /// Task 30: the restaurant-to-runner handoff's own chain-of-custody photo
@@ -66,7 +67,7 @@ class _HandoffPhotoCaptureScreenState
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: _uploading
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(child: AppSpinner())
               : CameraCaptureStep(
                   title: 'Photo of the sealed pack',
                   subtitle:

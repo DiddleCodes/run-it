@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/campus_repository.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/widgets/app_spinner.dart';
 import '../../../../core/widgets/app_text_field.dart';
 
 /// Task 26: no longer used at student/runner signup — a student's campus
@@ -170,7 +171,7 @@ class _CampusSearchSheetState extends ConsumerState<_CampusSearchSheet> {
             child: campuses.when(
               loading: () => const Padding(
                 padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                child: Center(child: CircularProgressIndicator()),
+                child: Center(child: AppSpinner()),
               ),
               error: (error, stack) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),

@@ -13,6 +13,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/app_spinner.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/skeleton.dart';
 import '../../auth/application/auth_controller.dart';
@@ -880,7 +881,7 @@ class _AmountSheetState extends ConsumerState<_AmountSheet> {
     if (widget.isWithdraw && _checkingPayoutAccount) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 60),
-        child: Center(child: CircularProgressIndicator()),
+        child: Center(child: AppSpinner()),
       );
     }
     final payoutAccount = widget.isWithdraw ? ref.watch(payoutControllerProvider) : null;
@@ -979,14 +980,7 @@ class _ConfirmingPaymentState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(
-            width: 40,
-            height: 40,
-            child: CircularProgressIndicator(
-              strokeWidth: 3,
-              color: AppColors.primaryMaroon,
-            ),
-          ),
+          const AppSpinner(size: 40, strokeWidth: 3, color: AppColors.primaryMaroon),
           const SizedBox(height: AppSpacing.ml),
           Text(
             isWithdraw ? 'Processing your withdrawal…' : 'Confirming payment…',

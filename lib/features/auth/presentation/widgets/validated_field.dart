@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/app_spinner.dart';
 import '../../../../core/widgets/app_text_field.dart';
 
 /// A text field with debounced inline validation: a green check once the
@@ -145,16 +146,9 @@ class ValidatedFieldState extends State<ValidatedField>
             hasError: hasError,
             onChanged: _onChanged,
             suffixIcon: _checking
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: Padding(
-                      padding: EdgeInsets.all(2),
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.mutedText,
-                      ),
-                    ),
+                ? const Padding(
+                    padding: EdgeInsets.all(2),
+                    child: AppSpinner(size: 16, strokeWidth: 2, color: AppColors.mutedText),
                   )
                 : _touched && !hasError
                 ? const Icon(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/widgets/app_spinner.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../application/payout_controller.dart';
 import '../../domain/payout_models.dart';
@@ -77,11 +78,7 @@ class BankPickerField extends ConsumerWidget {
                     ),
                   ),
                   if (banksAsync.isLoading)
-                    const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                    const AppSpinner(size: 18, strokeWidth: 2)
                   else
                     Container(
                       width: 28,

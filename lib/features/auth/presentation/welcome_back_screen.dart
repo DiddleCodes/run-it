@@ -11,6 +11,7 @@ import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/app_spinner.dart';
 import '../application/auth_controller.dart';
 import 'otp_screen.dart';
 import 'widgets/passcode_pad.dart';
@@ -549,9 +550,9 @@ class _BiometricButtonState extends State<_BiometricButton> {
                   width: 40,
                   height: 40,
                   child: widget.authenticating
-                      ? const Padding(
-                          padding: EdgeInsets.all(9),
-                          child: CircularProgressIndicator(
+                      ? const Center(
+                          child: AppSpinner(
+                            size: 22,
                             strokeWidth: 2.4,
                             color: AppColors.primaryMaroon,
                           ),

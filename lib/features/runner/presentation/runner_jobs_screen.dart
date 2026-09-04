@@ -9,6 +9,7 @@ import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/app_spinner.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/skeleton.dart';
 import '../../auth/application/auth_controller.dart';
@@ -389,13 +390,9 @@ class _ReconnectBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          SizedBox(
-            width: 16,
-            height: 16,
-            child: connecting
-                ? const CircularProgressIndicator(strokeWidth: 2, color: AppColors.gold)
-                : const Icon(Icons.wifi_off_rounded, size: 16, color: AppColors.gold),
-          ),
+          connecting
+              ? const AppSpinner(size: 16, strokeWidth: 2, color: AppColors.gold)
+              : const Icon(Icons.wifi_off_rounded, size: 16, color: AppColors.gold),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

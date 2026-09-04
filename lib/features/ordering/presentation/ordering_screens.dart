@@ -1,3 +1,5 @@
+import 'package:flutter/cupertino.dart'
+    show CupertinoActionSheet, CupertinoActionSheetAction, showCupertinoModalPopup;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -14,6 +16,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/app_spinner.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/route_line.dart';
@@ -244,7 +247,7 @@ class _EateryMenuScreenState extends ConsumerState<EateryMenuScreen> {
   void _confirmReplace(MenuItem item) {
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => AlertDialog.adaptive(
         title: const Text('Start a new basket?'),
         content: const Text(
           'Your basket can only contain items from one eatery. Replacing it will remove your current items.',
@@ -752,7 +755,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     );
   }
 
+  // Task 44: a short, fixed choice of 3 (DeliveryFeeZone.values) — the
+  // right shape for an iOS action sheet, unlike the campus/bank/category
+  // pickers elsewhere, which are longer, searchable form pickers where a
+  // bottom sheet is still the right widget on both platforms.
   void _pickLocation(BuildContext context, WidgetRef ref) {
+    if (Theme.of(context).platform == TargetPlatform.iOS) {
+      _pickLocationCupertino(context, ref);
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -772,24 +783,42 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 contentPadding: EdgeInsets.zero,
                 title: Text(zone.label),
                 subtitle: Text('Delivery from ${naira(zone.fee)}'),
-                onTap: () {
-                  final currentLabel = ref
-                      .read(checkoutFormProvider)
-                      .location
-                      .label;
-                  ref
-                      .read(checkoutFormProvider.notifier)
-                      .setLocation(
-                        DeliveryLocation(label: currentLabel, zone: zone),
-                      );
-                  Navigator.pop(sheetContext);
-                },
+                onTap: () => _setDeliveryZone(ref, sheetContext, zone),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  void _pickLocationCupertino(BuildContext context, WidgetRef ref) {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: const Text('Choose delivery point'),
+        actions: [
+          for (final zone in DeliveryFeeZone.values)
+            CupertinoActionSheetAction(
+              onPressed: () => _setDeliveryZone(ref, sheetContext, zone),
+              child: Text('${zone.label} · Delivery from ${naira(zone.fee)}'),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.pop(sheetContext),
+          child: const Text('Cancel'),
+        ),
+      ),
+    );
+  }
+
+  void _setDeliveryZone(WidgetRef ref, BuildContext sheetContext, DeliveryFeeZone zone) {
+    final currentLabel = ref.read(checkoutFormProvider).location.label;
+    ref
+        .read(checkoutFormProvider.notifier)
+        .setLocation(DeliveryLocation(label: currentLabel, zone: zone));
+    Navigator.pop(sheetContext);
   }
 }
 
@@ -855,7 +884,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   void _confirmCancel(OrderTrackingSession session) {
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => AlertDialog.adaptive(
         title: const Text('Cancel this order?'),
         content: const Text("You'll get a full refund to your RUN-It Wallet."),
         actions: [
@@ -983,11 +1012,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
               TextButton(
                 onPressed: _cancelling ? null : () => _confirmCancel(session),
                 child: _cancelling
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? const AppSpinner(size: 18, strokeWidth: 2)
                     : const Text('Cancel order'),
               ),
             ],

@@ -165,7 +165,7 @@ class StudentProfileScreen extends ConsumerWidget {
   void _confirmLogout(BuildContext context, WidgetRef ref) {
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => AlertDialog.adaptive(
         title: const Text('Log out?'),
         content: const Text("You'll need to sign back in to order again."),
         actions: [

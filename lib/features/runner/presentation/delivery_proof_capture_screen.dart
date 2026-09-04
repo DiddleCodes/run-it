@@ -9,6 +9,7 @@ import '../../../core/network/orders_repository.dart';
 import '../../../core/network/uploads_repository.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/app_spinner.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../auth/presentation/kyc/camera_capture_step.dart';
 
@@ -86,7 +87,7 @@ class _DeliveryProofCaptureScreenState
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: _submitting
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(child: AppSpinner())
               : CameraCaptureStep(
                   title: 'Photo proof of delivery',
                   subtitle:

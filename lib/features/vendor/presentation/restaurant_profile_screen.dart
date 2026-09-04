@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/app_spinner.dart';
 import '../../../core/widgets/settings_row.dart';
 import '../../auth/application/auth_controller.dart';
 import '../application/my_vendor_profile_controller.dart';
@@ -27,7 +28,7 @@ class _RestaurantProfileScreenState extends ConsumerState<RestaurantProfileScree
   void _confirmLogout() {
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => AlertDialog.adaptive(
         title: const Text('Log out?'),
         content: const Text("You'll need your passcode to sign back in."),
         actions: [
@@ -54,7 +55,7 @@ class _RestaurantProfileScreenState extends ConsumerState<RestaurantProfileScree
       body: SafeArea(
         top: false,
         child: vendorAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const Center(child: AppSpinner()),
           error: (error, stack) => Center(
             child: Padding(
               padding: const EdgeInsets.all(32),

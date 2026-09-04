@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import 'app_spinner.dart';
 
 /// Task 40: [PrimaryButtonStyle.outlined] exists for the one real recurring
 /// case where the default maroon-gradient fill doesn't work — a button
@@ -109,14 +110,7 @@ class _PrimaryButtonState extends State<PrimaryButton> {
                 : [],
           ),
           child: widget.loading
-              ? SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.4,
-                    color: contentColor,
-                  ),
-                )
+              ? AppSpinner(size: 22, strokeWidth: 2.4, color: contentColor)
               : Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

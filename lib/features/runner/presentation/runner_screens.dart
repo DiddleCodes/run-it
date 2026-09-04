@@ -361,7 +361,7 @@ class ActiveDeliveryScreen extends ConsumerWidget {
   void _confirm(BuildContext context, WidgetRef ref, bool pickup) {
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => AlertDialog.adaptive(
         title: Text(pickup ? 'Confirm collection' : 'Confirm drop-off'),
         content: Text(
           pickup ? 'Confirm you have the complete order before continuing.' : 'Confirm you have handed the order to the student. Photo proof will be added later.',
