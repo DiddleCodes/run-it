@@ -131,7 +131,7 @@ class _MyOrdersScreenState extends ConsumerState<MyOrdersScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(22, 6, 22, 0),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 6, AppSpacing.lg, 0),
               child: Row(
                 children: [
                   Expanded(
@@ -185,7 +185,7 @@ class _MyOrdersScreenState extends ConsumerState<MyOrdersScreen> {
             ),
             const SizedBox(height: 16),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 22),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: _SegmentedTabs(
                 value: _tab,
                 activeCount: hasActiveOrder ? 1 : 0,
@@ -309,10 +309,10 @@ class _ActiveOrderTab extends ConsumerWidget {
     final stage = session.stage!;
     final (stepIndex, statusLabel, statusIcon) = _activeStepInfo(stage);
     return ListView(
-      padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 14, AppSpacing.lg, 24),
       children: [
         Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(AppSpacing.ml),
           decoration: BoxDecoration(
             color: AppColors.surfaceCard,
             borderRadius: BorderRadius.circular(22),
@@ -378,7 +378,7 @@ class _ActiveOrderTab extends ConsumerWidget {
               const SizedBox(height: 20),
               StatusStepper(steps: _stepLabels, activeIndex: stepIndex),
               if (session.runnerName != null) ...[
-                const SizedBox(height: 18),
+                const SizedBox(height: AppSpacing.ml),
                 _RunnerInfoRow(name: session.runnerName!),
               ],
               const SizedBox(height: 16),
@@ -554,7 +554,7 @@ class _PastOrdersTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final formatter = DateFormat('MMM d');
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 14, AppSpacing.lg, 24),
       itemCount: history.length,
       separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
@@ -639,7 +639,7 @@ class _CancelledOrdersTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final formatter = DateFormat('MMM d');
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 14, AppSpacing.lg, 24),
       itemCount: cancelled.length,
       separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {

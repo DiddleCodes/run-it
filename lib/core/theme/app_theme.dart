@@ -95,7 +95,7 @@ abstract class AppTheme {
         fillColor: AppColors.surfaceCard,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 20,
-          vertical: 18,
+          vertical: AppSpacing.ml,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.sm),

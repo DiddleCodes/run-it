@@ -77,7 +77,7 @@ class _RestaurantProfileScreenState extends ConsumerState<RestaurantProfileScree
             ),
           ),
           data: (vendor) => ListView(
-            padding: const EdgeInsets.fromLTRB(22, 8, 22, 32),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 32),
             children: [
               if (_editing)
                 VendorProfileForm(
@@ -99,13 +99,13 @@ class _RestaurantProfileScreenState extends ConsumerState<RestaurantProfileScree
                   logoUrl: vendor.logoUrl,
                   onEdit: () => setState(() => _editing = true),
                 ),
-              const SizedBox(height: 22),
+              const SizedBox(height: AppSpacing.lg),
               SettingsGroup(
                 children: [
                   const PayoutsRow(accentColor: AppColors.accentForest),
                 ],
               ),
-              const SizedBox(height: 22),
+              const SizedBox(height: AppSpacing.lg),
               SettingsGroup(
                 children: [
                   SettingsRow(
@@ -118,7 +118,7 @@ class _RestaurantProfileScreenState extends ConsumerState<RestaurantProfileScree
                   ),
                 ],
               ),
-              const SizedBox(height: 22),
+              const SizedBox(height: AppSpacing.lg),
               SettingsGroup(
                 children: [
                   SettingsRow(
@@ -165,7 +165,7 @@ class _BusinessInfoCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
             child: logoUrl == null || logoUrl!.isEmpty
                 ? Container(
                     width: 64,

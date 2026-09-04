@@ -85,11 +85,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: CustomScrollView(
           slivers: [
             const SliverPadding(
-              padding: EdgeInsets.fromLTRB(22, 12, 22, 0),
+              padding: EdgeInsets.fromLTRB(AppSpacing.lg, 12, AppSpacing.lg, 0),
               sliver: SliverToBoxAdapter(child: _Header()),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(22, 24, 22, 0),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 24, AppSpacing.lg, 0),
               sliver: SliverToBoxAdapter(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,7 +113,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(22, 18, 22, 0),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.ml, AppSpacing.lg, 0),
               sliver: SliverToBoxAdapter(
                 child: _Search(
                   controller: _searchController,
@@ -129,7 +129,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               // fixed cross-axis extent on a horizontal scroller of chips
               // with real text has nowhere to grow at larger text scale.
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(22, 16, 22, 8),
+                padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 16, AppSpacing.lg, 8),
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
@@ -155,13 +155,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 14, AppSpacing.lg, 0),
               sliver: SliverToBoxAdapter(
                 child: _CampusPickCard(onOrderNow: _orderNow),
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(22, 28, 22, 12),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 28, AppSpacing.lg, 12),
               sliver: SliverToBoxAdapter(
                 child: Text(
                   'Popular around campus',
@@ -172,7 +172,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(22, 0, 22, 124),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, 124),
               sliver: SliverToBoxAdapter(
                 child: vendorsAsync.when(
                   loading: () => const _VendorRowSkeleton(),
@@ -450,7 +450,7 @@ class _Category extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: selected ? AppColors.primaryMaroon : AppColors.surfaceCard,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(
           color: selected ? AppColors.primaryMaroon : AppColors.borderSubtle,
         ),
@@ -538,7 +538,7 @@ class _CampusPickCard extends StatelessWidget {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 18, 18),
+                  padding: const EdgeInsets.fromLTRB(20, AppSpacing.ml, AppSpacing.ml, AppSpacing.ml),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
@@ -588,7 +588,7 @@ class _CampusPickCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(AppRadius.pill),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 18,
+                            horizontal: AppSpacing.ml,
                             vertical: 11,
                           ),
                           decoration: BoxDecoration(

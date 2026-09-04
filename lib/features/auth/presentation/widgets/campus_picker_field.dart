@@ -52,7 +52,7 @@ class CampusPickerField extends StatelessWidget {
               // scale; maxLines/ellipsis below keeps it visually a single
               // "field" regardless.
               constraints: const BoxConstraints(minHeight: 58),
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.ml, vertical: 14),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
@@ -60,7 +60,7 @@ class CampusPickerField extends StatelessWidget {
                   colors: [Colors.white.withValues(alpha: 0.6), surface],
                   stops: const [0.0, 0.4],
                 ),
-                borderRadius: BorderRadius.circular(19),
+                borderRadius: BorderRadius.circular(AppRadius.input),
                 border: Border.all(
                   color: hasError ? AppColors.error : AppColors.borderSubtle,
                   width: hasError ? 1.5 : 1,

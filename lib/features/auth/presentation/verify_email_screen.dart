@@ -162,7 +162,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                       ),
                       decoration: BoxDecoration(
                         color: AppColors.surfaceCard,
-                        borderRadius: BorderRadius.circular(19),
+                        borderRadius: BorderRadius.circular(AppRadius.input),
                         border: Border.all(color: AppColors.borderSubtle),
                         boxShadow: AppElevation.card(false),
                       ),

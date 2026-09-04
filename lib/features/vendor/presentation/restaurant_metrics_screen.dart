@@ -59,7 +59,7 @@ class _RestaurantMetricsScreenState extends ConsumerState<RestaurantMetricsScree
           color: AppColors.accentForest,
           onRefresh: () => ref.read(restaurantMetricsProvider.notifier).refresh(),
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 24),
             children: [
               Wrap(
                 spacing: 8,

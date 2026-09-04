@@ -43,7 +43,7 @@ class StudentProfileScreen extends ConsumerWidget {
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(22, 6, 22, 32),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 6, AppSpacing.lg, 32),
           children: [
             _ProfileHeader(
               onSettingsTap: () => ref
@@ -81,7 +81,7 @@ class StudentProfileScreen extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: AppSpacing.ml),
             _PlusBanner(onTap: () => context.push(AppRoutes.runItPlus)),
             const SizedBox(height: 24),
             _SettingsGroup(
@@ -134,7 +134,7 @@ class StudentProfileScreen extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: AppSpacing.lg),
             _SettingsGroup(
               children: [
                 _SettingsRow(
@@ -511,7 +511,7 @@ class _PersonalInfoSheet extends ConsumerWidget {
         ('Class / Grade', user.classOrGrade!),
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 22, 22, 36),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, 36),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,

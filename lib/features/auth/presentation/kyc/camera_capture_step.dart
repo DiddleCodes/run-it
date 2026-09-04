@@ -317,7 +317,7 @@ class _CapturePlaceholderCard extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: surface,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
           ),
           child: Icon(icon, size: 34, color: AppColors.mutedText),
         ),

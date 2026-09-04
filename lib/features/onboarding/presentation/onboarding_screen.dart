@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/primary_button.dart';
 import 'widgets/campus_collage_visual.dart';
 import 'widgets/delivery_hero_visual.dart';
@@ -356,7 +357,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               pageCount: _pages.length,
                               page: _page,
                             ),
-                            const SizedBox(height: 18),
+                            const SizedBox(height: AppSpacing.ml),
                             PrimaryButton(
                               label: _isLastPage ? 'Get Started' : 'Continue',
                               icon: Icons.arrow_forward_rounded,

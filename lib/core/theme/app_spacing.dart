@@ -9,6 +9,10 @@ abstract class AppSpacing {
   static const xs = 4.0;
   static const sm = 8.0;
   static const md = 14.0;
+  // Task 39: promoted from a raw 18 hardcoded 36+ times app-wide — real
+  // enough (and far enough from both neighbors) to earn its own step
+  // rather than being forced into md or lg.
+  static const ml = 18.0;
   static const lg = 22.0;
   static const xl = 28.0;
   static const xxl = 40.0;
@@ -22,6 +26,13 @@ abstract class AppRadius {
   static const lg = 20.0;
   static const xl = 28.0;
   static const pill = 999.0;
+
+  // Task 39: the shared AppTextField's own corner radius (19), hand-
+  // replicated across several other input-styled widgets before this
+  // constant existed — promoted rather than rounded into sm/md/lg, since
+  // rounding would be a real (if small) visual change to the actual
+  // canonical text field, not just a referencing fix.
+  static const input = 19.0;
 }
 
 /// Layered elevation shadows — a single flat drop-shadow is one of the

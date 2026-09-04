@@ -35,7 +35,7 @@ class RestaurantOrdersScreen extends ConsumerWidget {
           onRefresh: () => ref.read(restaurantOrdersProvider.notifier).refresh(),
           child: ordersAsync.when(
             loading: () => ListView(
-              padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 24),
               children: const [SkeletonList(count: 4)],
             ),
             error: (error, stack) => _ErrorState(
@@ -44,7 +44,7 @@ class RestaurantOrdersScreen extends ConsumerWidget {
             data: (page) => page.items.isEmpty
                 ? const _EmptyOrders()
                 : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
+                    padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 24),
                     itemCount: page.items.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 14),
                     itemBuilder: (context, index) => _OrderCard(order: page.items[index]),

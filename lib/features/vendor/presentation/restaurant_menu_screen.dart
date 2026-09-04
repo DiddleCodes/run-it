@@ -51,7 +51,7 @@ class RestaurantMenuScreen extends ConsumerWidget {
           onRefresh: () => ref.read(restaurantMenuProvider.notifier).refresh(),
           child: itemsAsync.when(
             loading: () => ListView(
-              padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 24),
               children: const [SkeletonList(count: 5)],
             ),
             error: (error, stack) => _ErrorState(onRetry: () => ref.read(restaurantMenuProvider.notifier).refresh()),
@@ -63,7 +63,7 @@ class RestaurantMenuScreen extends ConsumerWidget {
               }
               final categories = byCategory.keys.toList()..sort();
               return ListView(
-                padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
+                padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 24),
                 children: [
                   for (final category in categories) ...[
                     Padding(

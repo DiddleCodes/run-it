@@ -66,7 +66,7 @@ class RunnerProfileScreen extends ConsumerWidget {
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(22, 6, 22, 32),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 6, AppSpacing.lg, 32),
           children: [
             _ProfileHeader(
               onSettingsTap: () => ref
@@ -150,7 +150,7 @@ class RunnerProfileScreen extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: AppSpacing.lg),
             SettingsGroup(
               children: [
                 SettingsRow(
@@ -163,7 +163,7 @@ class RunnerProfileScreen extends ConsumerWidget {
                   _VehicleRow(user: user),
               ],
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: AppSpacing.lg),
             SettingsGroup(
               children: [
                 SettingsRow(
@@ -179,7 +179,7 @@ class RunnerProfileScreen extends ConsumerWidget {
                 _BiometricRow(user: user),
               ],
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: AppSpacing.lg),
             SettingsGroup(
               children: [
                 SettingsRow(
@@ -196,7 +196,7 @@ class RunnerProfileScreen extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: AppSpacing.lg),
             SettingsGroup(
               children: [
                 SettingsRow(
@@ -232,7 +232,7 @@ class RunnerProfileScreen extends ConsumerWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
       ),
       builder: (_) => Padding(
-        padding: const EdgeInsets.fromLTRB(22, 24, 22, 36),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 24, AppSpacing.lg, 36),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -345,7 +345,7 @@ class _ProfileHero extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.lg),
       child: Container(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(AppSpacing.ml),
         decoration: BoxDecoration(
           color: AppColors.surfaceCard,
           borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -553,7 +553,7 @@ class _WalletBalanceCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.lg),
       child: Container(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(AppSpacing.ml),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
@@ -751,7 +751,7 @@ class _PersonalInfoSheet extends ConsumerWidget {
         ('Class / Grade', user.classOrGrade!),
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 22, 22, 36),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, 36),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -917,10 +917,10 @@ class _EditVehicleSheetState extends ConsumerState<_EditVehicleSheet> {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        22,
+        AppSpacing.lg,
         20,
-        22,
-        MediaQuery.of(context).viewInsets.bottom + 22,
+        AppSpacing.lg,
+        MediaQuery.of(context).viewInsets.bottom + AppSpacing.lg,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

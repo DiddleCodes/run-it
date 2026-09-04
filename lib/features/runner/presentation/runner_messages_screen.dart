@@ -236,7 +236,7 @@ class _RunnerMessagesScreenState extends ConsumerState<RunnerMessagesScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(18, 6, 18, 0),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.ml, 6, AppSpacing.ml, 0),
               child: _MessagesHeader(
                 onSearchTap: () => ref
                     .read(appNotificationProvider.notifier)
@@ -248,7 +248,7 @@ class _RunnerMessagesScreenState extends ConsumerState<RunnerMessagesScreen> {
             ),
             const SizedBox(height: 14),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.ml),
               child: _SegmentedTabs(
                 value: _tab,
                 onChanged: (tab) => setState(() => _tab = tab),
@@ -259,7 +259,7 @@ class _RunnerMessagesScreenState extends ConsumerState<RunnerMessagesScreen> {
                   ? (notices.isEmpty
                         ? const _EmptyMessages()
                         : ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
+                            padding: const EdgeInsets.fromLTRB(AppSpacing.ml, 12, AppSpacing.ml, 24),
                             itemCount: notices.length,
                             separatorBuilder: (_, _) => const Divider(
                               height: 1,
@@ -271,7 +271,7 @@ class _RunnerMessagesScreenState extends ConsumerState<RunnerMessagesScreen> {
                   : (visibleThreads.isEmpty
                         ? const _EmptyMessages()
                         : ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
+                            padding: const EdgeInsets.fromLTRB(AppSpacing.ml, 12, AppSpacing.ml, 24),
                             itemCount: visibleThreads.length,
                             separatorBuilder: (_, _) => const Divider(
                               height: 1,

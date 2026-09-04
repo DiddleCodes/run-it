@@ -224,7 +224,7 @@ class _KeypadKeyState extends State<_KeypadKey> {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: AppColors.surfaceCard,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(AppRadius.lg),
               boxShadow: _pressed
                   ? AppElevation.card(false)
                   : AppElevation.raised(false),

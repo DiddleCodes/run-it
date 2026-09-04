@@ -540,7 +540,7 @@ class _BiometricButtonState extends State<_BiometricButton> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
             decoration: BoxDecoration(
               color: AppColors.surfaceCard,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(AppRadius.lg),
               boxShadow: AppElevation.raised(false),
             ),
             child: Row(

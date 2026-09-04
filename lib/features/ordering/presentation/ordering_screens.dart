@@ -119,7 +119,7 @@ class _EateryMenuScreenState extends ConsumerState<EateryMenuScreen> {
                         ],
                       ),
                       SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
+                        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 0),
                         sliver: SliverToBoxAdapter(
                           child: _EateryHero(eatery: place),
                         ),
@@ -128,7 +128,7 @@ class _EateryMenuScreenState extends ConsumerState<EateryMenuScreen> {
                         child: SizedBox(
                           height: 72,
                           child: ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(22, 18, 22, 10),
+                            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.ml, AppSpacing.lg, 10),
                             scrollDirection: Axis.horizontal,
                             itemCount: categories.length,
                             separatorBuilder: (_, _) =>
@@ -143,7 +143,7 @@ class _EateryMenuScreenState extends ConsumerState<EateryMenuScreen> {
                         ),
                       ),
                       SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(22, 8, 22, 110),
+                        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 110),
                         sliver: SliverList.separated(
                           itemCount: visible.length,
                           separatorBuilder: (_, _) =>
@@ -297,7 +297,7 @@ class _FloatingBasketBar extends StatelessWidget {
           curve: AppMotion.emphasized,
           child: Container(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-            margin: const EdgeInsets.fromLTRB(22, 0, 22, 18),
+            margin: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.ml),
             decoration: BoxDecoration(
               color: AppColors.surfaceCard,
               borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -382,7 +382,7 @@ class BasketScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Your basket')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 24),
         children: [
           Text(
             eateryName,
@@ -401,7 +401,7 @@ class BasketScreen extends ConsumerWidget {
                 padding: const EdgeInsets.only(right: 20),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.error,
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
                 ),
                 child: const Icon(
                   Icons.delete_outline_rounded,
@@ -446,7 +446,7 @@ class BasketScreen extends ConsumerWidget {
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 10, 22, 18),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 10, AppSpacing.lg, AppSpacing.ml),
           child: PrimaryButton(
             label: hasUnavailable
                 ? 'Remove unavailable items to continue'
@@ -607,7 +607,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Checkout')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 24),
         children: [
           const _SectionLabel(label: 'DELIVERY'),
           _LocationCard(
@@ -723,7 +723,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 10, 22, 18),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 10, AppSpacing.lg, AppSpacing.ml),
           child: PrimaryButton(
             label: insufficient
                 ? 'Wallet balance is insufficient'
@@ -757,7 +757,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       context: context,
       showDragHandle: true,
       builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.fromLTRB(22, 12, 22, 28),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 12, AppSpacing.lg, 28),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -921,7 +921,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
       ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 24),
           children: [
             StatusStepper(
               steps: _steps,
@@ -950,14 +950,14 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
               const SizedBox(height: 16),
               _DeliveryPinCard(pin: session.deliveryPin),
             ],
-            const SizedBox(height: 22),
+            const SizedBox(height: AppSpacing.lg),
             if (!confirmed) ...[
               _MapPlaceholder(delivered: delivered),
               if (session.runnerName != null) ...[
-                const SizedBox(height: 18),
+                const SizedBox(height: AppSpacing.ml),
                 _RunnerCard(name: session.runnerName!),
               ],
-              const SizedBox(height: 18),
+              const SizedBox(height: AppSpacing.ml),
             ],
             _OrderSummaryCard(items: session.orderItems, total: session.total),
             if (confirmed) ...[
@@ -1034,7 +1034,7 @@ class _DeliveryPinCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: AppSpacing.ml),
       decoration: BoxDecoration(
         color: AppColors.primaryMaroon,
         borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -1308,7 +1308,7 @@ class _EnjoyYourMealMessage extends StatelessWidget {
       key: const ValueKey('enjoy-your-meal'),
       children: [
         const RouteLineReveal(size: 96),
-        const SizedBox(height: 18),
+        const SizedBox(height: AppSpacing.ml),
         Text(
               'Enjoy your meal!',
               textAlign: TextAlign.center,
@@ -1408,7 +1408,7 @@ class _RunnerCard extends StatelessWidget {
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
       color: OrderingColors.surface(context),
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
       border: Border.all(color: OrderingColors.border(context)),
     ),
     child: Row(
@@ -1466,10 +1466,10 @@ class _OrderSummaryCard extends StatelessWidget {
   final int total;
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(18),
+    padding: const EdgeInsets.all(AppSpacing.ml),
     decoration: BoxDecoration(
       color: OrderingColors.surface(context),
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
       border: Border.all(color: OrderingColors.border(context)),
     ),
     child: Column(
@@ -1737,9 +1737,9 @@ class _ItemOptionsSheetState extends State<_ItemOptionsSheet> {
     final total = widget.item.price * _quantity;
     return Padding(
           padding: EdgeInsets.fromLTRB(
-            22,
+            AppSpacing.lg,
             8,
-            22,
+            AppSpacing.lg,
             MediaQuery.of(context).viewInsets.bottom + 24,
           ),
           // The notes field (Task 14) pushed this sheet's content past a
@@ -1809,7 +1809,7 @@ class _ItemOptionsSheetState extends State<_ItemOptionsSheet> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 22),
+                const SizedBox(height: AppSpacing.lg),
                 Text(
                   'Add a note',
                   style: Theme.of(context).textTheme.labelLarge
@@ -1876,7 +1876,7 @@ class _BasketLine extends StatelessWidget {
       padding: const EdgeInsets.all(11),
       decoration: BoxDecoration(
         color: OrderingColors.surface(context),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: OrderingColors.border(context)),
       ),
       child: Column(
@@ -1977,10 +1977,10 @@ class _Breakdown extends StatelessWidget {
   final PriceBreakdown pricing;
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(18),
+    padding: const EdgeInsets.all(AppSpacing.ml),
     decoration: BoxDecoration(
       color: OrderingColors.surface(context),
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
       border: Border.all(color: OrderingColors.border(context)),
     ),
     child: Column(
@@ -2023,7 +2023,7 @@ class _LocationCard extends StatelessWidget {
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
       color: OrderingColors.surface(context),
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
       border: Border.all(color: OrderingColors.border(context)),
     ),
     child: Row(
@@ -2212,7 +2212,7 @@ class _EmptyBasket extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyMedium
                   ?.copyWith(color: OrderingColors.muted(context)),
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: AppSpacing.lg),
             TextButton(
               onPressed: () => context.pop(),
               child: const Text('Browse the menu'),
@@ -2234,7 +2234,7 @@ class _MenuScreenSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SafeArea(
     child: SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

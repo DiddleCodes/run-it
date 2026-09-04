@@ -353,12 +353,12 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
                     context,
                   ).textTheme.labelSmall?.copyWith(color: AppColors.scannerGreen),
                 ),
-                const SizedBox(height: 22),
+                const SizedBox(height: AppSpacing.lg),
                 _BottomActionsRow(
                   onGalleryTap: () => _stubAction('Scanning from gallery is coming soon.'),
                   onMyCodeTap: () => _stubAction('Your runner QR code is coming soon.'),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: AppSpacing.ml),
               ],
             ),
           ),
@@ -490,7 +490,7 @@ class _BottomActionsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 22),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
       child: Row(
         children: [
           Expanded(
@@ -789,7 +789,7 @@ class _ScanErrorOverlay extends StatelessWidget {
                 size: 40,
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: AppSpacing.ml),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Text(
@@ -828,10 +828,10 @@ class _ManualCodeSheetState extends State<_ManualCodeSheet> {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        22,
+        AppSpacing.lg,
         20,
-        22,
-        MediaQuery.of(context).viewInsets.bottom + 22,
+        AppSpacing.lg,
+        MediaQuery.of(context).viewInsets.bottom + AppSpacing.lg,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

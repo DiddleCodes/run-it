@@ -98,7 +98,7 @@ class _RunnerJobsScreenState extends ConsumerState<RunnerJobsScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(18, 6, 18, 0),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.ml, 6, AppSpacing.ml, 0),
               child: _JobsHeader(
                 onFilterTap: () => ref
                     .read(appNotificationProvider.notifier)
@@ -110,7 +110,7 @@ class _RunnerJobsScreenState extends ConsumerState<RunnerJobsScreen> {
             ),
             const SizedBox(height: 14),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 22),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: _SegmentedTabs(
                 value: _tab,
                 onChanged: (tab) => setState(() => _tab = tab),
@@ -118,7 +118,7 @@ class _RunnerJobsScreenState extends ConsumerState<RunnerJobsScreen> {
             ),
             if (!verified)
               Padding(
-                padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
+                padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 14, AppSpacing.lg, 0),
                 child: _PendingReviewBanner(user: user),
               ),
             Expanded(
@@ -319,13 +319,13 @@ class _AvailableTab extends ConsumerWidget {
       children: [
         if (showReconnectBanner)
           Padding(
-            padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 14, AppSpacing.lg, 0),
             child: _ReconnectBanner(status: dispatchStatus),
           ),
         Expanded(
           child: jobs.when(
             loading: () => const Padding(
-              padding: EdgeInsets.fromLTRB(22, 14, 22, 24),
+              padding: EdgeInsets.fromLTRB(AppSpacing.lg, 14, AppSpacing.lg, 24),
               child: SkeletonList(count: 3),
             ),
             error: (error, stack) => const _EmptyState(
@@ -342,7 +342,7 @@ class _AvailableTab extends ConsumerWidget {
                 );
               }
               return ListView.separated(
-                padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
+                padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 14, AppSpacing.lg, 24),
                 itemCount: jobs.length + 1,
                 separatorBuilder: (_, _) => const SizedBox(height: 14),
                 itemBuilder: (context, index) {
@@ -481,7 +481,7 @@ class _AvailableJobCard extends StatelessWidget {
     final (badgeBg, badgeFg, badgeIcon, category) = _vendorBadgeFor(job.eateryName);
     final isNew = _isNewJob(job.eateryName);
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(AppSpacing.ml),
       decoration: BoxDecoration(
         color: AppColors.surfaceCard,
         borderRadius: BorderRadius.circular(22),
@@ -712,10 +712,10 @@ class _ActiveTab extends StatelessWidget {
     final pickup = active.status == DeliveryStage.accepted;
     final statusLabel = pickup ? 'Heading to pickup' : 'Delivering';
     return ListView(
-      padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 14, AppSpacing.lg, 24),
       children: [
         Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(AppSpacing.ml),
           decoration: BoxDecoration(
             color: AppColors.surfaceCard,
             borderRadius: BorderRadius.circular(22),
@@ -772,7 +772,7 @@ class _ActiveTab extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodyMedium
                     ?.copyWith(color: AppColors.mutedText),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: AppSpacing.ml),
               SizedBox(
                 width: double.infinity,
                 child: _PressableButton(
@@ -811,7 +811,7 @@ class _CompletedTab extends StatelessWidget {
     }
     final formatter = DateFormat('MMM d · h:mm a');
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 14, AppSpacing.lg, 24),
       itemCount: earnings.length,
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) {

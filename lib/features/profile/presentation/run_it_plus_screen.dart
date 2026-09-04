@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
 
 /// A visual placeholder only — no entitlement/recurring-payment logic.
 /// Real RUN-It Plus subscription/billing is out of scope for this task;
@@ -16,7 +17,7 @@ class RunItPlusScreen extends StatelessWidget {
       backgroundColor: AppColors.backgroundCream,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -66,7 +67,7 @@ class RunItPlusScreen extends StatelessWidget {
                           size: 40,
                         ),
                       ),
-                      const SizedBox(height: 22),
+                      const SizedBox(height: AppSpacing.lg),
                       Text(
                         'RUN-It Plus',
                         style: Theme.of(context).textTheme.headlineLarge

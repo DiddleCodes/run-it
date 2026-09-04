@@ -84,12 +84,12 @@ class _RunnerHomeScreenState extends ConsumerState<RunnerHomeScreen> {
       body: SafeArea(
         bottom: false,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(22, 8, 22, 28),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _DashboardHeader(onMenuTap: _menuTapped),
-              const SizedBox(height: 22),
+              const SizedBox(height: AppSpacing.lg),
               staggered(
                 _OnlineHeroCard(
                   online: online,
@@ -216,7 +216,7 @@ class _DashboardHeader extends StatelessWidget {
                 _EarningsChip(onTap: () => context.push(AppRoutes.earnings)),
               ],
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: AppSpacing.lg),
             Padding(
               padding: const EdgeInsets.only(right: 66),
               child: Text.rich(
@@ -298,7 +298,7 @@ class ActiveDeliveryScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: Text(pickup ? 'Pickup' : 'Drop-off')),
       body: Padding(
-        padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -317,10 +317,10 @@ class ActiveDeliveryScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 28),
             Container(
-              padding: const EdgeInsets.all(18),
+              padding: const EdgeInsets.all(AppSpacing.ml),
               decoration: BoxDecoration(
                 color: OrderingColors.surface(context),
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(AppRadius.lg),
                 border: Border.all(color: OrderingColors.border(context)),
               ),
               child: Column(
@@ -400,10 +400,10 @@ class EarningsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Earnings')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(22, 10, 22, 24),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 10, AppSpacing.lg, 24),
         children: [
           Container(
-            padding: const EdgeInsets.all(22),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             decoration: BoxDecoration(
               color: AppColors.primaryMaroonDeep,
               borderRadius: BorderRadius.circular(22),
@@ -1237,7 +1237,7 @@ class _DeliveryComplete extends ConsumerWidget {
                 size: 36,
               ),
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: AppSpacing.lg),
             Text(
               'Delivery complete.',
               style: Theme.of(context).textTheme.headlineMedium

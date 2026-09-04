@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_spacing.dart';
 
 /// Icon-led composition (not a literal storefront illustration) used for
 /// the "every campus spot" onboarding page — a loose grid of tilted rose
@@ -56,7 +57,7 @@ class CampusCollageVisual extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: AppColors.accentRose,
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
                     boxShadow: [
                       BoxShadow(
                         color: AppColors.primaryMaroonDeep.withValues(

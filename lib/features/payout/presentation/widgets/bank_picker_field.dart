@@ -48,7 +48,7 @@ class BankPickerField extends ConsumerWidget {
             onTap: () => _handleTap(context, ref, banksAsync),
             child: Container(
               constraints: const BoxConstraints(minHeight: 58),
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.ml, vertical: 14),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
@@ -56,7 +56,7 @@ class BankPickerField extends ConsumerWidget {
                   colors: [Colors.white.withValues(alpha: 0.6), surface],
                   stops: const [0.0, 0.4],
                 ),
-                borderRadius: BorderRadius.circular(19),
+                borderRadius: BorderRadius.circular(AppRadius.input),
                 border: Border.all(
                   color: hasError ? AppColors.error : AppColors.borderSubtle,
                   width: hasError ? 1.5 : 1,

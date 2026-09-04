@@ -83,7 +83,7 @@ class _AppTextFieldState extends State<AppTextField> {
           ],
           stops: const [0.0, 0.4],
         ),
-        borderRadius: BorderRadius.circular(19),
+        borderRadius: BorderRadius.circular(AppRadius.input),
         border: Border.all(
           color: widget.hasError
               ? AppColors.error
@@ -144,8 +144,8 @@ class _AppTextFieldState extends State<AppTextField> {
                 contentPadding: EdgeInsets.only(
                   left: widget.leadingText != null ? 10 : 20,
                   right: 20,
-                  top: 18,
-                  bottom: 18,
+                  top: AppSpacing.ml,
+                  bottom: AppSpacing.ml,
                 ),
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,

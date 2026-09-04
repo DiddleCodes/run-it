@@ -506,7 +506,7 @@ class _VehicleDetailsStepState extends ConsumerState<_VehicleDetailsStep> {
           Container(
             decoration: BoxDecoration(
               color: surface,
-              borderRadius: BorderRadius.circular(19),
+              borderRadius: BorderRadius.circular(AppRadius.input),
               border: Border.all(
                 color:
                     _showError &&
@@ -526,7 +526,7 @@ class _VehicleDetailsStepState extends ConsumerState<_VehicleDetailsStep> {
                 hintText: 'e.g. ABC-123-XY',
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 18,
+                  horizontal: AppSpacing.ml,
                   vertical: 16,
                 ),
                 prefixIcon: const Padding(
