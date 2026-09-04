@@ -6,7 +6,12 @@ plugins {
 
 android {
     namespace = "com.runit.run_it"
-    compileSdk = flutter.compileSdkVersion
+    // flutter_secure_storage's AAR metadata requires compileSdk 37+, one
+    // ahead of Flutter 3.47.0's own default (36) — see Task 24 for the
+    // build failure this fixes. compileSdk is compile-time only (which
+    // APIs are visible to javac/kotlinc); it doesn't change targetSdk or
+    // any runtime behavior, so this is safe independent of minSdk/targetSdk.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

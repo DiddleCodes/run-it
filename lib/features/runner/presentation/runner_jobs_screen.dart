@@ -18,6 +18,14 @@ import '../domain/runner_models.dart';
 
 enum _JobsTab { available, active, completed }
 
+String _relativeTime(DateTime time) {
+  final diff = DateTime.now().difference(time);
+  if (diff.inMinutes < 1) return 'just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  return DateFormat('MMM d').format(time);
+}
+
 /// A small fixed rotation of vendor-badge tints/glyphs/category labels,
 /// picked deterministically per eatery name — so the Available list reads
 /// as a row of distinct vendors rather than identical rose tiles, without
@@ -65,6 +73,13 @@ class _RunnerJobsScreenState extends ConsumerState<RunnerJobsScreen> {
         );
       case AcceptOfferResult.blocked:
         notifier.warning('Finish your active delivery before accepting another.');
+      case AcceptOfferResult.alreadyClaimed:
+        // Expected, normal outcome of the broadcast model — not an error.
+        // The job is already removed from the list by the controller;
+        // this just explains why it vanished.
+        notifier.info('Another runner just claimed this one.');
+      case AcceptOfferResult.networkError:
+        notifier.warning("Couldn't reach the server. Check your connection and try again.");
     }
   }
 
@@ -293,49 +308,104 @@ class _AvailableTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final jobs = ref.watch(availableJobsProvider);
-    return jobs.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.fromLTRB(22, 14, 22, 24),
-        child: SkeletonList(count: 3),
-      ),
-      error: (error, stack) => const _EmptyState(
-        icon: Icons.error_outline_rounded,
-        title: 'Couldn’t load jobs',
-        subtitle: 'Something went wrong. Pull to refresh in a moment.',
-      ),
-      data: (jobs) {
-        if (jobs.isEmpty) {
-          return const _EmptyState(
-            icon: Icons.explore_off_rounded,
-            title: 'No jobs nearby',
-            subtitle: 'When a vendor near you has a delivery, it’ll show up here.',
-          );
-        }
-        return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
-          itemCount: jobs.length + 1,
-          separatorBuilder: (_, _) => const SizedBox(height: 14),
-          itemBuilder: (context, index) {
-            if (index == 0) {
-              return _AvailableJobsBar(
-                count: jobs.length,
-                onSortTap: () => ref
-                    .read(appNotificationProvider.notifier)
-                    .info('Sorting options are coming soon.'),
+    // Task 21b: "a runner shouldn't silently stop receiving jobs if the
+    // socket drops without visible indication" — a small banner, not a
+    // blocking state; the last-fetched list stays visible underneath it.
+    final dispatchStatus = ref.watch(dispatchConnectionStatusProvider).valueOrNull;
+    final showReconnectBanner =
+        dispatchStatus != null && dispatchStatus != DispatchConnectionStatus.connected;
+
+    return Column(
+      children: [
+        if (showReconnectBanner)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
+            child: _ReconnectBanner(status: dispatchStatus),
+          ),
+        Expanded(
+          child: jobs.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.fromLTRB(22, 14, 22, 24),
+              child: SkeletonList(count: 3),
+            ),
+            error: (error, stack) => const _EmptyState(
+              icon: Icons.error_outline_rounded,
+              title: 'Couldn’t load jobs',
+              subtitle: 'Something went wrong. Pull to refresh in a moment.',
+            ),
+            data: (jobs) {
+              if (jobs.isEmpty) {
+                return const _EmptyState(
+                  icon: Icons.explore_off_rounded,
+                  title: 'No jobs nearby',
+                  subtitle: 'When a vendor near you has a delivery, it’ll show up here.',
+                );
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
+                itemCount: jobs.length + 1,
+                separatorBuilder: (_, _) => const SizedBox(height: 14),
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return _AvailableJobsBar(
+                      count: jobs.length,
+                      onSortTap: () => ref
+                          .read(appNotificationProvider.notifier)
+                          .info('Sorting options are coming soon.'),
+                    );
+                  }
+                  final job = jobs[index - 1];
+                  return _AvailableJobCard(
+                        job: job,
+                        readOnly: readOnly,
+                        onAccept: () => onAccept(job),
+                      )
+                      .animate(delay: (60 * (index - 1)).ms)
+                      .fadeIn(duration: 260.ms)
+                      .moveY(begin: 10, end: 0);
+                },
               );
-            }
-            final job = jobs[index - 1];
-            return _AvailableJobCard(
-                  job: job,
-                  readOnly: readOnly,
-                  onAccept: () => onAccept(job),
-                )
-                .animate(delay: (60 * (index - 1)).ms)
-                .fadeIn(duration: 260.ms)
-                .moveY(begin: 10, end: 0);
-          },
-        );
-      },
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReconnectBanner extends StatelessWidget {
+  const _ReconnectBanner({required this.status});
+  final DispatchConnectionStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final connecting = status == DispatchConnectionStatus.connecting;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.goldTint,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: connecting
+                ? const CircularProgressIndicator(strokeWidth: 2, color: AppColors.gold)
+                : const Icon(Icons.wifi_off_rounded, size: 16, color: AppColors.gold),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              connecting
+                  ? 'Connecting to live jobs…'
+                  : "Reconnecting — new jobs won't appear until this comes back.",
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.inkText),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -408,7 +478,6 @@ class _AvailableJobCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final etaMinutes = (job.estimatedDistanceMeters / 80).ceil();
     final (badgeBg, badgeFg, badgeIcon, category) = _vendorBadgeFor(job.eateryName);
     final isNew = _isNewJob(job.eateryName);
     return Container(
@@ -503,14 +572,11 @@ class _AvailableJobCard extends StatelessWidget {
                 ),
                 _JobStatDivider(),
                 Expanded(
-                  child: _JobStat(label: 'Est. time', value: '~$etaMinutes min'),
+                  child: _JobStat(label: 'Order total', value: naira(job.totalAmount)),
                 ),
                 _JobStatDivider(),
                 Expanded(
-                  child: _JobStat(
-                    label: 'Distance',
-                    value: '${(job.estimatedDistanceMeters / 1000).toStringAsFixed(1)} km',
-                  ),
+                  child: _JobStat(label: 'Placed', value: _relativeTime(job.offeredAt)),
                 ),
               ],
             ),

@@ -26,6 +26,7 @@ class _RejectingAuthRepository extends AuthRepository {
     required String code,
     required AccountType accountType,
     String? name,
+    String? phone,
   }) async {
     throw exception;
   }
@@ -58,7 +59,6 @@ void main() {
     name: 'Ada Student',
     contact: 'ada@campus.edu',
     accountType: AccountType.student,
-    campus: kCampuses.first,
   );
 
   // Task 17: a suspended account's real backend rejection must surface its

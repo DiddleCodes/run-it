@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:run_it/core/network/matching_repository.dart';
 import 'package:run_it/core/routing/app_router.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
 import 'package:run_it/features/auth/presentation/kyc/kyc_status_screen.dart';
+import 'package:run_it/features/runner/domain/runner_models.dart';
 import 'package:run_it/features/runner/presentation/runner_jobs_screen.dart';
 import 'package:run_it/features/runner/presentation/runner_screens.dart';
 
@@ -15,6 +17,15 @@ class _FakeAuthController extends AuthController {
   final AuthSession _session;
   @override
   AuthSession? build() => _session;
+}
+
+/// RunnerHomeScreen/RunnerJobsScreen both mount `availableJobsProvider`
+/// (Task 21b), which otherwise hits the real `GET /matching/available` —
+/// keeps these theme/nav tests network-free.
+class _FakeMatchingRepository extends MatchingRepository {
+  const _FakeMatchingRepository();
+  @override
+  Future<List<DeliveryJob>> listAvailable({required String token}) async => const [];
 }
 
 AuthSession _verifiedRunnerSession() => AuthSession(
@@ -85,6 +96,7 @@ void main() {
             authControllerProvider.overrideWith(
               () => _FakeAuthController(_verifiedRunnerSession()),
             ),
+            matchingRepositoryProvider.overrideWithValue(const _FakeMatchingRepository()),
           ],
           child: MaterialApp.router(routerConfig: router),
         ),
@@ -123,6 +135,7 @@ void main() {
             authControllerProvider.overrideWith(
               () => _FakeAuthController(_verifiedRunnerSession()),
             ),
+            matchingRepositoryProvider.overrideWithValue(const _FakeMatchingRepository()),
           ],
           child: MaterialApp.router(routerConfig: router),
         ),

@@ -110,9 +110,14 @@ abstract class AppRoutes {
   static const studentProfile = '/profile';
   static const runItPlus = '/plus';
   static const runnerHome = '/runner';
-  static const runnerOffer = '/runner/offer';
   static const runnerDelivery = '/runner/delivery';
   static const earnings = '/runner/earnings';
+  // Task 33: runner earnings now land in an in-app wallet balance (credited
+  // by OrderEscrowService.release()'s runner leg) instead of a direct
+  // Paystack transfer — WalletScreen itself needed zero changes (it's
+  // already keyed only on the signed-in user's id, per Task 32), just a
+  // route to reach it from the runner shell too.
+  static const runnerWallet = '/runner/wallet';
   static const runnerJobs = '/runner/jobs';
   static const runnerScan = '/runner/scan';
   static const runnerMessages = '/runner/messages';
@@ -147,6 +152,7 @@ abstract class AppRoutes {
     runnerJobs,
     runnerMessages,
     runnerProfile,
+    runnerWallet,
   };
 
   /// Only reachable once Verified — these all presuppose either an
@@ -156,7 +162,6 @@ abstract class AppRoutes {
   /// them — this is defense-in-depth against a direct deep link, not the
   /// primary gate.
   static const _runnerVerifiedOnlyRoutes = {
-    runnerOffer,
     runnerDelivery,
     earnings,
     runnerScan,
@@ -422,10 +427,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             const RunnerShell(child: RunnerHomeScreen()),
       ),
       GoRoute(
-        path: AppRoutes.runnerOffer,
-        builder: (context, state) => const JobOfferScreen(),
-      ),
-      GoRoute(
         path: AppRoutes.runnerDelivery,
         builder: (context, state) => const ActiveDeliveryScreen(),
       ),
@@ -434,13 +435,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const RunnerShell(child: EarningsScreen()),
       ),
       GoRoute(
+        path: AppRoutes.runnerWallet,
+        builder: (context, state) => const RunnerShell(child: WalletScreen()),
+      ),
+      GoRoute(
         path: AppRoutes.runnerJobs,
         builder: (context, state) =>
             const RunnerShell(child: RunnerJobsScreen()),
       ),
       // Deliberately not RunnerShell-wrapped: a full-screen camera
       // viewfinder shouldn't sit under a persistent bottom nav — same
-      // treatment as runnerOffer/runnerDelivery above.
+      // treatment as runnerDelivery above.
       GoRoute(
         path: AppRoutes.runnerScan,
         builder: (context, state) => const RunnerScanScreen(),

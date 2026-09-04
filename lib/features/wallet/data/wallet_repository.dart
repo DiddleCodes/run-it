@@ -58,6 +58,26 @@ class WalletRepository {
     return data.cast<Map<String, dynamic>>().map(_toTransaction).toList();
   }
 
+  /// Task 32: real withdrawal to the user's already-confirmed payout
+  /// account (`POST /payout-accounts` — the same one Runner Profile's
+  /// Payouts row uses). Returns the created ledger row's id/status, which
+  /// the caller polls via [getTransactions] until it's no longer
+  /// 'pending' — same "the backend's ledger status is the source of
+  /// truth, not any client-side assumption" shape [initializeFunding]'s
+  /// caller already uses for Add Funds.
+  Future<WalletWithdrawalResult> initiateWithdrawal({
+    required String userId,
+    required int amountNaira,
+    required String token,
+  }) async {
+    final json = await client.post(
+      '/wallet/withdraw/initiate',
+      token: token,
+      body: {'userId': userId, 'amountKobo': amountNaira * 100},
+    ) as Map<String, dynamic>;
+    return WalletWithdrawalResult(id: json['id'] as String, status: json['status'] as String);
+  }
+
   WalletTransaction _toTransaction(Map<String, dynamic> json) {
     final metadata = json['metadata'] as Map<String, dynamic>?;
     final purpose = metadata?['purpose'] as String?;
@@ -65,6 +85,7 @@ class WalletRepository {
       'wallet_topup' => ('Wallet top-up', 'Paystack'),
       'escrow_hold' => ('Order payment', 'Food order'),
       'escrow_refund' => ('Order refund', 'Cancelled order'),
+      'wallet_withdrawal' => ('Withdrawal', 'To your bank account'),
       _ => ('Wallet transaction', json['status'] as String? ?? ''),
     };
     return WalletTransaction(
@@ -74,8 +95,19 @@ class WalletRepository {
       amount: (json['amount'] as int) ~/ 100,
       kind: json['type'] == 'credit' ? WalletTransactionKind.credit : WalletTransactionKind.debit,
       occurredAt: DateTime.parse(json['createdAt'] as String),
+      status: json['status'] as String? ?? 'success',
     );
   }
+}
+
+/// What `POST /wallet/withdraw/initiate` hands back — enough to poll
+/// [WalletRepository.getTransactions] for this specific row's real,
+/// backend-confirmed resolution.
+class WalletWithdrawalResult {
+  const WalletWithdrawalResult({required this.id, required this.status});
+
+  final String id;
+  final String status;
 }
 
 /// What the backend hands back from `POST /wallet/fund/initialize` — enough

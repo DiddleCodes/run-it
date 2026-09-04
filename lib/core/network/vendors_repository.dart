@@ -38,6 +38,7 @@ class VendorsRepository {
     required String category,
     String? description,
     String? logoUrl,
+    String? requestedCampusId,
     required String token,
   }) async {
     final json =
@@ -49,6 +50,7 @@ class VendorsRepository {
                 'category': category,
                 if (description != null && description.trim().isNotEmpty) 'description': description.trim(),
                 'logoUrl': ?logoUrl,
+                'requestedCampusId': ?requestedCampusId,
               },
             )
             as Map<String, dynamic>;

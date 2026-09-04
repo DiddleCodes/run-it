@@ -100,6 +100,7 @@ class _SetupForm extends ConsumerWidget {
                   initialCategory: application.category,
                   initialDescription: application.description,
                   initialLogoBytes: application.storefrontPhoto,
+                  requestedCampusId: application.campus?.id,
                   submitLabel: 'Get Started',
                   onSaved: (_) {
                     ref

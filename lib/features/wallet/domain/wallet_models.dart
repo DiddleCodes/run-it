@@ -1,6 +1,6 @@
-/// A row in the Wallet screen's "Recent transactions" list. Local/demo
-/// data only — there's no ledger backend yet, same spirit as the runner
-/// side's `EarningsRecord`/`SystemNotice`.
+/// A row in the Wallet screen's "Recent transactions" list — wired to the
+/// real `GET /wallet/:userId/transactions` (Task 8b/32), not local/demo
+/// data.
 enum WalletTransactionKind { debit, credit }
 
 class WalletTransaction {
@@ -11,6 +11,7 @@ class WalletTransaction {
     required this.amount,
     required this.kind,
     required this.occurredAt,
+    required this.status,
   });
 
   final String id;
@@ -19,4 +20,10 @@ class WalletTransaction {
   final int amount;
   final WalletTransactionKind kind;
   final DateTime occurredAt;
+
+  /// Real backend WalletTransactionStatus: 'pending' | 'success' | 'failed'.
+  /// A withdrawal (Task 32) is the one row type a caller actually needs to
+  /// poll this for — every other transaction type is only ever created
+  /// already-settled.
+  final String status;
 }

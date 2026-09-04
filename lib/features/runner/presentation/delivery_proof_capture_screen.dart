@@ -5,11 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_exception.dart';
-import '../../../core/network/demo_identity_service.dart';
 import '../../../core/network/orders_repository.dart';
 import '../../../core/network/uploads_repository.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../auth/application/auth_controller.dart';
 import '../../auth/presentation/kyc/camera_capture_step.dart';
 
 /// Task 11's fallback when PIN verification isn't possible (student's
@@ -33,14 +33,18 @@ class _DeliveryProofCaptureScreenState
   bool _submitting = false;
 
   Future<void> _submit(Uint8List bytes) async {
+    // Task 21b: the real signed-in runner's own token — same reasoning as
+    // RunnerScanScreen._runnerToken's own doc comment. `EscrowPartyGuard`
+    // requires it to belong to whoever actually claimed this order.
+    final token = ref.read(authControllerProvider)?.accessToken;
+    if (token == null) {
+      ref
+          .read(appNotificationProvider.notifier)
+          .error('Your session has expired. Sign in again to continue.');
+      return;
+    }
     setState(() => _submitting = true);
     try {
-      final demoIdentity = ref.read(demoIdentityServiceProvider);
-      final runnerUserId = await demoIdentity.ensureRunnerUserId();
-      final token = await demoIdentity.mintTokenFor(
-        userId: runnerUserId,
-        accountType: 'runner',
-      );
       final publicUrl = await ref
           .read(uploadsRepositoryProvider)
           .uploadImage(

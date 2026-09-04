@@ -145,6 +145,20 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(container.read(orderTrackingProvider).stage, OrderStage.confirmed);
+      // Task 30: the confirmed layout is shorter than delivered's (no map/
+      // report-a-problem row below the fold any more), but the scroll
+      // position from the pre-tap scroll above carries over — far enough
+      // that the stepper is genuinely culled out of the sliver list's
+      // element tree now (not just off-screen), so neither
+      // `find.text('Confirmed')` nor `ensureVisible`/`scrollUntilVisible`
+      // (both of which need to already find the target) can bring it
+      // back. Jumping the scroll position directly is the only thing that
+      // works here.
+      tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position
+          .jumpTo(0);
+      await tester.pumpAndSettle();
       expect(find.text('Confirmed'), findsWidgets);
       // The rating prompt (Task 14 Part D) comes first — Skip reaches the
       // original closing message without submitting a rating.

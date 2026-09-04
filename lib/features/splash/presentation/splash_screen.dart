@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -23,6 +24,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
+    // The native launch screen is held (see main.dart's
+    // FlutterNativeSplash.preserve call) until right here — the first
+    // frame this widget is actually about to paint — so the native-to-
+    // Dart handoff happens at a moment the user can actually see, and the
+    // redirect timer below gets this screen's full intended visible
+    // duration rather than counting down invisibly underneath the native
+    // splash.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FlutterNativeSplash.remove();
+    });
     _redirectTimer = Timer(const Duration(milliseconds: 2200), () {
       if (!mounted) return;
       final user = ref.read(authControllerProvider)?.user;

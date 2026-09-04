@@ -21,3 +21,15 @@ const paystackPublicKey = String.fromEnvironment(
 /// Must match the backend's `PAYSTACK_CALLBACK_URL` (`.env.example`) — see
 /// that config value's own doc comment for why the two have to agree.
 const paystackCallbackUrl = 'https://runit.app/payments/callback';
+
+/// Task 31: a Sentry DSN is publish-only (safe to ship in the compiled
+/// app), same trust level as the API base URL above — unlike the backend's
+/// Paystack secret key, this is not a credential that needs to stay out of
+/// source. Empty disables crash reporting entirely (see
+/// crash_reporting.dart) — override with
+/// `--dart-define=SENTRY_DSN=...` for a different environment/project.
+const sentryDsn = String.fromEnvironment(
+  'SENTRY_DSN',
+  defaultValue:
+      'https://9fd415708b1747fb96bc3b23d726ef58@o4512024018354176.ingest.de.sentry.io/4512024082055248',
+);

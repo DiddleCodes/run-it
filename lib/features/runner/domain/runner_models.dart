@@ -13,32 +13,36 @@ class RunnerStatus {
   final bool isVerifiedRunner;
 }
 
+/// Task 21b: shaped directly by what `GET /matching/available` and the
+/// `runner-dispatch` socket's `new_job_available` broadcast actually carry
+/// — no campus tag (the backend has no per-order campus concept; see
+/// `RunnerDispatchGateway`'s own doc comment), no distance/ETA (no vendor
+/// geo data exists server-side to compute one from, so this never shows a
+/// fabricated number), no per-job expiry (a broadcast job has no countdown
+/// — that model retired with the single-offer flow).
 class DeliveryJob {
   const DeliveryJob({
     required this.id,
-    required this.campusId,
     required this.eateryName,
     required this.eateryLocation,
     required this.dropoffZone,
     required this.dropoffLocation,
     required this.payoutAmount,
-    required this.estimatedDistanceMeters,
+    required this.totalAmount,
     required this.offeredAt,
-    required this.expiresAt,
   });
+  /// The order id — also what `POST /orders/:id/escrow/claim` takes.
   final String id;
-
-  /// The campus the originating eatery belongs to — a runner may only be
-  /// offered and may only accept jobs where this matches their own campus.
-  final String campusId;
   final String eateryName;
   final String eateryLocation;
   final String dropoffZone;
   final String dropoffLocation;
   final int payoutAmount;
-  final int estimatedDistanceMeters;
+
+  /// The order's full total (Task 21b) — a real, honest stand-in for the
+  /// old fabricated distance/ETA stat, shown on the Available card instead.
+  final int totalAmount;
   final DateTime offeredAt;
-  final DateTime expiresAt;
 }
 
 class ActiveDelivery {

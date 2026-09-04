@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/network/campus_repository.dart';
 import '../../../core/network/ratings_repository.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
@@ -128,6 +129,16 @@ class RunnerProfileScreen extends ConsumerWidget {
                   icon: Icons.receipt_long_outlined,
                   title: 'Earnings',
                   onTap: () => context.push(AppRoutes.earnings),
+                ),
+                // Task 33: delivery earnings now land in an in-app wallet
+                // balance (see OrderEscrowService.release()'s runner leg)
+                // — this is where a runner actually sees that balance and
+                // withdraws it, distinct from Earnings' own delivery-count
+                // history above.
+                SettingsRow(
+                  icon: Icons.account_balance_wallet_outlined,
+                  title: 'Wallet',
+                  onTap: () => context.push(AppRoutes.runnerWallet),
                 ),
                 const PayoutsRow(),
                 SettingsRow(
@@ -721,16 +732,21 @@ class _VerificationRow extends StatelessWidget {
   }
 }
 
-class _PersonalInfoSheet extends StatelessWidget {
+class _PersonalInfoSheet extends ConsumerWidget {
   const _PersonalInfoSheet({required this.user});
   final UserProfile user;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final rows = <(String, String)>[
       ('Name', user.name),
-      ('Contact', user.contact),
-      ('Campus', user.campus.name),
+      // Task 28: a runner's `contact` is their email now (the real OTP
+      // channel) — phone is a separate field, shown as its own row when
+      // present rather than folded into a generic "Contact" label.
+      ('Email', user.contact),
+      if (user.phone != null && user.phone!.isNotEmpty)
+        ('Phone', user.phone!),
+      ('Campus', ref.watch(campusNameProvider(user.campusId)) ?? '—'),
       if (user.classOrGrade != null && user.classOrGrade!.isNotEmpty)
         ('Class / Grade', user.classOrGrade!),
     ];

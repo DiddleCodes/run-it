@@ -26,16 +26,20 @@ class OrdersRepository {
 
   /// Throws [ApiException] on a mismatched code (400) or after too many
   /// wrong attempts on this order (429) — callers show `e.message` directly
-  /// and must not advance any local state (no optimistic UI).
+  /// and must not advance any local state (no optimistic UI). Task 30:
+  /// [handoffPhotoUrl] is required — the backend rejects a request with
+  /// none (400) before the code is even checked, same hard-block decision
+  /// as `Order.handoffPhotoUrl`'s own doc comment explains.
   Future<void> verifyPickup({
     required String orderId,
     required String code,
+    required String handoffPhotoUrl,
     required String token,
   }) async {
     await client.post(
       '/orders/$orderId/verify-pickup',
       token: token,
-      body: {'code': code},
+      body: {'code': code, 'handoffPhotoUrl': handoffPhotoUrl},
     );
   }
 
@@ -84,5 +88,23 @@ class OrdersRepository {
   }) async {
     final result = await client.get('/orders/$orderId', token: token) as Map<String, dynamic>;
     return result['deliveryPin'] as String?;
+  }
+
+  /// Task 30: the real student-facing "report a problem" call — creates a
+  /// real backend Dispute (reusing the existing admin dispute-review
+  /// model/flow, not a new one) scoped to [token]'s own order. Throws
+  /// [ApiException] (409) if a dispute already exists for this order —
+  /// same one-per-order limit the admin-manual open() path already has.
+  Future<void> reportProblem({
+    required String orderId,
+    required String reason,
+    String? photoUrl,
+    required String token,
+  }) async {
+    await client.post(
+      '/orders/$orderId/report',
+      token: token,
+      body: {'reason': reason, 'photoUrl': ?photoUrl},
+    );
   }
 }

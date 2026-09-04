@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 
-import '../../auth/domain/auth_models.dart' show Campus;
+import '../../../core/network/campus_repository.dart' show CampusOption;
 
-export '../../auth/domain/auth_models.dart' show Campus;
+export '../../../core/network/campus_repository.dart' show CampusOption;
 
 enum VendorApplicationStatus { draft, pending }
 
@@ -14,11 +14,11 @@ enum VendorApplicationStatus { draft, pending }
 /// nothing here is sent to the backend yet. The real `POST /vendors/me`
 /// call happens right after, on `RestaurantProfileSetupScreen` (Task 12),
 /// which prefills itself from this same record rather than asking the
-/// restaurant to re-enter business name/category/description. Submission
-/// is auto-approved (temporary stopgap — see
-/// `VendorsService.upsertMyVendor`'s doc comment backend-side) straight
-/// into that screen, then the Restaurant Dashboard shell — order/menu
-/// management is genuinely mobile scope now (Task 12), not web-app-only.
+/// restaurant to re-enter business name/category/description/campus
+/// preference (Task 27). Submission goes into the real admin review queue
+/// (Task 13c) straight into that screen, then the Restaurant Dashboard
+/// shell — order/menu management is genuinely mobile scope now (Task 12),
+/// not web-app-only.
 class VendorApplication {
   const VendorApplication({
     this.businessName = '',
@@ -46,7 +46,7 @@ class VendorApplication {
   final String description;
   final String contactName;
   final String contactPhone;
-  final Campus? campus;
+  final CampusOption? campus;
   final Uint8List? storefrontPhoto;
 
   /// Set together, from the shared `PayoutAccountForm`'s resolved result
@@ -77,7 +77,7 @@ class VendorApplication {
     String? description,
     String? contactName,
     String? contactPhone,
-    Campus? campus,
+    CampusOption? campus,
     Uint8List? storefrontPhoto,
     bool clearStorefrontPhoto = false,
     String? payoutBankCode,

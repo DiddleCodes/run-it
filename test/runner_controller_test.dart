@@ -1,11 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:run_it/core/network/vendors_repository.dart';
+import 'package:run_it/core/network/escrow_repository.dart';
+import 'package:run_it/core/network/matching_repository.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
 import 'package:run_it/features/runner/application/runner_controller.dart';
 import 'package:run_it/features/runner/domain/runner_models.dart';
-import 'package:run_it/features/vendor/domain/vendor_dashboard_models.dart';
 
 class _FakeAuthController extends AuthController {
   _FakeAuthController(this._session);
@@ -14,23 +14,27 @@ class _FakeAuthController extends AuthController {
   AuthSession? build() => _session;
 }
 
-/// In-memory stand-in for the real, network-backed `VendorsRepository` —
-/// every test that goes online (`toggleAvailability`) exercises
-/// `RunnerController._scheduleOffer`, which now fetches from
-/// `campusEateriesProvider` (real `GET /vendors`, Task 14) instead of the
-/// old `MockOrderingRepository`. [vendors] defaults to one active vendor so
-/// existing offer-flow tests keep receiving an offer; the "no active
-/// vendors" test overrides it with an empty list instead.
-class _FakeVendorsRepository extends VendorsRepository {
-  const _FakeVendorsRepository([this.vendors = const [_defaultVendor]]);
-  final List<MyVendorProfile> vendors;
-
-  static const _defaultVendor = MyVendorProfile(id: 'tantalizers', businessName: 'Tantalizers', category: 'Meals');
+/// Task 21b: `acceptJob` now calls this instead of a local timer/preview
+/// flow — [result] drives the outcome, [claimed] records every orderId
+/// actually attempted so a test can assert exactly what was sent.
+class _FakeEscrowRepository extends EscrowRepository {
+  _FakeEscrowRepository({this.result = ClaimResult.claimed, this.throwError = false});
+  final ClaimResult result;
+  final bool throwError;
+  final List<String> claimed = [];
 
   @override
-  Future<VendorsPage> listVendors({String? category, String? search, int page = 1, int limit = 20}) async {
-    return VendorsPage(items: vendors, total: vendors.length, page: page, limit: limit);
+  Future<ClaimResult> claim({required String orderId, required String token}) async {
+    claimed.add(orderId);
+    if (throwError) throw Exception('network down');
+    return result;
   }
+}
+
+class _FakeMatchingRepository extends MatchingRepository {
+  const _FakeMatchingRepository();
+  @override
+  Future<List<DeliveryJob>> listAvailable({required String token}) async => const [];
 }
 
 AuthSession _sessionForCampus(
@@ -52,25 +56,36 @@ AuthSession _sessionForCampus(
   ),
 );
 
+DeliveryJob _job({String id = 'order-1'}) => DeliveryJob(
+  id: id,
+  eateryName: 'Tantalizers',
+  eateryLocation: 'Student Centre, Main Walk',
+  dropoffZone: 'Queen Elizabeth II Hall',
+  dropoffLocation: 'Queen Elizabeth II Hall',
+  payoutAmount: 850,
+  totalAmount: 4500,
+  offeredAt: DateTime.now(),
+);
+
 void main() {
-  test('runner delivery state machine only permits forward transitions', () {
+  test('runner delivery state machine only permits forward transitions', () async {
+    final escrow = _FakeEscrowRepository();
     final container = ProviderContainer(
       overrides: [
-        authControllerProvider.overrideWith(
-          () => _FakeAuthController(_sessionForCampus('ui')),
-        ),
-        vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository()),
+        authControllerProvider.overrideWith(() => _FakeAuthController(_sessionForCampus('ui'))),
+        escrowRepositoryProvider.overrideWithValue(escrow),
+        matchingRepositoryProvider.overrideWithValue(const _FakeMatchingRepository()),
       ],
     );
     addTearDown(container.dispose);
     final controller = container.read(runnerControllerProvider.notifier);
 
     expect(controller.confirmPickup(), isFalse);
-    controller.toggleAvailability();
-    controller.simulateOfferNow();
-    expect(container.read(runnerControllerProvider).offer, isNotNull);
+    await controller.toggleAvailability();
 
-    controller.acceptOffer();
+    final result = await controller.acceptJob(_job());
+    expect(result, AcceptOfferResult.accepted);
+    expect(escrow.claimed, ['order-1']);
     expect(
       container.read(runnerControllerProvider).activeDelivery!.status,
       DeliveryStage.accepted,
@@ -87,148 +102,106 @@ void main() {
   });
 
   test(
-    // Task 14: the backend has no per-campus vendor assignment, so there's
-    // no longer a "this campus has no vendors" case to scope to — the only
-    // remaining "no jobs" condition is genuinely zero active vendors
-    // anywhere.
-    'a runner never receives an offer when there are no active vendors at all',
+    'a lost claim race (409) reports alreadyClaimed and never sets an active delivery',
     () async {
+      final escrow = _FakeEscrowRepository(result: ClaimResult.alreadyClaimed);
       final container = ProviderContainer(
         overrides: [
-          authControllerProvider.overrideWith(
-            () => _FakeAuthController(_sessionForCampus('ui')),
-          ),
-          vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository([])),
+          authControllerProvider.overrideWith(() => _FakeAuthController(_sessionForCampus('ui'))),
+          escrowRepositoryProvider.overrideWithValue(escrow),
+          matchingRepositoryProvider.overrideWithValue(const _FakeMatchingRepository()),
         ],
       );
       addTearDown(container.dispose);
       final controller = container.read(runnerControllerProvider.notifier);
+      await controller.toggleAvailability();
 
-      controller.toggleAvailability();
-      // Lets the repository-scoped lookup (a delayed Future, not a Timer)
-      // resolve before asserting.
-      await Future.delayed(const Duration(milliseconds: 400));
+      final result = await controller.acceptJob(_job());
 
-      final session = container.read(runnerControllerProvider);
-      expect(session.noJobsInZone, isTrue);
-      expect(session.offer, isNull);
-    },
-  );
-
-  test(
-    'acceptOffer rejects an offer tied to a different campus than the runner',
-    () {
-      final container = ProviderContainer(
-        overrides: [
-          authControllerProvider.overrideWith(
-            () => _FakeAuthController(_sessionForCampus('ui')),
-          ),
-          vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository()),
-        ],
-      );
-      addTearDown(container.dispose);
-      final controller = container.read(runnerControllerProvider.notifier);
-      controller.toggleAvailability();
-
-      final crossCampusJob = DeliveryJob(
-        id: 'job-cross-campus',
-        campusId: 'oau', // the runner above belongs to 'ui', not 'oau'
-        eateryName: 'Some Other Campus Spot',
-        eateryLocation: 'Elsewhere',
-        dropoffZone: 'Elsewhere Hall',
-        dropoffLocation: 'Room 1',
-        payoutAmount: 500,
-        estimatedDistanceMeters: 300,
-        offeredAt: DateTime.now(),
-        expiresAt: DateTime.now().add(const Duration(seconds: 20)),
-      );
-      controller.debugInjectOffer(crossCampusJob);
-
-      controller.acceptOffer();
-
+      expect(result, AcceptOfferResult.alreadyClaimed);
       expect(container.read(runnerControllerProvider).activeDelivery, isNull);
+      // A claim attempt (won or lost) still counts toward the real
+      // acceptance-rate denominator — see RunnerSession.offersReceived's
+      // own doc comment.
+      expect(container.read(runnerControllerProvider).offersReceived, 1);
+      expect(container.read(runnerControllerProvider).offersAccepted, 0);
     },
   );
+
+  test('a network failure while claiming reports networkError, not a crash', () async {
+    final escrow = _FakeEscrowRepository(throwError: true);
+    final container = ProviderContainer(
+      overrides: [
+        authControllerProvider.overrideWith(() => _FakeAuthController(_sessionForCampus('ui'))),
+        escrowRepositoryProvider.overrideWithValue(escrow),
+        matchingRepositoryProvider.overrideWithValue(const _FakeMatchingRepository()),
+      ],
+    );
+    addTearDown(container.dispose);
+    final controller = container.read(runnerControllerProvider.notifier);
+    await controller.toggleAvailability();
+
+    final result = await controller.acceptJob(_job());
+
+    expect(result, AcceptOfferResult.networkError);
+    expect(container.read(runnerControllerProvider).activeDelivery, isNull);
+  });
 
   group('verified-KYC gating applies to both runner types equally', () {
     for (final runnerType in RunnerType.values) {
-      test(
-        'a non-Verified ${runnerType.name} cannot go online',
-        () async {
-          final container = ProviderContainer(
-            overrides: [
-              authControllerProvider.overrideWith(
-                () => _FakeAuthController(
-                  _sessionForCampus(
-                    'ui',
-                    kycStatus: KycStatus.pending,
-                    runnerType: runnerType,
-                  ),
-                ),
+      test('a non-Verified ${runnerType.name} cannot go online', () async {
+        final container = ProviderContainer(
+          overrides: [
+            authControllerProvider.overrideWith(
+              () => _FakeAuthController(
+                _sessionForCampus('ui', kycStatus: KycStatus.pending, runnerType: runnerType),
               ),
-            ],
-          );
-          addTearDown(container.dispose);
-          final controller = container.read(runnerControllerProvider.notifier);
+            ),
+            matchingRepositoryProvider.overrideWithValue(const _FakeMatchingRepository()),
+          ],
+        );
+        addTearDown(container.dispose);
+        final controller = container.read(runnerControllerProvider.notifier);
 
-          final result = await controller.toggleAvailability();
+        final result = await controller.toggleAvailability();
 
-          expect(result, GoOnlineResult.notVerified);
-          expect(
-            container.read(runnerControllerProvider).status.availability,
-            RunnerAvailability.offline,
-          );
-        },
-      );
+        expect(result, GoOnlineResult.notVerified);
+        expect(
+          container.read(runnerControllerProvider).status.availability,
+          RunnerAvailability.offline,
+        );
+      });
 
-      test(
-        'a non-Verified ${runnerType.name} cannot accept a job',
-        () async {
-          final container = ProviderContainer(
-            overrides: [
-              authControllerProvider.overrideWith(
-                () => _FakeAuthController(
-                  _sessionForCampus(
-                    'ui',
-                    kycStatus: KycStatus.none,
-                    runnerType: runnerType,
-                  ),
-                ),
+      test('a non-Verified ${runnerType.name} cannot claim a job', () async {
+        final container = ProviderContainer(
+          overrides: [
+            authControllerProvider.overrideWith(
+              () => _FakeAuthController(
+                _sessionForCampus('ui', kycStatus: KycStatus.none, runnerType: runnerType),
               ),
-            ],
-          );
-          addTearDown(container.dispose);
-          final controller = container.read(runnerControllerProvider.notifier);
+            ),
+            escrowRepositoryProvider.overrideWithValue(_FakeEscrowRepository()),
+            matchingRepositoryProvider.overrideWithValue(const _FakeMatchingRepository()),
+          ],
+        );
+        addTearDown(container.dispose);
+        final controller = container.read(runnerControllerProvider.notifier);
 
-          final job = DeliveryJob(
-            id: 'job-1',
-            campusId: 'ui',
-            eateryName: 'Tantalizers',
-            eateryLocation: 'Student Centre',
-            dropoffZone: 'Hall',
-            dropoffLocation: 'Room 1',
-            payoutAmount: 500,
-            estimatedDistanceMeters: 300,
-            offeredAt: DateTime.now(),
-            expiresAt: DateTime.now().add(const Duration(seconds: 20)),
-          );
-          final result = await controller.acceptJob(job);
+        final result = await controller.acceptJob(_job());
 
-          expect(result, AcceptOfferResult.notVerified);
-          expect(container.read(runnerControllerProvider).activeDelivery, isNull);
-        },
-      );
+        expect(result, AcceptOfferResult.notVerified);
+        expect(container.read(runnerControllerProvider).activeDelivery, isNull);
+      });
     }
 
-    test('a Verified runner of either type can go online and accept jobs', () async {
+    test('a Verified runner of either type can go online and claim jobs', () async {
       final container = ProviderContainer(
         overrides: [
           authControllerProvider.overrideWith(
-            () => _FakeAuthController(
-              _sessionForCampus('ui', kycStatus: KycStatus.verified),
-            ),
+            () => _FakeAuthController(_sessionForCampus('ui', kycStatus: KycStatus.verified)),
           ),
-          vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository()),
+          escrowRepositoryProvider.overrideWithValue(_FakeEscrowRepository()),
+          matchingRepositoryProvider.overrideWithValue(const _FakeMatchingRepository()),
         ],
       );
       addTearDown(container.dispose);
@@ -244,24 +217,25 @@ void main() {
     });
   });
 
-  test('offersReceived/offersAccepted track real accept-vs-decline behavior', () async {
+  test('offersReceived/offersAccepted track real claim-attempt-vs-won behavior', () async {
+    final escrow = _FakeEscrowRepository();
     final container = ProviderContainer(
       overrides: [
-        authControllerProvider.overrideWith(
-          () => _FakeAuthController(_sessionForCampus('ui')),
-        ),
-        vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository()),
+        authControllerProvider.overrideWith(() => _FakeAuthController(_sessionForCampus('ui'))),
+        escrowRepositoryProvider.overrideWithValue(escrow),
+        matchingRepositoryProvider.overrideWithValue(const _FakeMatchingRepository()),
       ],
     );
     addTearDown(container.dispose);
     final controller = container.read(runnerControllerProvider.notifier);
 
     await controller.toggleAvailability();
-    controller.simulateOfferNow();
-    expect(container.read(runnerControllerProvider).offersReceived, 1);
-    expect(container.read(runnerControllerProvider).offersAccepted, 0);
+    expect(container.read(runnerControllerProvider).offersReceived, 0);
 
-    await controller.acceptOffer();
+    final result = await controller.acceptJob(_job());
+
+    expect(result, AcceptOfferResult.accepted);
+    expect(container.read(runnerControllerProvider).offersReceived, 1);
     expect(container.read(runnerControllerProvider).offersAccepted, 1);
   });
 }

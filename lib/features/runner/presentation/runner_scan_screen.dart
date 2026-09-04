@@ -8,16 +8,17 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/network/api_exception.dart';
-import '../../../core/network/demo_identity_service.dart';
 import '../../../core/network/orders_repository.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../auth/application/auth_controller.dart';
 import '../../ordering/application/order_tracking_controller.dart';
 import '../application/runner_controller.dart';
 import '../domain/runner_models.dart';
 import 'delivery_proof_capture_screen.dart';
+import 'handoff_photo_capture_screen.dart';
 
 /// Which scan is expected right now, derived from the active delivery's
 /// own status — never a context-blind generic prompt when there IS a job
@@ -97,7 +98,14 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
     HapticFeedback.mediumImpact();
 
     final active = ref.read(runnerControllerProvider).activeDelivery;
-    final orderId = ref.read(orderTrackingProvider).orderId;
+    // Task 21b: the real claimed order's own id — DeliveryJob.id is the
+    // backend orderId (see MatchingRepository.listAvailable) now that
+    // acceptJob() goes through a real claim, not orderTrackingProvider's
+    // (a *different*, student-side, single-device local simulation of
+    // whichever order this same device most recently placed as a student —
+    // see its own doc comment. Only relevant below as an opportunistic
+    // same-device testing convenience, never as the verification target).
+    final orderId = active?.job.id;
     final notifier = ref.read(runnerControllerProvider.notifier);
 
     if (active == null || orderId == null) {
@@ -108,9 +116,19 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
     }
 
     final isPickup = active.status == DeliveryStage.accepted;
-    final verified = isPickup
-        ? await _verifyPickup(orderId, code)
-        : await _verifyDelivery(orderId, code);
+    bool verified;
+    if (isPickup) {
+      // Task 30: the required restaurant-handoff photo — captured before
+      // the pickup code is even sent, since the backend rejects a
+      // verify-pickup call with no photo (see VerifyPickupDto's own doc
+      // comment). A cancelled/failed capture is treated exactly like a
+      // failed verification below: nothing advances, scanner resumes.
+      final handoffPhotoUrl = await _captureHandoffPhoto();
+      verified = handoffPhotoUrl != null &&
+          await _verifyPickup(orderId, code, handoffPhotoUrl);
+    } else {
+      verified = await _verifyDelivery(orderId, code);
+    }
 
     if (!verified) {
       if (!mounted) return;
@@ -121,33 +139,66 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
 
     if (isPickup) {
       notifier.confirmPickup();
-      ref.read(orderTrackingProvider.notifier).markPickedUp();
+      _syncOrderTrackingIfSameOrder(orderId, (n) => n.markPickedUp());
     } else {
       notifier.confirmDropoff();
     }
     await _showSuccessAndClose();
   }
 
-  /// [OrderTrackingController]'s session and this runner's own session are
-  /// two independent local simulations with no real backend order registry
-  /// linking them (see `DemoIdentityService`'s doc comment) — reading
-  /// `orderTrackingProvider` here is the documented bridge for testing both
-  /// sides of one order end to end within a single app session. The human
-  /// holding the scanner is signed in under their own session, not this
-  /// demo runner identity — see `DemoIdentityService.mintTokenFor`'s doc
-  /// comment for why verification authenticates as the demo identity.
-  Future<String> _runnerToken() async {
-    final demoIdentity = ref.read(demoIdentityServiceProvider);
-    final runnerUserId = await demoIdentity.ensureRunnerUserId();
-    return demoIdentity.mintTokenFor(userId: runnerUserId, accountType: 'runner');
+  /// Same-device testing convenience only (see `_completeScan`'s doc
+  /// comment): if this device's own student-side order-tracking session
+  /// happens to be watching the exact order just verified — i.e. someone
+  /// is testing both sides of one order in a single app session — mirror
+  /// the stage there too. A no-op for the normal, real case of a runner
+  /// verifying a different student's order on their own device.
+  void _syncOrderTrackingIfSameOrder(
+    String orderId,
+    void Function(OrderTrackingController) apply,
+  ) {
+    if (ref.read(orderTrackingProvider).orderId != orderId) return;
+    apply(ref.read(orderTrackingProvider.notifier));
   }
 
-  Future<bool> _verifyPickup(String orderId, String code) async {
+  /// Task 21b: the real signed-in runner's own token — `EscrowPartyGuard`
+  /// requires it to belong to whichever runner actually won this order's
+  /// claim (Task 21a), which `acceptJob()` now always is. The old demo
+  /// runner identity (`DemoIdentityService.ensureRunnerUserId`/
+  /// `mintTokenFor`) retired with the single-offer flow it existed for —
+  /// using it here would 403 against a really-claimed order, since that
+  /// identity was never the one who claimed it.
+  String? _runnerToken() => ref.read(authControllerProvider)?.accessToken;
+
+  /// Task 30: pushes the handoff-photo capture screen and returns the real
+  /// uploaded URL, or `null` if the runner backs out (or their session
+  /// expired) — either way, the caller must not proceed to verify-pickup
+  /// without one.
+  Future<String?> _captureHandoffPhoto() async {
+    final token = _runnerToken();
+    if (token == null) {
+      _showVerificationError('Your session has expired. Sign in again to continue.');
+      return null;
+    }
+    if (!mounted) return null;
+    return Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => HandoffPhotoCaptureScreen(token: token)),
+    );
+  }
+
+  Future<bool> _verifyPickup(String orderId, String code, String handoffPhotoUrl) async {
+    final token = _runnerToken();
+    if (token == null) {
+      return _showVerificationError('Your session has expired. Sign in again to continue.');
+    }
     try {
-      final token = await _runnerToken();
       await ref
           .read(ordersRepositoryProvider)
-          .verifyPickup(orderId: orderId, code: code, token: token);
+          .verifyPickup(
+            orderId: orderId,
+            code: code,
+            handoffPhotoUrl: handoffPhotoUrl,
+            token: token,
+          );
       return true;
     } on ApiException catch (e) {
       return _showVerificationError(e.message);
@@ -159,8 +210,11 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
   }
 
   Future<bool> _verifyDelivery(String orderId, String code) async {
+    final token = _runnerToken();
+    if (token == null) {
+      return _showVerificationError('Your session has expired. Sign in again to continue.');
+    }
     try {
-      final token = await _runnerToken();
       final outcome = await ref
           .read(ordersRepositoryProvider)
           .verifyDelivery(orderId: orderId, code: code, token: token);
@@ -170,7 +224,7 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
       // session must not show "Delivered" until the backend actually says
       // so.
       if (outcome == DeliveryVerificationResult.delivered) {
-        ref.read(orderTrackingProvider.notifier).markDelivered();
+        _syncOrderTrackingIfSameOrder(orderId, (n) => n.markDelivered());
       }
       _pendingSuccessMessage = outcome == DeliveryVerificationResult.delivered
           ? 'Delivery confirmed — payout sent.'

@@ -76,12 +76,13 @@ class _RecordingEscrowRepository extends EscrowRepository {
     required String orderId,
     required String studentUserId,
     required String restaurantUserId,
-    required String runnerUserId,
+    String? runnerUserId,
     required int grossAmountKobo,
     required String token,
     String? vendorId,
     List<EscrowOrderItem>? items,
     int? deliveryFeeKobo,
+    String? deliveryLocationLabel,
   }) async {
     calls.add({
       'restaurantUserId': restaurantUserId,

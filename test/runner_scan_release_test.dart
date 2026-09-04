@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:run_it/core/network/api_exception.dart';
-import 'package:run_it/core/network/demo_identity_service.dart';
 import 'package:run_it/core/network/orders_repository.dart';
 import 'package:run_it/core/routing/app_router.dart';
 import 'package:run_it/core/widgets/app_notification.dart';
@@ -37,17 +36,22 @@ AuthSession _runnerSession() => AuthSession(
   ),
 );
 
+// Task 21b: DeliveryJob.id is the real backend orderId now (see
+// MatchingRepository.listAvailable) — matches _OrderWithIdController's own
+// orderId below so RunnerScanScreen's same-device sync convenience
+// (_syncOrderTrackingIfSameOrder) actually fires, same as the real case of
+// a runner verifying the order they genuinely claimed.
+const _orderId = 'order-release-1';
+
 DeliveryJob _job() => DeliveryJob(
-  id: 'job-1',
-  campusId: 'ui',
+  id: _orderId,
   eateryName: 'Jollof Palace',
   eateryLocation: 'Student Centre',
   dropoffZone: 'Hostel B, Room 204',
   dropoffLocation: 'Room 204',
   payoutAmount: 800,
-  estimatedDistanceMeters: 500,
+  totalAmount: 3000,
   offeredAt: DateTime.now(),
-  expiresAt: DateTime.now().add(const Duration(seconds: 20)),
 );
 
 /// A runner already at the picked-up stage — the *next* scan is the
@@ -58,7 +62,7 @@ class _PickedUpRunnerController extends RunnerController {
   RunnerSession build() => RunnerSession(
     status: const RunnerStatus(
       availability: RunnerAvailability.online,
-      activeDeliveryId: 'job-1',
+      activeDeliveryId: _orderId,
     ),
     activeDelivery: ActiveDelivery(
       job: _job(),
@@ -73,23 +77,12 @@ class _OrderWithIdController extends OrderTrackingController {
   @override
   OrderTrackingSession build() => const OrderTrackingSession(
     stage: OrderStage.pickedUp,
-    orderId: 'order-release-1',
+    orderId: _orderId,
     orderItems: ['1 × Jollof'],
     total: 3000,
     eateryName: 'Jollof Palace',
     deliveryLocationLabel: 'Hostel B',
   );
-}
-
-class _FakeDemoIdentityService extends DemoIdentityService {
-  const _FakeDemoIdentityService();
-  @override
-  Future<String> ensureRunnerUserId() async => 'demo-runner-1';
-  @override
-  Future<String> mintTokenFor({
-    required String userId,
-    required String accountType,
-  }) async => 'demo-runner-token';
 }
 
 class _VerifyingDeliveryOrdersRepository extends OrdersRepository {
@@ -182,7 +175,6 @@ void main() {
             authControllerProvider.overrideWith(() => _FakeAuthController(_runnerSession())),
             runnerControllerProvider.overrideWith(() => _PickedUpRunnerController()),
             orderTrackingProvider.overrideWith(() => _OrderWithIdController()),
-            demoIdentityServiceProvider.overrideWithValue(const _FakeDemoIdentityService()),
             ordersRepositoryProvider.overrideWithValue(
               const _VerifyingDeliveryOrdersRepository(DeliveryVerificationResult.delivered),
             ),
@@ -216,7 +208,6 @@ void main() {
             authControllerProvider.overrideWith(() => _FakeAuthController(_runnerSession())),
             runnerControllerProvider.overrideWith(() => _PickedUpRunnerController()),
             orderTrackingProvider.overrideWith(() => _OrderWithIdController()),
-            demoIdentityServiceProvider.overrideWithValue(const _FakeDemoIdentityService()),
             ordersRepositoryProvider.overrideWithValue(
               const _VerifyingDeliveryOrdersRepository(DeliveryVerificationResult.payoutProcessing),
             ),
@@ -251,7 +242,6 @@ void main() {
             authControllerProvider.overrideWith(() => _FakeAuthController(_runnerSession())),
             runnerControllerProvider.overrideWith(() => runnerController),
             orderTrackingProvider.overrideWith(() => _OrderWithIdController()),
-            demoIdentityServiceProvider.overrideWithValue(const _FakeDemoIdentityService()),
             ordersRepositoryProvider.overrideWithValue(
               const _MismatchedDeliveryOrdersRepository(),
             ),

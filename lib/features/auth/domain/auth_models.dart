@@ -99,13 +99,17 @@ class Campus {
   bool contains(GeoPoint point) => distanceMetersFrom(point) <= radiusMeters;
 }
 
-/// The full campus directory. Every account is bound to one of these at
-/// signup — `campusId` is what a real backend would use to scope every
-/// query server-side; here the mock repositories enforce the same
-/// contract locally (see `ordering_repository.dart` and
-/// `runner_controller.dart`). Coordinates are each campus's approximate,
-/// publicly-known center — used only for the Independent Rider geofence.
-const kCampuses = [
+/// Task 26: NOT the campus directory anymore — the real one lives on the
+/// backend now (`GET /campuses`, `Campus.campusId`/name on the signed-in
+/// session), and nothing picks a campus from this list at signup. This is
+/// purely a local geofence-coordinates reference for the Independent Rider
+/// "are you on campus" check (`RunnerController._checkCampusBoundary`),
+/// which the real backend `Campus` model has no lat/lng for (out of this
+/// task's scope — see the Task 26 report). Matched by campus *name*
+/// against whatever the backend returns, since the id here is no longer
+/// meaningful outside this file. A school with no entry here simply can't
+/// be geofence-checked; see that call site for how it degrades.
+const kCampusGeofenceReference = [
   Campus(
     id: 'ui',
     name: 'University of Ibadan',
@@ -138,8 +142,9 @@ class UserProfile {
     required this.name,
     required this.contact,
     required this.accountType,
-    required this.campusId,
+    this.campusId,
     this.classOrGrade,
+    this.phone,
     this.kycStatus = KycStatus.none,
     this.kycRejectionReason,
     this.biometricEnabled = false,
@@ -153,7 +158,18 @@ class UserProfile {
   final String name;
   final String contact;
   final AccountType accountType;
-  final String campusId;
+
+  /// Task 26: real and backend-derived/admin-assigned now, never picked by
+  /// the user — null until a student's email domain resolves one (always
+  /// true by the time a student account exists at all) or an admin assigns
+  /// one to a restaurant/runner (may stay null for a while after signup).
+  final String? campusId;
+
+  /// Task 28: a runner's phone — collected at signup alongside `contact`
+  /// (their email, the real OTP channel now), kept for admin
+  /// dispute-resolution contact. Null for student/restaurant, which never
+  /// collect a second contact field.
+  final String? phone;
 
   /// Student's class/grade level, collected at signup — nullable since
   /// runners never provide one and it's optional for students too.
@@ -180,8 +196,6 @@ class UserProfile {
   final VehicleType? vehicleType;
   final String? vehiclePlate;
 
-  Campus get campus => kCampuses.firstWhere((c) => c.id == campusId);
-
   /// Runners are gated behind Verified before they can see or accept jobs;
   /// students only need to exist to browse/order.
   bool get canAccessRunnerJobs =>
@@ -203,6 +217,7 @@ class UserProfile {
     accountType: accountType,
     campusId: campusId,
     classOrGrade: classOrGrade,
+    phone: phone,
     kycStatus: kycStatus ?? this.kycStatus,
     kycRejectionReason: clearRejectionReason
         ? null
@@ -215,9 +230,13 @@ class UserProfile {
   );
 }
 
-/// Stand-in for a JWT + refresh-token pair issued by a real auth backend.
-/// Shaped the same way (opaque access token, longer-lived refresh token,
-/// expiry) so swapping in a real issuer later doesn't change call sites.
+/// A real JWT + refresh-token pair issued by the backend (Task 34) — a
+/// short-lived (1h) access token plus a long-lived (30d), server-side,
+/// hashed, rotating refresh token (`POST /auth/refresh`). [expiresAt] is
+/// the access token's own expiry only; the refresh token has no
+/// client-visible expiry of its own (AuthController never needs one — a
+/// refresh attempt against an expired/revoked one just fails, same as any
+/// other rejection).
 class AuthSession {
   const AuthSession({
     required this.accessToken,
@@ -235,11 +254,12 @@ class AuthSession {
 
   AuthSession copyWith({
     String? accessToken,
+    String? refreshToken,
     DateTime? expiresAt,
     UserProfile? user,
   }) => AuthSession(
     accessToken: accessToken ?? this.accessToken,
-    refreshToken: refreshToken,
+    refreshToken: refreshToken ?? this.refreshToken,
     expiresAt: expiresAt ?? this.expiresAt,
     user: user ?? this.user,
   );

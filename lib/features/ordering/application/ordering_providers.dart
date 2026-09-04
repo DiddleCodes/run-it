@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/campus_repository.dart';
 import '../../../core/network/vendors_repository.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../vendor/domain/vendor_dashboard_models.dart';
@@ -171,9 +172,10 @@ class CheckoutFormNotifier extends Notifier<CheckoutForm> {
     // Task 10 performance audit: only campus name actually matters here —
     // selecting it means an unrelated session change (token refresh, KYC
     // status) doesn't rebuild (and reset) this form.
-    final campusName = ref.watch(
-      authControllerProvider.select((session) => session?.user.campus.name),
+    final campusId = ref.watch(
+      authControllerProvider.select((session) => session?.user.campusId),
     );
+    final campusName = ref.watch(campusNameProvider(campusId));
     return CheckoutForm(
       location: DeliveryLocation(
         label: campusName == null

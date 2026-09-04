@@ -2,16 +2,19 @@ import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_paystack_plus/flutter_paystack_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/network/api_config.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
 import '../../../core/widgets/skeleton.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../ordering/presentation/widgets/ordering_components.dart';
+import '../../payout/application/payout_controller.dart';
 import '../application/wallet_controller.dart';
 import '../data/wallet_repository.dart';
 import '../domain/wallet_models.dart';
@@ -443,6 +446,16 @@ class _TransactionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final credit = transaction.kind == WalletTransactionKind.credit;
     final amountColor = credit ? AppColors.success : AppColors.error;
+    // Task 32: a withdrawal row can sit at 'pending' or resolve to
+    // 'failed' (the wallet balance was already credited back by then —
+    // see WebhooksService.applyVerifiedWithdrawalResult) — surfaced here
+    // rather than silently showing a debit with no explanation for why the
+    // current balance doesn't reflect it.
+    final statusSuffix = switch (transaction.status) {
+      'pending' => ' · Pending',
+      'failed' => ' · Failed, refunded',
+      _ => '',
+    };
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
@@ -472,7 +485,7 @@ class _TransactionRow extends StatelessWidget {
                       ?.copyWith(color: AppColors.inkText),
                 ),
                 Text(
-                  transaction.subtitle,
+                  '${transaction.subtitle}$statusSuffix',
                   style: Theme.of(
                     context,
                   ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
@@ -547,10 +560,11 @@ enum _AmountSheetPhase { form, launchingCheckout, confirmingPayment, result }
 /// lands (see [_balancePollAttempts]) rather than trusting any client-side
 /// "success" callback.
 ///
-/// Withdraw stays honestly stubbed below — there is no student-payout
-/// endpoint on the backend at all (`PayoutAccountsService.create` rejects
-/// any account type other than restaurant/runner), so there's nothing real
-/// to wire it to yet.
+/// Withdraw (Task 32) is real too: it debits the wallet and initiates a
+/// real Paystack transfer server-side (`WalletService.initiateWithdrawal`),
+/// then polls the ledger row's own status the same way Add Funds polls the
+/// balance — a withdrawal only shows as complete once the backend actually
+/// confirms it, never on the request simply having been accepted.
 class _AmountSheet extends ConsumerStatefulWidget {
   const _AmountSheet({required this.isWithdraw});
   final bool isWithdraw;
@@ -566,6 +580,27 @@ class _AmountSheetState extends ConsumerState<_AmountSheet> {
   int? _resolvedAmount;
   String? _errorMessage;
   bool _stillProcessing = false;
+  bool _withdrawalFailed = false;
+  bool _checkingPayoutAccount = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isWithdraw) _loadPayoutAccount();
+  }
+
+  Future<void> _loadPayoutAccount() async {
+    setState(() => _checkingPayoutAccount = true);
+    await ref.read(payoutControllerProvider.notifier).load();
+    if (!mounted) return;
+    setState(() => _checkingPayoutAccount = false);
+  }
+
+  Future<void> _addBankAccount() async {
+    await context.push(AppRoutes.payoutAccount);
+    if (!mounted) return;
+    await _loadPayoutAccount();
+  }
 
   @override
   void dispose() {
@@ -583,9 +618,7 @@ class _AmountSheetState extends ConsumerState<_AmountSheet> {
     if (amount == null) return;
 
     if (widget.isWithdraw) {
-      ref
-          .read(appNotificationProvider.notifier)
-          .info("Withdrawals aren't available yet — there's no payout path for student wallets.");
+      await _confirmWithdraw(amount);
       return;
     }
 
@@ -667,21 +700,117 @@ class _AmountSheetState extends ConsumerState<_AmountSheet> {
     return null;
   }
 
+  /// Task 32: the wallet balance already left at request time (debited
+  /// synchronously — see WalletService.initiateWithdrawal), so unlike Add
+  /// Funds this can't poll for the balance to move; it polls the specific
+  /// withdrawal row's own status instead, which the backend only ever
+  /// flips once the real Paystack transfer.success/failed webhook lands
+  /// (or ReconciliationService catches a lost one).
+  Future<void> _confirmWithdraw(int amount) async {
+    final session = ref.read(authControllerProvider);
+    if (session == null) return;
+    final balance = ref.read(walletBalanceProvider).valueOrNull ?? 0;
+    if (amount > balance) {
+      setState(() => _errorMessage = "You can't withdraw more than your ${naira(balance)} balance.");
+      return;
+    }
+
+    setState(() {
+      _phase = _AmountSheetPhase.launchingCheckout;
+      _errorMessage = null;
+    });
+
+    try {
+      final withdrawal = await ref
+          .read(walletRepositoryProvider)
+          .initiateWithdrawal(userId: session.user.id, amountNaira: amount, token: session.accessToken);
+      if (!mounted) return;
+      // The debit already happened — reflect it immediately rather than
+      // waiting for the poll below to notice.
+      ref.read(walletBalanceProvider.notifier).refresh();
+
+      setState(() => _phase = _AmountSheetPhase.confirmingPayment);
+      final outcome = await _pollUntilWithdrawalStatus(withdrawal.id);
+      if (!mounted) return;
+
+      ref.read(walletTransactionsProvider.notifier).refresh();
+      if (outcome == 'failed') {
+        // The backend already credited the balance back
+        // (WebhooksService.applyVerifiedWithdrawalResult) — reflect that
+        // real, restored balance rather than leaving the stale post-debit
+        // one on screen underneath this result.
+        ref.read(walletBalanceProvider.notifier).refresh();
+      }
+      setState(() {
+        _phase = _AmountSheetPhase.result;
+        _stillProcessing = outcome == null;
+        _withdrawalFailed = outcome == 'failed';
+        _resolvedAmount = amount;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _phase = _AmountSheetPhase.form;
+        _errorMessage = e.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _phase = _AmountSheetPhase.form;
+        _errorMessage = "Couldn't reach the server. Check your connection and try again.";
+      });
+    }
+  }
+
+  /// Returns 'success', 'failed', or `null` if it's still 'pending' by the
+  /// time polling gives up — same timeout-not-failure framing as
+  /// [_pollUntilBalanceIncreases].
+  Future<String?> _pollUntilWithdrawalStatus(String withdrawalId) async {
+    final session = ref.read(authControllerProvider);
+    if (session == null) return null;
+    for (var attempt = 0; attempt < _balancePollAttempts; attempt++) {
+      await Future<void>.delayed(_balancePollInterval);
+      if (!mounted) return null;
+      final transactions = await ref
+          .read(walletRepositoryProvider)
+          .getTransactions(userId: session.user.id, token: session.accessToken);
+      for (final txn in transactions) {
+        if (txn.id == withdrawalId && txn.status != 'pending') return txn.status;
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_phase == _AmountSheetPhase.confirmingPayment) {
-      return const _ConfirmingPaymentState();
+      return _ConfirmingPaymentState(isWithdraw: widget.isWithdraw);
     }
     if (_phase == _AmountSheetPhase.result) {
       return _ConfirmationState(
         amount: _resolvedAmount ?? 0,
         isWithdraw: widget.isWithdraw,
         stillProcessing: _stillProcessing,
+        failed: _withdrawalFailed,
         onDone: () => Navigator.of(context).pop(),
       );
     }
+
+    if (widget.isWithdraw && _checkingPayoutAccount) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 60),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    final payoutAccount = widget.isWithdraw ? ref.watch(payoutControllerProvider) : null;
+    if (widget.isWithdraw && payoutAccount == null) {
+      return _NoPayoutAccountState(onAddAccount: _addBankAccount);
+    }
+
     final launching = _phase == _AmountSheetPhase.launchingCheckout;
     final title = widget.isWithdraw ? 'Withdraw' : 'Add Funds';
+    final balance = ref.watch(walletBalanceProvider).valueOrNull;
+    final amountExceedsBalance = widget.isWithdraw && _amount != null && balance != null && _amount! > balance;
     return Padding(
       padding: EdgeInsets.fromLTRB(22, 20, 22, MediaQuery.of(context).viewInsets.bottom + 24),
       child: Column(
@@ -696,13 +825,21 @@ class _AmountSheetState extends ConsumerState<_AmountSheet> {
           const SizedBox(height: 4),
           Text(
             widget.isWithdraw
-                ? "Withdrawals aren't available yet."
+                ? 'Sent to ${payoutAccount!.maskedAccountNumber} — ${payoutAccount.bankName}.'
                 : 'Pay securely with Paystack.',
             style: Theme.of(
               context,
             ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
           ),
-          if (_errorMessage != null) ...[
+          if (amountExceedsBalance) ...[
+            const SizedBox(height: 10),
+            Text(
+              "That's more than your ${naira(balance)} balance.",
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: AppColors.error),
+            ),
+          ] else if (_errorMessage != null) ...[
             const SizedBox(height: 10),
             Text(
               _errorMessage!,
@@ -743,7 +880,7 @@ class _AmountSheetState extends ConsumerState<_AmountSheet> {
                 foregroundColor: AppColors.onMaroon,
                 minimumSize: const Size.fromHeight(48),
               ),
-              onPressed: (_amount == null || launching) ? null : _confirm,
+              onPressed: (_amount == null || launching || amountExceedsBalance) ? null : _confirm,
               child: launching
                   ? const SizedBox(
                       width: 20,
@@ -763,7 +900,8 @@ class _AmountSheetState extends ConsumerState<_AmountSheet> {
 }
 
 class _ConfirmingPaymentState extends StatelessWidget {
-  const _ConfirmingPaymentState();
+  const _ConfirmingPaymentState({required this.isWithdraw});
+  final bool isWithdraw;
 
   @override
   Widget build(BuildContext context) {
@@ -782,7 +920,7 @@ class _ConfirmingPaymentState extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           Text(
-            'Confirming payment…',
+            isWithdraw ? 'Processing your withdrawal…' : 'Confirming payment…',
             style: Theme.of(context).textTheme.headlineMedium
                 ?.copyWith(color: AppColors.inkText, fontSize: 18),
           ),
@@ -793,6 +931,61 @@ class _ConfirmingPaymentState extends StatelessWidget {
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Task 32: shown in place of the amount form when a student hasn't
+/// confirmed a bank account yet — reuses the same `PayoutAccountScreen`
+/// (Task 8c Part B/25) restaurant and runner payouts already go through,
+/// just reached from Withdraw instead of Profile > Payouts.
+class _NoPayoutAccountState extends StatelessWidget {
+  const _NoPayoutAccountState({required this.onAddAccount});
+  final VoidCallback onAddAccount;
+
+  @override
+  Widget build(BuildContext context) {
+    const onBg = AppColors.inkText;
+    const secondary = AppColors.mutedText;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 32, 22, 36),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(color: AppColors.backgroundCream, shape: BoxShape.circle),
+            child: const Icon(Icons.account_balance_outlined, color: AppColors.primaryMaroon, size: 28),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Add a bank account to withdraw',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: onBg, fontSize: 18),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "We'll verify your details with your bank before saving.",
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: secondary),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primaryMaroon,
+                foregroundColor: AppColors.onMaroon,
+                minimumSize: const Size.fromHeight(48),
+              ),
+              onPressed: onAddAccount,
+              child: const Text('Add bank account'),
+            ),
           ),
         ],
       ),
@@ -837,6 +1030,7 @@ class _ConfirmationState extends StatelessWidget {
     required this.amount,
     required this.isWithdraw,
     required this.stillProcessing,
+    this.failed = false,
     required this.onDone,
   });
   final int amount;
@@ -847,10 +1041,21 @@ class _ConfirmationState extends StatelessWidget {
   /// always instant), so this is framed as "still confirming," never as a
   /// false-positive success or a false failure.
   final bool stillProcessing;
+
+  /// Task 32: withdrawal-only — Paystack itself rejected/reversed the
+  /// transfer after it was accepted. The backend already credited the
+  /// wallet back (WebhooksService.applyVerifiedWithdrawalResult) by the
+  /// time this ever renders, so this is reassurance, not a warning to act
+  /// on.
+  final bool failed;
   final VoidCallback onDone;
 
   @override
   Widget build(BuildContext context) {
+    final iconColor = failed ? AppColors.error : (stillProcessing ? AppColors.gold : AppColors.success);
+    final iconBg = failed
+        ? AppColors.error.withValues(alpha: 0.12)
+        : (stillProcessing ? AppColors.goldTint : AppColors.successBackground);
     return Padding(
       padding: const EdgeInsets.fromLTRB(22, 32, 22, 36),
       child: Column(
@@ -860,30 +1065,33 @@ class _ConfirmationState extends StatelessWidget {
             width: 64,
             height: 64,
             alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: stillProcessing ? AppColors.goldTint : AppColors.successBackground,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
             child: Icon(
-              stillProcessing ? Icons.hourglass_top_rounded : CupertinoIcons.checkmark_alt,
-              color: stillProcessing ? AppColors.gold : AppColors.success,
+              failed
+                  ? Icons.close_rounded
+                  : (stillProcessing ? Icons.hourglass_top_rounded : CupertinoIcons.checkmark_alt),
+              color: iconColor,
               size: 30,
             ),
           ),
           const SizedBox(height: 16),
           Text(
-            stillProcessing
-                ? 'Still confirming your payment'
-                : (isWithdraw ? '${naira(amount)} withdrawn' : '${naira(amount)} added'),
+            failed
+                ? 'Withdrawal failed'
+                : (stillProcessing
+                      ? 'Still confirming your payment'
+                      : (isWithdraw ? '${naira(amount)} withdrawn' : '${naira(amount)} added')),
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineMedium
                 ?.copyWith(color: AppColors.inkText, fontSize: 19),
           ),
           const SizedBox(height: 6),
           Text(
-            stillProcessing
-                ? "This can take a little longer than usual. Check back on your Wallet in a minute — we'll reflect it as soon as it lands."
-                : 'Your wallet balance has been updated.',
+            failed
+                ? "Your bank rejected the transfer. The ${naira(amount)} is back in your wallet — nothing was lost."
+                : (stillProcessing
+                      ? "This can take a little longer than usual. Check back on your Wallet in a minute — we'll reflect it as soon as it lands."
+                      : 'Your wallet balance has been updated.'),
             textAlign: TextAlign.center,
             style: Theme.of(
               context,

@@ -323,7 +323,7 @@ class _ContactLocationStepState extends ConsumerState<_ContactLocationStep> {
   );
   final _nameFieldKey = GlobalKey<ValidatedFieldState>();
   final _phoneFieldKey = GlobalKey<ValidatedFieldState>();
-  late Campus? _campus = widget.application.campus;
+  late CampusOption? _campus = widget.application.campus;
   String? _campusError;
   late Uint8List? _photo = widget.application.storefrontPhoto;
 

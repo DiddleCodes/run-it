@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/network/campus_repository.dart';
 import '../../../../core/routing/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -310,19 +311,19 @@ class _IdTypeToggle extends StatelessWidget {
   }
 }
 
-class _StudentDetailsStep extends StatelessWidget {
+class _StudentDetailsStep extends ConsumerWidget {
   const _StudentDetailsStep({required this.user, required this.onContinue});
   final UserProfile user;
   final VoidCallback onContinue;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     const onBg = AppColors.inkText;
     const secondary = AppColors.mutedText;
 
     final rows = <(String, String)>[
       ('Full Name', user.name),
-      ('School', user.campus.name),
+      ('School', ref.watch(campusNameProvider(user.campusId)) ?? '—'),
       if (user.classOrGrade != null && user.classOrGrade!.isNotEmpty)
         ('Class / Grade', user.classOrGrade!),
       ('Student Email / Phone', user.contact),
@@ -613,7 +614,7 @@ class _VehicleTypeChip extends StatelessWidget {
   }
 }
 
-class _AlmostThereStep extends ConsumerWidget {
+class _AlmostThereStep extends ConsumerStatefulWidget {
   const _AlmostThereStep({
     required this.isRunner,
     required this.capture,
@@ -631,7 +632,70 @@ class _AlmostThereStep extends ConsumerWidget {
   final VoidCallback? onEditVehicle;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_AlmostThereStep> createState() => _AlmostThereStepState();
+}
+
+class _AlmostThereStepState extends ConsumerState<_AlmostThereStep> {
+  bool _submitting = false;
+
+  /// Task 29: the real runner path — uploads the three captured photos and
+  /// registers them for admin review. Unlike the student branch below,
+  /// this is a real network round trip that can genuinely fail (no Brevo-
+  /// style local fallback makes sense for a photo upload), so it needs a
+  /// loading state and real error handling rather than an instant,
+  /// can't-fail local state flip.
+  Future<void> _submitRunner() async {
+    final capture = widget.capture;
+    final idImage = capture.idImage;
+    final selfieImage = capture.selfieImage;
+    final runnerType = capture.runnerType;
+    // Defensive only — KycCaptureScreen's own step sequencing never reaches
+    // this button without all of these already captured.
+    if (idImage == null || selfieImage == null || runnerType == null) return;
+
+    setState(() => _submitting = true);
+    final ok = await ref
+        .read(authControllerProvider.notifier)
+        .submitKycForReview(
+          runnerType: runnerType,
+          idType: capture.idType,
+          idImage: idImage,
+          selfieImage: selfieImage,
+          vehiclePhoto: capture.vehiclePhoto,
+          vehicleType: capture.vehicleType,
+          vehiclePlate: capture.plateNumber,
+        );
+    if (!mounted) return;
+    if (!ok) {
+      setState(() => _submitting = false);
+      ref
+          .read(appNotificationProvider.notifier)
+          .error("Couldn't submit for verification. Check your connection and try again.");
+      return;
+    }
+    ref.read(kycFlowProvider.notifier).reset();
+    ref.read(appNotificationProvider.notifier).info('KYC submitted for review.');
+    context.go(AppRoutes.kycStatus);
+  }
+
+  /// Light KYC (student) — unchanged local fake-resolution path, out of
+  /// Task 29's scope (see its own report).
+  void _submitStudent() {
+    ref
+        .read(authControllerProvider.notifier)
+        .submitKyc(
+          runnerType: widget.capture.runnerType,
+          vehicleType: widget.capture.vehicleType,
+          vehiclePlate: widget.capture.plateNumber,
+        );
+    ref.read(kycFlowProvider.notifier).reset();
+    ref.read(appNotificationProvider.notifier).info('KYC submitted for review.');
+    context.go(AppRoutes.kycStatus);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final capture = widget.capture;
     const onBg = AppColors.inkText;
     const secondary = AppColors.mutedText;
 
@@ -665,7 +729,7 @@ class _AlmostThereStep extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   GestureDetector(
-                    onTap: onEditId,
+                    onTap: widget.onEditId,
                     child: ChecklistRow(
                       label: capture.idType == IdType.governmentId
                           ? 'Government ID Uploaded'
@@ -673,24 +737,24 @@ class _AlmostThereStep extends ConsumerWidget {
                       complete: capture.hasId,
                     ),
                   ),
-                  if (onEditSelfie != null)
+                  if (widget.onEditSelfie != null)
                     GestureDetector(
-                      onTap: onEditSelfie,
+                      onTap: widget.onEditSelfie,
                       child: ChecklistRow(
                         label: 'Selfie Captured',
                         complete: capture.hasSelfie,
                       ),
                     ),
-                  if (onEditStudentDetails != null)
+                  if (widget.onEditStudentDetails != null)
                     GestureDetector(
-                      onTap: onEditStudentDetails,
+                      onTap: widget.onEditStudentDetails,
                       child: const ChecklistRow(
                         label: 'Student Details Completed',
                       ),
                     ),
-                  if (onEditVehicle != null)
+                  if (widget.onEditVehicle != null)
                     GestureDetector(
-                      onTap: onEditVehicle,
+                      onTap: widget.onEditVehicle,
                       child: ChecklistRow(
                         label: 'Vehicle Details Added',
                         complete: capture.vehicleStepComplete,
@@ -712,20 +776,10 @@ class _AlmostThereStep extends ConsumerWidget {
         const SizedBox(height: AppSpacing.lg),
         PrimaryButton(
           label: 'Submit for Verification',
-          onPressed: () {
-            ref
-                .read(authControllerProvider.notifier)
-                .submitKyc(
-                  runnerType: capture.runnerType,
-                  vehicleType: capture.vehicleType,
-                  vehiclePlate: capture.plateNumber,
-                );
-            ref.read(kycFlowProvider.notifier).reset();
-            ref
-                .read(appNotificationProvider.notifier)
-                .info('KYC submitted for review.');
-            context.go(AppRoutes.kycStatus);
-          },
+          loading: _submitting,
+          onPressed: _submitting
+              ? null
+              : (widget.isRunner ? _submitRunner : _submitStudent),
         ),
       ],
     );

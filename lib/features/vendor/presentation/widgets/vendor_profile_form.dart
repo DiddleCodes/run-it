@@ -31,6 +31,7 @@ class VendorProfileForm extends ConsumerStatefulWidget {
     this.initialDescription,
     this.initialLogoUrl,
     this.initialLogoBytes,
+    this.requestedCampusId,
     this.submitLabel = 'Save',
     required this.onSaved,
   });
@@ -39,6 +40,12 @@ class VendorProfileForm extends ConsumerStatefulWidget {
   final String? initialCategory;
   final String? initialDescription;
   final String? initialLogoUrl;
+
+  /// Task 27: only ever passed by the first-run setup screen (the
+  /// applicant's stated preference from the wizard) — the Profile tab's
+  /// own "edit business info" use of this same form omits it entirely, so
+  /// a later edit never overwrites whatever was captured at submission.
+  final String? requestedCampusId;
 
   /// A photo already captured (e.g. the wizard's storefront photo,
   /// Task 7) but not yet uploaded anywhere — treated exactly like a
@@ -115,6 +122,7 @@ class _VendorProfileFormState extends ConsumerState<VendorProfileForm> {
             category: category,
             description: _descriptionController.text.trim(),
             logoUrl: logoUrl,
+            requestedCampusId: widget.requestedCampusId,
           );
       if (!mounted) return;
       widget.onSaved(saved);

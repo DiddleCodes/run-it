@@ -9,12 +9,22 @@ import '../../../../core/widgets/app_text_field.dart';
 /// value passes [validator], a shake + red border once it's been touched
 /// and fails. Validation only runs ~350ms after the user pauses typing,
 /// so it never flags a field mid-keystroke.
+///
+/// [asyncValidator] adds a second, optional check that only ever runs
+/// after [validator] already passes (Task 27) — so it never fires on
+/// obviously-incomplete input (e.g. a still-being-typed email domain), the
+/// same "don't flash red mid-type" guarantee [validator] itself has. While
+/// it's in flight the field shows a small spinner instead of the green
+/// check; a stale response (superseded by newer typing) is discarded. It's
+/// advisory only — nothing here blocks [validateNow], since the real
+/// enforcement for whatever this is checking lives server-side regardless.
 class ValidatedField extends StatefulWidget {
   const ValidatedField({
     super.key,
     required this.controller,
     required this.hintText,
     required this.validator,
+    this.asyncValidator,
     this.leadingText,
     this.prefixIcon,
     this.keyboardType,
@@ -24,6 +34,7 @@ class ValidatedField extends StatefulWidget {
   final TextEditingController controller;
   final String hintText;
   final String? Function(String value) validator;
+  final Future<String?> Function(String value)? asyncValidator;
   final String? leadingText;
   final Widget? prefixIcon;
   final TextInputType? keyboardType;
@@ -38,6 +49,8 @@ class ValidatedFieldState extends State<ValidatedField>
   Timer? _debounce;
   String? _error;
   bool _touched = false;
+  bool _checking = false;
+  int _requestGen = 0;
   late final _shakeController = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 400),
@@ -75,9 +88,31 @@ class ValidatedFieldState extends State<ValidatedField>
       setState(() {
         _touched = true;
         _error = error;
+        _checking = false;
       });
-      if (error != null && wasInvalid) _shakeController.forward(from: 0);
-      widget.onValidChanged?.call(error == null);
+      if (error != null) {
+        if (wasInvalid) _shakeController.forward(from: 0);
+        widget.onValidChanged?.call(false);
+        return;
+      }
+      widget.onValidChanged?.call(true);
+
+      final asyncValidator = widget.asyncValidator;
+      if (asyncValidator == null) return;
+      final gen = ++_requestGen;
+      setState(() => _checking = true);
+      asyncValidator(value).then((asyncError) {
+        // A newer keystroke (or a dispose) superseded this request —
+        // its answer no longer describes what's in the field.
+        if (!mounted || gen != _requestGen) return;
+        final wasInvalidNow = _touched && _error != null;
+        setState(() {
+          _checking = false;
+          _error = asyncError;
+        });
+        if (asyncError != null && wasInvalidNow) _shakeController.forward(from: 0);
+        widget.onValidChanged?.call(asyncError == null);
+      });
     });
   }
 
@@ -109,7 +144,19 @@ class ValidatedFieldState extends State<ValidatedField>
             keyboardType: widget.keyboardType,
             hasError: hasError,
             onChanged: _onChanged,
-            suffixIcon: _touched && !hasError
+            suffixIcon: _checking
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: Padding(
+                      padding: EdgeInsets.all(2),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.mutedText,
+                      ),
+                    ),
+                  )
+                : _touched && !hasError
                 ? const Icon(
                     Icons.check_circle_rounded,
                     size: 20,

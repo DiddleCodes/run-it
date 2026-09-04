@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/network/campus_repository.dart';
 import '../../../core/network/vendors_repository.dart';
 import '../../../core/routing/app_router.dart';
 import '../../vendor/domain/vendor_dashboard_models.dart' show VendorCategoryOption;
@@ -226,7 +227,7 @@ class _Header extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authControllerProvider)?.user;
-    final campusName = user?.campus.name ?? 'your campus';
+    final campusName = ref.watch(campusNameProvider(user?.campusId)) ?? 'your campus';
     return Row(
       children: [
         Container(

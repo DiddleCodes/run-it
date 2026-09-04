@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
@@ -112,17 +113,26 @@ abstract class AppTheme {
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
+          // iOS keeps the platform default (Task 23): overriding it with
+          // the custom builder below silently drops
+          // CupertinoPageTransitionsBuilder's edge-swipe-to-go-back
+          // gesture, since GoRouter's routes resolve their transition
+          // through this theme rather than the route class itself —
+          // there's no separate opt-in for the gesture alone.
           TargetPlatform.android: _RouteFadeSlideTransitionsBuilder(),
-          TargetPlatform.iOS: _RouteFadeSlideTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
         },
       ),
     );
   }
 }
 
-/// Coordinated slide + fade between screens — replaces the default
-/// platform push transition everywhere in the app (auth steps included,
-/// since they use the same `GoRouter`/`Navigator` push mechanism).
+/// Coordinated slide + fade between screens on Android — replaces the
+/// default platform push transition there (auth steps included, since
+/// they use the same `GoRouter`/`Navigator` push mechanism). iOS uses
+/// `CupertinoPageTransitionsBuilder` instead (Task 23) to keep its native
+/// swipe-back gesture; Android has no equivalent gesture tied to this
+/// builder, so the custom transition stays without that tradeoff.
 class _RouteFadeSlideTransitionsBuilder extends PageTransitionsBuilder {
   const _RouteFadeSlideTransitionsBuilder();
 

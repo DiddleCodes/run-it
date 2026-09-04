@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:run_it/core/network/matching_repository.dart';
 import 'package:run_it/core/network/ratings_repository.dart';
-import 'package:run_it/core/network/vendors_repository.dart';
 import 'package:run_it/core/routing/app_router.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
@@ -14,7 +14,6 @@ import 'package:run_it/features/runner/presentation/runner_messages_screen.dart'
 import 'package:run_it/features/runner/presentation/runner_profile_screen.dart';
 import 'package:run_it/features/runner/presentation/runner_scan_screen.dart';
 import 'package:run_it/features/runner/presentation/runner_screens.dart';
-import 'package:run_it/features/vendor/domain/vendor_dashboard_models.dart';
 
 class _FakeAuthController extends AuthController {
   _FakeAuthController(this._session);
@@ -41,22 +40,15 @@ AuthSession _runnerSession({
   ),
 );
 
-/// Task 14: `RunnerJobsScreen`'s Available tab now draws its job previews
-/// from real vendor data (`campusEateriesProvider`, `GET /vendors`)
-/// instead of the old `MockOrderingRepository`'s fixed "Tantalizers" entry
-/// — this fake keeps that same name so the test's own assertions don't
-/// need to change, while keeping the test network-free.
-class _FakeVendorsRepository extends VendorsRepository {
-  const _FakeVendorsRepository();
+/// Task 21b: `RunnerJobsScreen`'s Available tab now draws from the real
+/// `GET /matching/available` endpoint (`MatchingRepository`) instead of a
+/// vendor-preview synthesis — this fake keeps the network out of these
+/// widget tests.
+class _FakeMatchingRepository extends MatchingRepository {
+  const _FakeMatchingRepository([this.jobs = const []]);
+  final List<DeliveryJob> jobs;
   @override
-  Future<VendorsPage> listVendors({String? category, String? search, int page = 1, int limit = 20}) async {
-    return const VendorsPage(
-      items: [MyVendorProfile(id: 'tantalizers', businessName: 'Tantalizers', category: 'Meals')],
-      total: 1,
-      page: 1,
-      limit: 20,
-    );
-  }
+  Future<List<DeliveryJob>> listAvailable({required String token}) async => jobs;
 }
 
 /// Task 14: Runner Profile now fetches its real rating aggregate — a fixed
@@ -70,15 +62,13 @@ class _FakeRatingsRepository extends RatingsRepository {
 
 DeliveryJob _job() => DeliveryJob(
   id: 'job-1',
-  campusId: 'ui',
   eateryName: 'Jollof Palace',
   eateryLocation: 'Student Centre',
   dropoffZone: 'Hostel B, Room 204',
   dropoffLocation: 'Room 204',
   payoutAmount: 800,
-  estimatedDistanceMeters: 500,
+  totalAmount: 4500,
   offeredAt: DateTime.now(),
-  expiresAt: DateTime.now().add(const Duration(seconds: 20)),
 );
 
 void main() {
@@ -138,7 +128,7 @@ void main() {
           authControllerProvider.overrideWith(
             () => _FakeAuthController(_runnerSession(runnerType: RunnerType.studentRunner)),
           ),
-          vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository()),
+          matchingRepositoryProvider.overrideWithValue(_FakeMatchingRepository([_job()])),
         ],
         child: const MaterialApp(home: RunnerJobsScreen()),
       ),
@@ -149,8 +139,8 @@ void main() {
     expect(find.text('Available'), findsOneWidget);
     expect(find.text('Accepted'), findsOneWidget);
     expect(find.text('Completed'), findsOneWidget);
-    // The mock ordering repository has exactly one eatery on campus 'ui'.
-    expect(find.text('Tantalizers'), findsOneWidget);
+    // The fake matching repository seeds exactly one available job.
+    expect(find.text('Jollof Palace'), findsOneWidget);
 
     await tester.tap(find.text('Accepted'));
     await tester.pump();
@@ -206,6 +196,13 @@ void main() {
 
       expect(find.text('Ada Runner'), findsOneWidget);
       expect(find.text('Student Runner'), findsOneWidget);
+      // Task 33's new Wallet row pushed this section below the fold in the
+      // test viewport — ListView only builds items near it lazily.
+      await tester.dragUntilVisible(
+        find.text('Verification'),
+        find.byType(ListView),
+        const Offset(0, -150),
+      );
       expect(find.text('Verification'), findsOneWidget);
       expect(find.text('Vehicle / Mode'), findsNothing);
     });
@@ -229,6 +226,13 @@ void main() {
       await tester.pump();
 
       expect(find.text('Independent Rider'), findsOneWidget);
+      // Task 33's new Wallet row pushed this section below the fold in the
+      // test viewport — ListView only builds items near it lazily.
+      await tester.dragUntilVisible(
+        find.text('Vehicle / Mode'),
+        find.byType(ListView),
+        const Offset(0, -150),
+      );
       expect(find.text('Vehicle / Mode'), findsOneWidget);
     });
   });
@@ -291,7 +295,7 @@ void main() {
               authControllerProvider.overrideWith(
                 () => _FakeAuthController(_runnerSession(runnerType: RunnerType.studentRunner)),
               ),
-              vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository()),
+              matchingRepositoryProvider.overrideWithValue(_FakeMatchingRepository([_job()])),
               ratingsRepositoryProvider.overrideWithValue(const _FakeRatingsRepository()),
             ],
             child: MaterialApp(home: screen),
@@ -320,7 +324,7 @@ void main() {
                 ),
               ),
             ),
-            vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository()),
+            matchingRepositoryProvider.overrideWithValue(_FakeMatchingRepository([_job()])),
           ],
           child: const MaterialApp(home: RunnerJobsScreen()),
         ),

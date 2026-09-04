@@ -14,6 +14,7 @@ import 'package:run_it/features/ordering/presentation/ordering_screens.dart';
 import 'package:run_it/features/payout/domain/payout_models.dart';
 import 'package:run_it/features/payout/presentation/widgets/bank_picker_field.dart';
 import 'package:run_it/features/payout/presentation/widgets/payout_account_form.dart';
+import 'package:run_it/core/network/campus_repository.dart';
 import 'package:run_it/core/network/vendors_repository.dart';
 import 'package:run_it/features/ordering/application/order_tracking_controller.dart';
 import 'package:run_it/features/vendor/domain/vendor_dashboard_models.dart';
@@ -381,11 +382,9 @@ void main() {
               body: Padding(
                 padding: const EdgeInsets.all(16),
                 child: CampusPickerField(
-                  selected: const Campus(
+                  selected: const CampusOption(
                     id: 'long',
                     name: 'Obafemi Awolowo University — Main Campus, Ile-Ife',
-                    latitude: 7.5181,
-                    longitude: 4.5284,
                   ),
                   onChanged: (_) {},
                 ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/network/campus_repository.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -88,7 +89,7 @@ class StudentProfileScreen extends ConsumerWidget {
                 _SettingsRow(
                   icon: Icons.location_on_outlined,
                   title: 'Delivery Address',
-                  subtitle: user.campus.name,
+                  subtitle: ref.watch(campusNameProvider(user.campusId)) ?? 'your campus',
                   onTap: () => ref
                       .read(appNotificationProvider.notifier)
                       .info('Delivery addresses are coming soon.'),
@@ -512,16 +513,16 @@ class _SettingsRow extends StatelessWidget {
   }
 }
 
-class _PersonalInfoSheet extends StatelessWidget {
+class _PersonalInfoSheet extends ConsumerWidget {
   const _PersonalInfoSheet({required this.user});
   final UserProfile user;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final rows = <(String, String)>[
       ('Name', user.name),
       ('School email', user.contact),
-      ('Campus', user.campus.name),
+      ('Campus', ref.watch(campusNameProvider(user.campusId)) ?? '—'),
       if (user.classOrGrade != null && user.classOrGrade!.isNotEmpty)
         ('Class / Grade', user.classOrGrade!),
     ];

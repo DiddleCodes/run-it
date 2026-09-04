@@ -11,22 +11,57 @@ import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/data/auth_repository.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
 
-/// Stubs only the network boundary (`POST /auth/otp/*`) with a canned
-/// success response — everything above it (passcode hashing, secure-storage
-/// reads/writes) is the real [AuthController] logic under test.
+// Mirrors AuthController's own private storage keys — there's no public
+// accessor, so a test that needs to directly manipulate what's persisted
+// (e.g. to simulate real elapsed time past a token's expiry) has to use
+// the same literal key names the real code writes to.
+const _refreshTokenStorageKey = 'runit_session_refresh_token_v1';
+const _expiryStorageKey = 'runit_session_expiry_v1';
+
+/// Stubs only the network boundary — everything above it (passcode
+/// hashing, secure-storage reads/writes, refresh-vs-logout routing) is the
+/// real [AuthController] logic under test. `/auth/refresh` and
+/// `/auth/logout` default to a canned success (Task 34); pass
+/// [refreshResponder]/[logoutResponder] to override per test (e.g. to
+/// simulate a rejected/revoked refresh token). [requestLog], if given,
+/// records every request made so a test can assert on what was actually
+/// sent (path, body).
 class _FakeAuthController extends AuthController {
-  _FakeAuthController(this._session);
+  _FakeAuthController(
+    this._session, {
+    this.refreshResponder,
+    this.logoutResponder,
+    this.requestLog,
+  });
   final AuthSession _session;
+  final Future<http.Response> Function(http.Request)? refreshResponder;
+  final Future<http.Response> Function(http.Request)? logoutResponder;
+  final List<http.Request>? requestLog;
+
   @override
   AuthSession? build() {
     repository = AuthRepository(
       client: ApiClient(
-        httpClient: MockClient(
-          (request) async => http.Response(
-            jsonEncode({'accessToken': 'mock-dev-token'}),
-            200,
-          ),
-        ),
+        httpClient: MockClient((request) async {
+          requestLog?.add(request);
+          if (request.url.path == '/auth/refresh') {
+            return refreshResponder != null
+                ? await refreshResponder!(request)
+                : http.Response(
+                    jsonEncode({
+                      'accessToken': 'refreshed-access-token',
+                      'refreshToken': 'refreshed-refresh-token',
+                    }),
+                    200,
+                  );
+          }
+          if (request.url.path == '/auth/logout') {
+            return logoutResponder != null
+                ? await logoutResponder!(request)
+                : http.Response(jsonEncode({'message': 'Logged out.'}), 200);
+          }
+          return http.Response(jsonEncode({'accessToken': 'mock-dev-token'}), 200);
+        }),
       ),
     );
     return _session;
@@ -231,7 +266,7 @@ void main() {
     expect(await controller.isBiometricAvailable(), isFalse);
   });
 
-  group('handleUnauthorized (Task 17)', () {
+  group('handleUnauthorized (Task 17 + Task 34 silent refresh)', () {
     test('is a no-op when already logged out', () async {
       final container = ProviderContainer(
         overrides: [
@@ -249,13 +284,53 @@ void main() {
     });
 
     test(
-      'clears the live session, shows a clear message, and — unlike a plain expired '
+      'Task 34: a successful silent refresh preserves the session — no logout, no notification, '
+      'and the new tokens are what get persisted',
+      () async {
+        final requestLog = <http.Request>[];
+        final container = ProviderContainer(
+          overrides: [
+            authControllerProvider.overrideWith(
+              () => _FakeAuthController(_studentSession(), requestLog: requestLog),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        final controller = container.read(authControllerProvider.notifier);
+
+        await controller.handleUnauthorized();
+
+        // Session survives, silently — with the rotated tokens, not the
+        // original ones.
+        final session = container.read(authControllerProvider);
+        expect(session, isNotNull);
+        expect(session!.accessToken, 'refreshed-access-token');
+        expect(session.refreshToken, 'refreshed-refresh-token');
+        expect(container.read(appNotificationProvider), isEmpty);
+        expect(store[_refreshTokenStorageKey], 'refreshed-refresh-token');
+
+        // Really called the real refresh endpoint with the original
+        // refresh token — not a re-derived or dev-only shortcut.
+        final refreshCall = requestLog.singleWhere((r) => r.url.path == '/auth/refresh');
+        expect(jsonDecode(refreshCall.body)['refreshToken'], 'test-refresh');
+      },
+    );
+
+    test(
+      'a rejected refresh (expired/revoked/suspended) falls through to the old hard-logout '
+      'behavior: clears the live session, shows a clear message, and — unlike a plain expired '
       'logout — clears the persisted session too, so a later passcode unlock cannot '
       'silently resume the same rejected token',
       () async {
         final container = ProviderContainer(
           overrides: [
-            authControllerProvider.overrideWith(() => _FakeAuthController(_studentSession())),
+            authControllerProvider.overrideWith(
+              () => _FakeAuthController(
+                _studentSession(),
+                refreshResponder: (_) async =>
+                    http.Response(jsonEncode({'message': 'Your session has expired. Please sign in again.'}), 401),
+              ),
+            ),
           ],
         );
         addTearDown(container.dispose);
@@ -275,6 +350,147 @@ void main() {
         // session left to resume, unlike the ordinary expired-logout case
         // covered by the test above.
         expect(await controller.hasStoredPasscode(), isTrue);
+        await expectLater(
+          controller.loginWithPasscode('482913'),
+          throwsA(isA<SessionRecoveryRequiredException>()),
+        );
+      },
+    );
+
+    test(
+      'two concurrent 401s share a single real refresh call, not two independent ones racing '
+      'against the same not-yet-rotated token',
+      () async {
+        final requestLog = <http.Request>[];
+        final container = ProviderContainer(
+          overrides: [
+            authControllerProvider.overrideWith(
+              () => _FakeAuthController(_studentSession(), requestLog: requestLog),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        final controller = container.read(authControllerProvider.notifier);
+
+        await Future.wait([
+          controller.handleUnauthorized(),
+          controller.handleUnauthorized(),
+        ]);
+
+        expect(container.read(authControllerProvider), isNotNull);
+        expect(requestLog.where((r) => r.url.path == '/auth/refresh'), hasLength(1));
+      },
+    );
+  });
+
+  group('logout (Task 34: server-side revocation)', () {
+    test('an explicit logout revokes the refresh token server-side, not just locally', () async {
+      final requestLog = <http.Request>[];
+      final container = ProviderContainer(
+        overrides: [
+          authControllerProvider.overrideWith(
+            () => _FakeAuthController(_studentSession(), requestLog: requestLog),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+
+      await controller.logout();
+
+      final logoutCall = requestLog.singleWhere((r) => r.url.path == '/auth/logout');
+      expect(jsonDecode(logoutCall.body)['refreshToken'], 'test-refresh');
+      expect(container.read(authControllerProvider), isNull);
+    });
+
+    test('a network failure during the revoke call never blocks signing out of this device', () async {
+      final container = ProviderContainer(
+        overrides: [
+          authControllerProvider.overrideWith(
+            () => _FakeAuthController(
+              _studentSession(),
+              logoutResponder: (_) async => throw Exception('offline'),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+
+      await controller.logout();
+
+      expect(container.read(authControllerProvider), isNull);
+      expect(await controller.hasStoredPasscode(), isFalse);
+    });
+
+    test('an expired (not explicit) logout never calls the revoke endpoint', () async {
+      final requestLog = <http.Request>[];
+      final container = ProviderContainer(
+        overrides: [
+          authControllerProvider.overrideWith(
+            () => _FakeAuthController(_studentSession(), requestLog: requestLog),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+
+      await controller.logout(expired: true);
+
+      expect(requestLog.where((r) => r.url.path == '/auth/logout'), isEmpty);
+    });
+  });
+
+  group('_loadPersistedSession silent refresh (Task 34)', () {
+    test(
+      'loginWithPasscode resumes via a real refresh call when the persisted access token has '
+      'time-expired but the stored refresh token is still accepted',
+      () async {
+        final requestLog = <http.Request>[];
+        final container = ProviderContainer(
+          overrides: [
+            authControllerProvider.overrideWith(
+              () => _FakeAuthController(_studentSession(), requestLog: requestLog),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        final controller = container.read(authControllerProvider.notifier);
+        await controller.setPasscode('482913');
+        // Simulate real elapsed time: the persisted access token is now
+        // past its (short-lived, 1h in production) expiry.
+        store[_expiryStorageKey] = DateTime.now().subtract(const Duration(hours: 2)).toIso8601String();
+        await controller.logout(expired: true);
+
+        expect(await controller.loginWithPasscode('482913'), isTrue);
+
+        final session = container.read(authControllerProvider);
+        expect(session!.accessToken, 'refreshed-access-token');
+        expect(requestLog.where((r) => r.url.path == '/auth/refresh'), hasLength(1));
+      },
+    );
+
+    test(
+      'loginWithPasscode requires a real re-authentication when the persisted refresh token '
+      'itself is rejected (expired/revoked/suspended)',
+      () async {
+        final container = ProviderContainer(
+          overrides: [
+            authControllerProvider.overrideWith(
+              () => _FakeAuthController(
+                _studentSession(),
+                refreshResponder: (_) async =>
+                    http.Response(jsonEncode({'message': 'Your session has expired. Please sign in again.'}), 401),
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        final controller = container.read(authControllerProvider.notifier);
+        await controller.setPasscode('482913');
+        store[_expiryStorageKey] = DateTime.now().subtract(const Duration(hours: 2)).toIso8601String();
+        await controller.logout(expired: true);
+
         await expectLater(
           controller.loginWithPasscode('482913'),
           throwsA(isA<SessionRecoveryRequiredException>()),

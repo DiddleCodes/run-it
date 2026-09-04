@@ -26,6 +26,7 @@ import '../application/ordering_providers.dart';
 import '../domain/ordering_models.dart';
 import '../domain/pricing_service.dart';
 import 'my_orders_screen.dart';
+import 'report_problem_screen.dart';
 import 'widgets/ordering_components.dart';
 
 class EateryMenuScreen extends ConsumerStatefulWidget {
@@ -485,15 +486,20 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       // Task 14: the real vendor a student actually browsed and ordered
       // from, when one is known — falling back to the fixed demo
       // restaurant identity only if it somehow isn't (there's still no
-      // real runner-matching backend, so the runner leg always stays
-      // DemoIdentityService's stand-in — see its own doc comment).
+      // real per-vendor-account backend identity for every path that can
+      // reach checkout).
+      //
+      // Task 21b: no runner leg here at all any more — a real order now
+      // starts with no runner attached and gets broadcast to the runner
+      // pool once the restaurant accepts it (see
+      // OrderEscrowService.claim's own doc comment backend-side).
+      // DemoIdentityService.ensureRunnerUserId/mintTokenFor's runner-side
+      // use retired with the single-offer flow; the restaurant-side
+      // fallback above is a separate, still-open gap.
       final vendor = await ref.read(selectedVendorProfileProvider.future);
       final restaurantUserId =
           vendor?.userId ??
           await ref.read(demoIdentityServiceProvider).ensureRestaurantUserId();
-      final runnerUserId = await ref
-          .read(demoIdentityServiceProvider)
-          .ensureRunnerUserId();
 
       await ref
           .read(escrowRepositoryProvider)
@@ -501,7 +507,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             orderId: orderId,
             studentUserId: session.user.id,
             restaurantUserId: restaurantUserId,
-            runnerUserId: runnerUserId,
+            deliveryLocationLabel: deliveryLocationLabel,
             // Task 15: the backend now splits delivery fee out from the food
             // subtotal (and gives the runner a real cut of it) rather than
             // treating the whole order as one commissionable amount — so
@@ -873,6 +879,12 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     ref.read(orderTrackingProvider.notifier).confirmDelivery();
   }
 
+  void _reportProblem(String orderId) {
+    Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => ReportProblemScreen(orderId: orderId)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(orderTrackingProvider);
@@ -892,6 +904,15 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     // cancellation window closes there.
     final cancellable =
         stage == OrderStage.placed || stage == OrderStage.runnerAssigned;
+    // Task 30: "Report a problem" — there's nothing to report on before
+    // the restaurant has actually handed the order off (pickedUp is the
+    // earliest real stage a physical problem — wrong items, damaged
+    // packaging — could exist at all). Independent of the confirmed/
+    // delivered/cancellable branches above (renders alongside them, not
+    // instead of), since a student should be able to report a problem
+    // whether or not they've confirmed receipt yet.
+    final showReportProblem =
+        stage.index >= OrderStage.pickedUp.index && session.orderId != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -968,6 +989,13 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Text('Cancel order'),
+              ),
+            ],
+            if (showReportProblem) ...[
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => _reportProblem(session.orderId!),
+                child: const Text('Report a problem'),
               ),
             ],
           ],

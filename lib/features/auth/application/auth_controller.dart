@@ -1,15 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
+import '../../../core/network/runner_kyc_repository.dart';
+import '../../../core/network/uploads_repository.dart';
 import '../../../core/widgets/app_notification.dart';
 import '../data/auth_repository.dart';
 import '../domain/auth_models.dart';
+import 'kyc_flow_controller.dart' show IdType;
 
 const _biometricUserKey = 'runit_biometric_user_v1';
 const _passcodeHashKey = 'runit_passcode_hash_v1';
@@ -29,6 +33,12 @@ const _passcodeSalt = 'runit_passcode_pepper_v1';
 // credential should resume later.
 const _sessionTokenKey = 'runit_session_token_v1';
 const _sessionExpiryKey = 'runit_session_expiry_v1';
+// Task 34: the real refresh token that lets a persisted session outlive
+// its (now short-lived, 1h) access token — see _loadPersistedSession and
+// handleUnauthorized, both of which fall back to a real network refresh
+// via this rather than declaring the session dead the moment
+// [_sessionExpiryKey] has passed.
+const _sessionRefreshTokenKey = 'runit_session_refresh_token_v1';
 
 /// Thrown by [AuthController.loginWithPasscode]/[loginWithBiometric] when
 /// the local credential check passes but there's no still-valid persisted
@@ -49,6 +59,12 @@ class AuthController extends Notifier<AuthSession?> {
   /// injection (which `NotifierProvider` can't supply — it always calls
   /// `AuthController.new` with no arguments).
   AuthRepository repository = const AuthRepository();
+  /// Task 29: same reassignable-for-tests convention as [repository] —
+  /// used by [submitKycForReview] to upload the three real KYC photos.
+  UploadsRepository uploads = const UploadsRepository();
+  /// Task 29: same convention as [repository]/[uploads] — used by
+  /// [submitKycForReview] to register the uploaded photo URLs for review.
+  RunnerKycRepository runnerKyc = const RunnerKycRepository();
   final _localAuth = LocalAuthentication();
   final _secureStorage = const FlutterSecureStorage();
   final _random = Random();
@@ -73,28 +89,35 @@ class AuthController extends Notifier<AuthSession?> {
     required String code,
     required String name,
     required AccountType accountType,
-    required String campusId,
     String? classOrGrade,
+    String? phone,
   }) async {
     final result = await repository.verifyOtp(
       contact: contact,
       code: code,
       accountType: accountType,
       name: name,
+      phone: phone,
     );
     state = AuthSession(
       accessToken: result.accessToken,
-      // The backend has no distinct refresh-token concept — see
-      // AuthRepository's own doc comment.
-      refreshToken: result.accessToken,
+      refreshToken: result.refreshToken,
       expiresAt: result.expiresAt,
       user: UserProfile(
         id: result.userId,
         name: name,
         contact: contact,
         accountType: accountType,
-        campusId: campusId,
+        // Task 26: the real, backend-derived/admin-assigned campus — never
+        // client-supplied. Null for a fresh runner/restaurant account
+        // nobody has assigned one to yet.
+        campusId: result.campusId,
         classOrGrade: classOrGrade,
+        // Task 28: a runner's own phone, client-supplied same as
+        // classOrGrade above — never echoed back by the backend, but the
+        // backend only ever persists it on first verify anyway, so this
+        // matches what's actually stored.
+        phone: phone,
       ),
     );
   }
@@ -102,28 +125,79 @@ class AuthController extends Notifier<AuthSession?> {
   Future<void> _persistSession(AuthSession session) async {
     await _secureStorage.write(key: _sessionTokenKey, value: session.accessToken);
     await _secureStorage.write(
+      key: _sessionRefreshTokenKey,
+      value: session.refreshToken,
+    );
+    await _secureStorage.write(
       key: _sessionExpiryKey,
       value: session.expiresAt.toIso8601String(),
     );
   }
 
-  /// Null when there's nothing stored, or what's stored has since expired
-  /// — either way, the caller (loginWithPasscode/loginWithBiometric) must
-  /// treat that as "needs a full re-authentication," never re-mint a
-  /// token out of thin air for [user].
+  /// Null when there's nothing stored at all — the caller
+  /// (loginWithPasscode/loginWithBiometric) must treat that as "needs a
+  /// full re-authentication," never re-mint a token out of thin air for
+  /// [user]. If the persisted *access* token has expired (routine now that
+  /// it's short-lived, 1h — see AuthService's own TTL comment), this
+  /// silently spends the persisted *refresh* token to mint a fresh one
+  /// instead of giving up — only returns null from that path if the
+  /// refresh call itself is rejected (expired/revoked/suspended) or no
+  /// refresh token was ever persisted (a pre-Task-34 session).
   Future<AuthSession?> _loadPersistedSession(UserProfile user) async {
     final token = await _secureStorage.read(key: _sessionTokenKey);
+    final refreshToken = await _secureStorage.read(key: _sessionRefreshTokenKey);
     final expiryRaw = await _secureStorage.read(key: _sessionExpiryKey);
     if (token == null || expiryRaw == null) return null;
     final expiresAt = DateTime.tryParse(expiryRaw);
     if (expiresAt == null) return null;
     final session = AuthSession(
       accessToken: token,
-      refreshToken: token,
+      refreshToken: refreshToken ?? token,
       expiresAt: expiresAt,
       user: user,
     );
-    return session.isExpired ? null : session;
+    if (!session.isExpired) return session;
+    if (refreshToken == null) return null;
+    return _attemptRefresh(session);
+  }
+
+  /// Task 34: the one place a real, server-verified refresh is attempted —
+  /// shared by [_loadPersistedSession] (a cold resume finding a
+  /// time-expired access token) and [handleUnauthorized] (a live request
+  /// getting rejected mid-session). Returns null on any failure
+  /// (unreachable backend, or the backend genuinely rejecting the refresh
+  /// token — expired, already rotated, or the account got suspended) —
+  /// callers must treat that as "this session cannot be silently
+  /// recovered," never retry with the same token again.
+  ///
+  /// De-duplicated via [_refreshInFlight]: two callers racing (e.g. two
+  /// screens' calls both getting a 401 around the same moment) share one
+  /// real network call instead of each spending the same not-yet-rotated
+  /// refresh token — the second of two *independent* calls would otherwise
+  /// find it already rotated by the first and be wrongly treated as an
+  /// unrecoverable session.
+  Future<AuthSession?>? _refreshInFlight;
+
+  Future<AuthSession?> _attemptRefresh(AuthSession current) {
+    return _refreshInFlight ??= _doRefresh(current).whenComplete(() {
+      _refreshInFlight = null;
+    });
+  }
+
+  Future<AuthSession?> _doRefresh(AuthSession current) async {
+    try {
+      final result = await repository.refresh(refreshToken: current.refreshToken);
+      final refreshed = AuthSession(
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        expiresAt: result.expiresAt,
+        user: current.user,
+      );
+      await _persistSession(refreshed);
+      return refreshed;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Lets the UI/tests trigger the "session expired" path deterministically
@@ -131,27 +205,48 @@ class AuthController extends Notifier<AuthSession?> {
   bool expired = false;
   void debugExpireSession() => logout(expired: true);
 
-  /// Task 17: the single place a backend-confirmed-invalid session
-  /// (expired, or suspended mid-session — [ApiClient.onUnauthorized]
-  /// never distinguishes which) becomes a clean logout instead of a raw
-  /// error left for whatever screen happened to be mid-request. Wired
-  /// once, at app startup (`main.dart`), to every `ApiClient` call.
-  /// Idempotent: already-logged-out is a no-op, so a burst of concurrent
-  /// requests failing at once only logs out and notifies once.
+  /// Task 17: the single place a backend-rejected access token (expired,
+  /// or a request rejected mid-session — [ApiClient.onUnauthorized] never
+  /// distinguishes why) is handled, instead of a raw error left for
+  /// whatever screen happened to be mid-request. Wired once, at app
+  /// startup (`main.dart`), to every `ApiClient` call. Idempotent:
+  /// already-logged-out is a no-op, so a burst of concurrent requests
+  /// failing at once only ever resolves once (via [_refreshInFlight]).
   ///
-  /// Unlike a plain [logout] (`expired: true`, e.g. a genuinely-elapsed
-  /// day-long token after an app relaunch), this also clears the
-  /// *persisted* session — the backend has just said this exact token is
-  /// no good, which a suspended-but-not-yet-time-expired token wouldn't
-  /// otherwise reveal locally. Without this, the very next passcode/
-  /// biometric unlock would silently reload the same bad token and hit
-  /// the same rejection again in a loop instead of routing to a real
-  /// re-authentication.
+  /// Task 34: a real, server-verified silent refresh (via
+  /// [_attemptRefresh]) is tried *first* — only if that itself fails
+  /// (expired, already rotated, or the account got suspended) does this
+  /// fall through to the old hard-logout behavior below. This is
+  /// deliberately **not** a resurrection of the dev-token-based silent
+  /// refresh Task 17 removed: that endpoint (`/auth/dev-token`) is
+  /// disabled outside development ([DevOnlyGuard]) and could mint a
+  /// session for *any* userId with no proof of prior authentication.
+  /// `/auth/refresh` only ever succeeds against a real, hashed, single-use,
+  /// rotating refresh token this exact session was issued at OTP-verify
+  /// time — one already-suspended, already-replayed, or already-expired
+  /// refresh token is rejected the same generic way any other invalid
+  /// session is, and AdminUsersService.suspend revokes it server-side the
+  /// instant an admin acts, so a suspended account can't ride this path to
+  /// a fresh access token either.
+  ///
+  /// A genuinely failed refresh still clears the *persisted* session, same
+  /// as before — the backend has just said this exact refresh token is no
+  /// good, which the very next passcode/biometric unlock must not
+  /// silently retry.
   Future<void> handleUnauthorized() async {
-    if (state == null) return;
+    final session = state;
+    if (session == null) return;
+
+    final refreshed = await _attemptRefresh(session);
+    if (refreshed != null) {
+      state = refreshed;
+      return;
+    }
+
     await Future.wait([
       _secureStorage.delete(key: _sessionTokenKey),
       _secureStorage.delete(key: _sessionExpiryKey),
+      _secureStorage.delete(key: _sessionRefreshTokenKey),
     ]);
     await logout(expired: true);
     ref
@@ -182,9 +277,25 @@ class AuthController extends Notifier<AuthSession?> {
     _kycTimer?.cancel();
     this.expired = expired;
     if (!expired) {
+      // Task 34: real server-side revocation, not just clearing local
+      // storage — the refresh token this device was holding can never be
+      // replayed after this. Best-effort: a network failure must never
+      // block the user from actually signing out of this device, so a
+      // rejected/unreachable call here is swallowed rather than left to
+      // interrupt the storage-clearing below (the token then simply
+      // expires naturally, at worst, in REFRESH_TOKEN_TTL_DAYS).
+      final session = state;
+      if (session != null) {
+        try {
+          await repository.logout(refreshToken: session.refreshToken);
+        } catch (_) {
+          // See doc comment above.
+        }
+      }
       await Future.wait([
         _secureStorage.delete(key: _sessionTokenKey),
         _secureStorage.delete(key: _sessionExpiryKey),
+        _secureStorage.delete(key: _sessionRefreshTokenKey),
         _secureStorage.delete(key: _biometricUserKey),
         _secureStorage.delete(key: _passcodeHashKey),
         _secureStorage.delete(key: _passcodeUserKey),
@@ -261,6 +372,15 @@ class AuthController extends Notifier<AuthSession?> {
     final session = await _loadPersistedSession(user);
     if (session == null) throw const SessionRecoveryRequiredException();
     state = session;
+    // Task 29: a runner may have been approved/rejected by an admin while
+    // this device's biometric snapshot was last written — refresh against
+    // the real backend status now rather than trusting whatever was cached
+    // at [enableBiometric] time. Best-effort: [refreshProfile] no-ops on a
+    // network failure, so this never blocks a resume that would otherwise
+    // succeed offline.
+    if (user.accountType == AccountType.runner) {
+      await refreshProfile();
+    }
     return true;
   }
 
@@ -284,6 +404,7 @@ class AuthController extends Notifier<AuthSession?> {
     'accountType': user.accountType.name,
     'campusId': user.campusId,
     'classOrGrade': user.classOrGrade,
+    'phone': user.phone,
     'kycStatus': user.kycStatus.name,
     'kycRejectionReason': user.kycRejectionReason,
     'biometricEnabled': user.biometricEnabled,
@@ -298,8 +419,9 @@ class AuthController extends Notifier<AuthSession?> {
     name: json['name'] as String,
     contact: json['contact'] as String,
     accountType: AccountType.values.byName(json['accountType'] as String),
-    campusId: json['campusId'] as String,
+    campusId: json['campusId'] as String?,
     classOrGrade: json['classOrGrade'] as String?,
+    phone: json['phone'] as String?,
     kycStatus: KycStatus.values.byName(json['kycStatus'] as String),
     kycRejectionReason: json['kycRejectionReason'] as String?,
     biometricEnabled: json['biometricEnabled'] as bool? ?? false,
@@ -392,7 +514,7 @@ class AuthController extends Notifier<AuthSession?> {
     );
     state = AuthSession(
       accessToken: result.accessToken,
-      refreshToken: result.accessToken,
+      refreshToken: result.refreshToken,
       expiresAt: result.expiresAt,
       user: storedUser,
     );
@@ -423,14 +545,12 @@ class AuthController extends Notifier<AuthSession?> {
     'ID card edges were cut off in the photo.',
   ];
 
-  /// Moves the account to Pending and, after a simulated review delay,
-  /// resolves to Verified or Rejected — stand-in for a real review queue
-  /// (Task 7 gives that queue an admin surface). Also the only place
-  /// [UserProfile.runnerType]/[UserProfile.vehicleType]/
-  /// [UserProfile.vehiclePlate] get persisted: the KYC-capture wizard
-  /// state they come from is transient and reset right after this call,
-  /// so this is the hand-off point before that context is lost — both on
-  /// first submission and on every resubmission after a rejection.
+  /// Task 29: the light-KYC (student) path only now — moves the account to
+  /// Pending and, after a simulated review delay, resolves to Verified or
+  /// Rejected. There's still no real backend concept of student KYC (out
+  /// of this task's scope — see its own report), so this stand-in stays
+  /// exactly as it was. Runner KYC no longer calls this: see
+  /// [submitKycForReview] for the real, backend-verified equivalent.
   void submitKyc({
     RunnerType? runnerType,
     VehicleType? vehicleType,
@@ -449,6 +569,109 @@ class AuthController extends Notifier<AuthSession?> {
     );
     _kycTimer?.cancel();
     _kycTimer = Timer(const Duration(seconds: 4), _resolveKyc);
+  }
+
+  /// Task 29: the real runner KYC submission — uploads the three captured
+  /// photos (same presign-then-PUT flow DeliveryProofCaptureScreen already
+  /// uses), registers them against `POST /runner-kyc/submit`, then reflects
+  /// the real `pending` status locally. Unlike [submitKyc], there is no
+  /// local Random()/Timer resolution here — [KycStatusScreen] polls
+  /// [refreshProfile] for the real admin decision. Returns false (and
+  /// leaves the caller's screen in place) on any upload/network failure —
+  /// this must never optimistically claim a submission succeeded.
+  Future<bool> submitKycForReview({
+    required RunnerType runnerType,
+    required IdType idType,
+    required Uint8List idImage,
+    required Uint8List selfieImage,
+    Uint8List? vehiclePhoto,
+    VehicleType? vehicleType,
+    String? vehiclePlate,
+  }) async {
+    final session = state;
+    if (session == null) return false;
+    final token = session.accessToken;
+
+    try {
+      final idPhotoUrl = await uploads.uploadImage(
+        bytes: idImage,
+        purpose: 'runner-kyc-id',
+        contentType: 'image/jpeg',
+        token: token,
+      );
+      final selfiePhotoUrl = await uploads.uploadImage(
+        bytes: selfieImage,
+        purpose: 'runner-kyc-selfie',
+        contentType: 'image/jpeg',
+        token: token,
+      );
+      String? vehiclePhotoUrl;
+      if (vehiclePhoto != null) {
+        vehiclePhotoUrl = await uploads.uploadImage(
+          bytes: vehiclePhoto,
+          purpose: 'runner-kyc-vehicle',
+          contentType: 'image/jpeg',
+          token: token,
+        );
+      }
+      await runnerKyc.submit(
+        token: token,
+        runnerType: runnerType,
+        idType: idType,
+        idPhotoUrl: idPhotoUrl,
+        selfiePhotoUrl: selfiePhotoUrl,
+        vehiclePhotoUrl: vehiclePhotoUrl,
+        vehicleType: vehicleType,
+        vehiclePlate: vehiclePlate,
+      );
+    } catch (_) {
+      return false;
+    }
+
+    // Re-read state rather than trusting the captured `session` — the
+    // uploads above are real network round-trips the user could have
+    // logged out during.
+    final current = state;
+    if (current == null) return false;
+    state = current.copyWith(
+      user: current.user.copyWith(
+        kycStatus: KycStatus.pending,
+        clearRejectionReason: true,
+        runnerType: runnerType,
+        vehicleType: vehicleType,
+        vehiclePlate: vehiclePlate,
+      ),
+    );
+    return true;
+  }
+
+  /// Task 29: pulls the real KYC status (and any admin rejection reason)
+  /// from the backend — the one place a possibly-stale locally cached
+  /// [UserProfile.kycStatus] (e.g. resumed via biometric login from before
+  /// an admin decision landed) gets corrected. A no-op on any network
+  /// failure — polling callers simply retry on their next tick rather than
+  /// surfacing a transient error.
+  Future<void> refreshProfile() async {
+    final session = state;
+    if (session == null) return;
+    final MeResult result;
+    try {
+      result = await repository.fetchMe(token: session.accessToken);
+    } catch (_) {
+      return;
+    }
+    final current = state;
+    if (current == null) return;
+    state = current.copyWith(
+      user: current.user.copyWith(
+        kycStatus: result.kycStatus,
+        kycRejectionReason: result.kycRejectionReason,
+        clearRejectionReason: result.kycRejectionReason == null,
+        runnerType: result.runnerType,
+        vehicleType: result.vehicleType,
+        vehiclePlate: result.vehiclePlate,
+      ),
+    );
   }
 
   /// Lets a runner edit their declared vehicle from Profile after

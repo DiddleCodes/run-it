@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,14 +18,49 @@ import '../../domain/auth_models.dart';
 /// so every state (pending/verified/rejected) gets its own hero icon and
 /// color treatment inside one consistent elevated card, rather than plain
 /// colored text on a flat background. Reassuring, not clinical.
-class KycStatusScreen extends ConsumerWidget {
+class KycStatusScreen extends ConsumerStatefulWidget {
   const KycStatusScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<KycStatusScreen> createState() => _KycStatusScreenState();
+}
+
+/// Task 29: real polling — a runner's status here is the real backend
+/// decision now (see AuthController.submitKycForReview/refreshProfile),
+/// not a local Timer that resolves itself. Only ever polls for a runner
+/// sitting in `pending`: a student's KYC still uses the old local
+/// Random()/Timer resolution (out of this task's scope), and polling that
+/// path too would just overwrite its fake progress back to `none`/`pending`
+/// before that Timer ever fires.
+class _KycStatusScreenState extends ConsumerState<KycStatusScreen> {
+  Timer? _pollTimer;
+
+  void _syncPolling(UserProfile user) {
+    final shouldPoll =
+        user.accountType == AccountType.runner &&
+        user.kycStatus == KycStatus.pending;
+    if (shouldPoll) {
+      _pollTimer ??= Timer.periodic(const Duration(seconds: 4), (_) {
+        ref.read(authControllerProvider.notifier).refreshProfile();
+      });
+    } else {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final session = ref.watch(authControllerProvider);
     final user = session?.user;
     if (user == null) return const SizedBox.shrink();
+    _syncPolling(user);
 
     final screen = Scaffold(
       body: SafeArea(

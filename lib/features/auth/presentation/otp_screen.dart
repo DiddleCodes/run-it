@@ -141,8 +141,8 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
               code: _controller.text,
               name: widget.args!.name,
               accountType: widget.args!.accountType,
-              campusId: widget.args!.campus.id,
               classOrGrade: widget.args!.classOrGrade,
+              phone: widget.args!.phone,
             );
       }
     } on ApiException catch (e) {

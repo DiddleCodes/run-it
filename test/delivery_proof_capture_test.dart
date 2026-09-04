@@ -3,23 +3,35 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:run_it/core/network/demo_identity_service.dart';
 import 'package:run_it/core/network/orders_repository.dart';
 import 'package:run_it/core/network/uploads_repository.dart';
 import 'package:run_it/core/widgets/app_notification.dart';
+import 'package:run_it/features/auth/application/auth_controller.dart';
+import 'package:run_it/features/auth/domain/auth_models.dart';
 import 'package:run_it/features/auth/presentation/kyc/camera_capture_step.dart';
 import 'package:run_it/features/runner/presentation/delivery_proof_capture_screen.dart';
 
-class _FakeDemoIdentityService extends DemoIdentityService {
-  const _FakeDemoIdentityService();
+class _FakeAuthController extends AuthController {
+  _FakeAuthController(this._session);
+  final AuthSession _session;
   @override
-  Future<String> ensureRunnerUserId() async => 'demo-runner-1';
-  @override
-  Future<String> mintTokenFor({
-    required String userId,
-    required String accountType,
-  }) async => 'demo-runner-token';
+  AuthSession? build() => _session;
 }
+
+AuthSession _runnerSession() => AuthSession(
+  accessToken: 'a',
+  refreshToken: 'r',
+  expiresAt: DateTime.now().add(const Duration(minutes: 5)),
+  user: const UserProfile(
+    id: 'runner-1',
+    name: 'Ada Runner',
+    contact: '+2348000000000',
+    accountType: AccountType.runner,
+    campusId: 'ui',
+    kycStatus: KycStatus.verified,
+    runnerType: RunnerType.studentRunner,
+  ),
+);
 
 /// Records what it was asked to upload rather than hitting the real S3
 /// presign flow — the interesting thing to verify here is that the fallback
@@ -109,7 +121,7 @@ void main() {
         _harness(
           orderId: 'order-proof-1',
           overrides: [
-            demoIdentityServiceProvider.overrideWithValue(const _FakeDemoIdentityService()),
+            authControllerProvider.overrideWith(() => _FakeAuthController(_runnerSession())),
             uploadsRepositoryProvider.overrideWithValue(uploads),
             ordersRepositoryProvider.overrideWithValue(orders),
           ],
@@ -144,7 +156,7 @@ void main() {
         _harness(
           orderId: 'order-proof-2',
           overrides: [
-            demoIdentityServiceProvider.overrideWithValue(const _FakeDemoIdentityService()),
+            authControllerProvider.overrideWith(() => _FakeAuthController(_runnerSession())),
             uploadsRepositoryProvider.overrideWithValue(uploads),
             ordersRepositoryProvider.overrideWithValue(const _FailingOrdersRepository()),
           ],

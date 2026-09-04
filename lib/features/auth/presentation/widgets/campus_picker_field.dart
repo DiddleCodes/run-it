@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/network/campus_repository.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_text_field.dart';
-import '../../domain/auth_models.dart';
 
-/// A searchable campus selector — deliberately not free text, since a
-/// typed-in campus name can't be used to scope queries later. Opens a
-/// bottom sheet with a search field over the fixed campus directory.
+/// Task 26: no longer used at student/runner signup — a student's campus
+/// is derived from their verified email domain, a runner's is admin-
+/// assigned, and picking one here would silently contradict either (see
+/// the Task 26 report). Its one remaining caller is the restaurant vendor
+/// application wizard, where a selection is real, honest data now (Task
+/// 27): backed by the real `GET /campuses` directory (not the old local
+/// `kCampuses` stand-in), and sent to the backend as
+/// `Vendor.requestedCampusId` — the applicant's own stated preference,
+/// which pre-fills (never dictates) the admin's campus choice at approval.
 class CampusPickerField extends StatelessWidget {
   const CampusPickerField({
     super.key,
@@ -16,8 +23,8 @@ class CampusPickerField extends StatelessWidget {
     this.errorText,
   });
 
-  final Campus? selected;
-  final ValueChanged<Campus> onChanged;
+  final CampusOption? selected;
+  final ValueChanged<CampusOption> onChanged;
   final String? errorText;
 
   @override
@@ -115,23 +122,21 @@ class CampusPickerField extends StatelessWidget {
   }
 }
 
-class _CampusSearchSheet extends StatefulWidget {
+class _CampusSearchSheet extends ConsumerStatefulWidget {
   const _CampusSearchSheet({required this.onSelected});
-  final ValueChanged<Campus> onSelected;
+  final ValueChanged<CampusOption> onSelected;
 
   @override
-  State<_CampusSearchSheet> createState() => _CampusSearchSheetState();
+  ConsumerState<_CampusSearchSheet> createState() => _CampusSearchSheetState();
 }
 
-class _CampusSearchSheetState extends State<_CampusSearchSheet> {
+class _CampusSearchSheetState extends ConsumerState<_CampusSearchSheet> {
   String _query = '';
 
   @override
   Widget build(BuildContext context) {
     const onBg = AppColors.inkText;
-    final filtered = kCampuses
-        .where((c) => c.name.toLowerCase().contains(_query.toLowerCase()))
-        .toList();
+    final campuses = ref.watch(campusesProvider);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -162,31 +167,48 @@ class _CampusSearchSheetState extends State<_CampusSearchSheet> {
           const SizedBox(height: AppSpacing.sm),
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 320),
-            child: filtered.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.lg,
-                    ),
+            child: campuses.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (error, stack) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                child: Text(
+                  "Couldn't load campuses. Check your connection and try again.",
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+              data: (list) {
+                final filtered = list
+                    .where((c) => c.name.toLowerCase().contains(_query.toLowerCase()))
+                    .toList();
+                if (filtered.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
                     child: Text(
                       'No campuses match that search.',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
-                  )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) {
-                      final campus = filtered[index];
-                      return ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(campus.name, style: TextStyle(color: onBg)),
-                        onTap: () {
-                          widget.onSelected(campus);
-                          Navigator.pop(context);
-                        },
-                      );
-                    },
-                  ),
+                  );
+                }
+                return ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) {
+                    final campus = filtered[index];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(campus.name, style: TextStyle(color: onBg)),
+                      onTap: () {
+                        widget.onSelected(campus);
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),

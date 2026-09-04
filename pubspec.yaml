@@ -49,12 +49,30 @@ dependencies:
   flutter_paystack_plus: ^2.6.0
   cached_network_image: ^4.0.0
 
+  # Task 21b: the runner-dispatch live channel — the backend gateway is a
+  # NestJS @WebSocketGateway, which defaults to the Socket.IO protocol (see
+  # runner-dispatch.gateway.ts's own `socket.io` import), not raw
+  # WebSocket — this client speaks the same protocol.
+  socket_io_client: ^3.0.2
+
+  # Task 28: moved from dev_dependencies — SplashScreen now calls
+  # FlutterNativeSplash.remove() at runtime (see its own doc comment), so
+  # this has to ship in the real app, not just back the `:create` codegen
+  # step.
+  flutter_native_splash: ^2.4.3
+
+  # Task 31: crash/error reporting. firebase_core/auth/storage above are
+  # declared but never actually initialized anywhere in this app (no
+  # Firebase.initializeApp() call, no google-services.json/
+  # GoogleService-Info.plist) — see crash_reporting.dart's own doc comment
+  # for why that ruled out Crashlytics as the "already paid for" option.
+  sentry_flutter: ^9.28.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.3
-  flutter_native_splash: ^2.4.3
 
 flutter:
   uses-material-design: true
@@ -84,6 +102,16 @@ flutter_launcher_icons:
 # widget takes over) — same cream background and dome mark so there's no
 # color discontinuity between the OS launch screen and SplashScreen's own
 # backgroundCream base. Regenerate with `dart run flutter_native_splash:create`.
+#
+# Task 28: iOS's LaunchImage.imageset PNGs were hand-replaced with crisp
+# @1x/2x/3x exports downsampled directly from assets/images/runit_icon_mark.png
+# (the same source used elsewhere in the app) at their real 92pt display size —
+# not regenerated through this 1024px `image` (which `:create` would upscale
+# from that same small source and export oversized/blurry, as the previous
+# version here was). Re-running `dart run flutter_native_splash:create`
+# overwrites those PNGs back to that oversized/blurry default AND resets
+# LaunchScreen.storyboard's icon size/position back to dead-center — see that
+# storyboard's own doc comment for the exact values to reapply after.
 flutter_native_splash:
   color: "#FBF4E9"
   image: assets/icons/app_icon_foreground.png

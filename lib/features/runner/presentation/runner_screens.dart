@@ -10,7 +10,6 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
 import '../../../core/widgets/primary_button.dart';
-import '../../../core/widgets/route_line.dart';
 import '../../../core/widgets/status_stepper.dart';
 import '../../ordering/presentation/widgets/ordering_components.dart';
 import '../application/runner_controller.dart';
@@ -67,11 +66,6 @@ class _RunnerHomeScreenState extends ConsumerState<RunnerHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<RunnerSession>(runnerControllerProvider, (previous, next) {
-      if (previous?.offer == null && next.offer != null && context.mounted) {
-        context.push(AppRoutes.runnerOffer);
-      }
-    });
     final session = ref.watch(runnerControllerProvider);
     final online = session.status.availability == RunnerAvailability.online;
     final total = session.earnings.fold(0, (sum, item) => sum + item.amount);
@@ -140,8 +134,6 @@ class _RunnerHomeScreenState extends ConsumerState<RunnerHomeScreen> {
               const SizedBox(height: 14),
               if (session.activeDelivery != null)
                 _ActiveCard(active: session.activeDelivery!)
-              else if (online && session.noJobsInZone)
-                const _NoJobsInZoneState()
               else if (online)
                 const _WaitingState()
               else
@@ -285,106 +277,6 @@ class _CircleIconButton extends StatelessWidget {
           ],
         ),
         child: Icon(icon, color: AppColors.inkText, size: 20),
-      ),
-    );
-  }
-}
-
-class JobOfferScreen extends ConsumerWidget {
-  const JobOfferScreen({super.key});
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final session = ref.watch(runnerControllerProvider);
-    final job = session.offer;
-    if (job == null) return const RunnerHomeScreen();
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () {
-                      ref
-                          .read(runnerControllerProvider.notifier)
-                          .declineOffer();
-                      context.go(AppRoutes.runnerHome);
-                    },
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${session.offerSecondsRemaining}s',
-                    style: Theme.of(context).textTheme.titleLarge
-                        ?.copyWith(color: OrderingColors.text(context)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: session.offerSecondsRemaining / 20,
-                  minHeight: 4,
-                  color: AppColors.primaryMaroon,
-                  backgroundColor: OrderingColors.border(context),
-                ),
-              ),
-              const SizedBox(height: 36),
-              Text(
-                'A delivery on your route.',
-                style: Theme.of(context).textTheme.headlineMedium
-                    ?.copyWith(color: OrderingColors.text(context)),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Review the details, then decide. This offer will simply pass on if you do nothing.',
-                style: Theme.of(context).textTheme.bodyMedium
-                    ?.copyWith(color: OrderingColors.muted(context)),
-              ),
-              const SizedBox(height: 28),
-              JobCard(job: job),
-              const Spacer(),
-              PrimaryButton(
-                onPressed: () async {
-                  final result = await ref
-                      .read(runnerControllerProvider.notifier)
-                      .acceptOffer();
-                  if (!context.mounted) return;
-                  if (result == AcceptOfferResult.accepted) {
-                    context.go(AppRoutes.runnerDelivery);
-                    return;
-                  }
-                  final message = switch (result) {
-                    AcceptOfferResult.notVerified =>
-                      'Verify your ID before you can accept deliveries.',
-                    AcceptOfferResult.outsideCampusBoundary =>
-                      'You need to be on campus to accept this delivery.',
-                    AcceptOfferResult.locationUnavailable => "We couldn't check your location. Enable location access and try again.",
-                    AcceptOfferResult.accepted ||
-                    AcceptOfferResult.blocked => null,
-                  };
-                  if (message != null) {
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(SnackBar(content: Text(message)));
-                  }
-                },
-                label: 'Accept delivery · ${naira(job.payoutAmount)}',
-              ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: () {
-                  ref.read(runnerControllerProvider.notifier).declineOffer();
-                  context.go(AppRoutes.runnerHome);
-                },
-                child: const Text('Decline'),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -642,11 +534,7 @@ class JobCard extends StatelessWidget {
           children: [
             _Metric(label: 'PAYOUT', value: naira(job.payoutAmount)),
             const SizedBox(width: 32),
-            _Metric(
-              label: 'DISTANCE',
-              value:
-                  '${(job.estimatedDistanceMeters / 1000).toStringAsFixed(1)} km',
-            ),
+            _Metric(label: 'ORDER TOTAL', value: naira(job.totalAmount)),
           ],
         ),
       ],
@@ -1307,35 +1195,6 @@ class _WaitingState extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           'We’ll bring you a delivery when one fits.',
-          style: Theme.of(context).textTheme.bodyMedium
-              ?.copyWith(color: OrderingColors.muted(context)),
-        ),
-      ],
-    ),
-  );
-}
-
-// Zero active vendors in the runner's own campus/zone — distinct from
-// "online and waiting", since no job is ever coming until a vendor is
-// onboarded there.
-class _NoJobsInZoneState extends StatelessWidget {
-  const _NoJobsInZoneState();
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Column(
-      children: [
-        const SizedBox(height: 12),
-        const RouteLineEmptyIllustration(width: 200, height: 110),
-        const SizedBox(height: 14),
-        Text(
-          'No jobs in your zone yet.',
-          style: Theme.of(context).textTheme.titleLarge
-              ?.copyWith(color: OrderingColors.text(context)),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'There are no active vendors in your campus right now — check back soon.',
-          textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyMedium
               ?.copyWith(color: OrderingColors.muted(context)),
         ),

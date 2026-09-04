@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:run_it/core/network/campus_repository.dart';
+import 'package:run_it/core/network/matching_repository.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
 import 'package:run_it/features/runner/application/runner_controller.dart';
@@ -20,7 +22,20 @@ class _FakeLocationRepository implements LocationRepository {
   Future<GeoPoint?> currentPosition() async => _point;
 }
 
-final _uiCampus = kCampuses.firstWhere((c) => c.id == 'ui');
+/// toggleAvailability() going online drives availableJobsProvider — keeps
+/// these geofence tests network-free.
+class _FakeMatchingRepository extends MatchingRepository {
+  const _FakeMatchingRepository();
+  @override
+  Future<List<DeliveryJob>> listAvailable({required String token}) async => const [];
+}
+
+final _uiCampus = kCampusGeofenceReference.firstWhere((c) => c.id == 'ui');
+// Task 26: the real backend campusId is an opaque id now, not the old
+// slug — this test's session carries a fake-but-realistic one, and
+// campusesProvider is overridden below to resolve it to the same real
+// campus name the geofence reference table matches by.
+const _uiCampusId = 'campus-ui-test-id';
 final _insideCampus = GeoPoint(
   latitude: _uiCampus.latitude,
   longitude: _uiCampus.longitude,
@@ -40,7 +55,7 @@ AuthSession _sessionFor({required RunnerType? runnerType}) => AuthSession(
     name: 'Test Runner',
     contact: '+2348000000000',
     accountType: AccountType.runner,
-    campusId: 'ui',
+    campusId: _uiCampusId,
     kycStatus: KycStatus.verified,
     runnerType: runnerType,
   ),
@@ -54,6 +69,10 @@ ProviderContainer _containerFor(RunnerType? runnerType, GeoPoint? point) {
       ),
       locationRepositoryProvider.overrideWithValue(
         _FakeLocationRepository(point),
+      ),
+      matchingRepositoryProvider.overrideWithValue(const _FakeMatchingRepository()),
+      campusesProvider.overrideWith(
+        (ref) async => [CampusOption(id: _uiCampusId, name: _uiCampus.name)],
       ),
     ],
   );
@@ -153,9 +172,9 @@ void main() {
     );
   });
 
-  group('the geofence also gates accepting an offer', () {
+  group('the geofence also gates claiming a job', () {
     test(
-      'an independent rider outside the boundary cannot accept an offer',
+      'an independent rider outside the boundary cannot claim a job',
       () async {
         final container = _containerFor(
           RunnerType.independentRider,
@@ -166,19 +185,18 @@ void main() {
 
         final job = DeliveryJob(
           id: 'job-1',
-          campusId: 'ui',
           eateryName: 'Test Eatery',
           eateryLocation: 'Somewhere',
           dropoffZone: 'Hall',
           dropoffLocation: 'Room 1',
           payoutAmount: 500,
-          estimatedDistanceMeters: 300,
+          totalAmount: 3000,
           offeredAt: DateTime.now(),
-          expiresAt: DateTime.now().add(const Duration(seconds: 20)),
         );
-        controller.debugInjectOffer(job);
 
-        final result = await controller.acceptOffer();
+        // The geofence check runs before any network claim call, so this
+        // short-circuits without needing an EscrowRepository override.
+        final result = await controller.acceptJob(job);
 
         expect(result, AcceptOfferResult.outsideCampusBoundary);
         expect(container.read(runnerControllerProvider).activeDelivery, isNull);

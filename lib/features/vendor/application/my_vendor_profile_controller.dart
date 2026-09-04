@@ -33,6 +33,7 @@ class MyVendorProfileController extends AsyncNotifier<MyVendorProfile> {
     required String category,
     String? description,
     String? logoUrl,
+    String? requestedCampusId,
   }) async {
     final session = ref.read(authControllerProvider);
     if (session == null) {
@@ -45,6 +46,7 @@ class MyVendorProfileController extends AsyncNotifier<MyVendorProfile> {
           category: category,
           description: description,
           logoUrl: logoUrl,
+          requestedCampusId: requestedCampusId,
           token: session.accessToken,
         );
     state = AsyncValue.data(updated);

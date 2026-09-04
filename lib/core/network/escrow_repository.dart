@@ -15,6 +15,11 @@ final escrowRepositoryProvider = Provider<EscrowRepository>(
 /// cares about is "succeeded outright" vs. "at least one leg needs a retry."
 enum EscrowReleaseOutcome { released, partiallyFailed }
 
+/// Outcome of a claim attempt — [alreadyClaimed] is the backend's
+/// `409 ORDER_ALREADY_CLAIMED`, an expected, normal outcome of the
+/// broadcast model (another runner won the race), never a generic error.
+enum ClaimResult { claimed, alreadyClaimed }
+
 /// Mirrors the backend's `OrderItemInputDto` (Task 9/14) — one basket line
 /// as sent at hold time, [notes] included so a student's per-item
 /// customization request actually lands on `OrderItem.notes` for the
@@ -58,7 +63,13 @@ class EscrowRepository {
     required String orderId,
     required String studentUserId,
     required String restaurantUserId,
-    required String runnerUserId,
+    // Task 21a/21b: nullable — a real order now starts with no runner
+    // attached and is broadcast to the runner pool once the restaurant
+    // accepts it (see OrderEscrowService.claim's own doc comment
+    // backend-side). Null is the normal case for every real checkout now;
+    // a caller only ever passes one for something pre-assigned outside the
+    // broadcast model.
+    String? runnerUserId,
     required int grossAmountKobo,
     required String token,
     // Task 14: the real vendor row a student actually ordered from
@@ -75,6 +86,11 @@ class EscrowRepository {
     // zone-based fee it already displays, so the app is never charged more
     // than what the checkout screen showed.
     int? deliveryFeeKobo,
+    // Task 21b: forwarded to `Order.deliveryLocationLabel` — was collected
+    // at checkout but never actually sent, so every real order's dropoff
+    // was silently null. Optional so an old caller that omits it still
+    // works exactly as before.
+    String? deliveryLocationLabel,
   }) async {
     await client.post(
       '/orders/$orderId/escrow/hold',
@@ -82,13 +98,30 @@ class EscrowRepository {
       body: {
         'studentUserId': studentUserId,
         'restaurantUserId': restaurantUserId,
-        'runnerUserId': runnerUserId,
+        'runnerUserId': ?runnerUserId,
         'grossAmountKobo': grossAmountKobo,
         'vendorId': ?vendorId,
         'items': ?items?.map((item) => item.toJson()).toList(),
         'deliveryFeeKobo': ?deliveryFeeKobo,
+        'deliveryLocationLabel': ?deliveryLocationLabel,
       },
     );
+  }
+
+  /// Task 21a/21b: first-to-claim-wins against a broadcast job — [token]
+  /// belongs to whichever runner is attempting the claim, no prior
+  /// assignment required (that's exactly what a successful claim creates).
+  /// [ClaimResult.alreadyClaimed] is the backend's `409
+  /// ORDER_ALREADY_CLAIMED` specifically — every other non-2xx status
+  /// rethrows as [ApiException], same as every other call here.
+  Future<ClaimResult> claim({required String orderId, required String token}) async {
+    try {
+      await client.post('/orders/$orderId/escrow/claim', token: token);
+      return ClaimResult.claimed;
+    } on ApiException catch (e) {
+      if (e.statusCode == 409) return ClaimResult.alreadyClaimed;
+      rethrow;
+    }
   }
 
   /// [token] must belong to the runner assigned to this order's escrow (or

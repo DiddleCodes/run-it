@@ -21,7 +21,7 @@ class VendorApplicationController extends Notifier<VendorApplication> {
   void setContactInfo({
     required String contactName,
     required String contactPhone,
-    required Campus campus,
+    required CampusOption campus,
   }) => state = state.copyWith(
     contactName: contactName,
     contactPhone: contactPhone,

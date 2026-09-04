@@ -3,6 +3,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/network/api_exception.dart';
+import '../../../core/network/campus_repository.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -11,23 +13,37 @@ import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/route_line.dart';
 import '../application/auth_controller.dart';
 import '../domain/auth_models.dart';
-import 'widgets/campus_picker_field.dart';
 import 'widgets/validated_field.dart';
 
+// Task 26: campus is no longer collected here at all — a student's is
+// derived from their verified email domain, a restaurant/runner's is
+// admin-assigned, and neither is ever self-picked (see the Task 26
+// report for why `CampusPickerField` was removed from this screen rather
+// than wired to real data).
+//
+// Task 28: a runner's `contact` is an email now too (the real OTP delivery
+// channel, same as a student) — `phone` is a separate field, collected
+// alongside it for admin dispute-resolution contact, never used for OTP.
+// Null for student/restaurant, which never collect a second contact field.
 class SignupArgs {
   const SignupArgs({
     required this.name,
     required this.contact,
     required this.accountType,
-    required this.campus,
     this.classOrGrade,
+    this.phone,
   });
   final String name;
   final String contact;
   final AccountType accountType;
-  final Campus campus;
   final String? classOrGrade;
+  final String? phone;
 }
+
+/// Shared by the student and runner email fields — matches multi-label
+/// school/personal domains alike (`student.ui.edu.ng`, `gmail.com`, ...).
+/// See Task 27 for why the domain part allows more than one dot.
+final _emailShapeRegex = RegExp(r'^[\w.+-]+@[\w-]+(\.[\w-]+)*\.[a-zA-Z]{2,}$');
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key, required this.accountType});
@@ -40,21 +56,23 @@ class SignupScreen extends ConsumerStatefulWidget {
 class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _nameController = TextEditingController();
   final _contactController = TextEditingController();
+  final _runnerEmailController = TextEditingController();
   final _classController = TextEditingController();
   final _nameFieldKey = GlobalKey<ValidatedFieldState>();
   final _contactFieldKey = GlobalKey<ValidatedFieldState>();
-  Campus? _campus;
-  String? _campusError;
+  final _runnerEmailFieldKey = GlobalKey<ValidatedFieldState>();
   bool _agreedToTerms = false;
   bool _submitting = false;
 
   bool get _isStudent => widget.accountType == AccountType.student;
   bool get _isRestaurant => widget.accountType == AccountType.restaurant;
+  bool get _isRunner => widget.accountType == AccountType.runner;
 
   @override
   void dispose() {
     _nameController.dispose();
     _contactController.dispose();
+    _runnerEmailController.dispose();
     _classController.dispose();
     super.dispose();
   }
@@ -66,37 +84,76 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
   String? _validateContact(String value) {
     if (_isStudent) {
-      final valid = RegExp(r'^[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}$').hasMatch(value);
-      return valid ? null : 'Enter a valid school email address.';
+      // Task 27: the previous pattern only allowed a single dot in the
+      // domain (`[\w-]+\.[a-zA-Z]{2,}`), which rejects every one of the
+      // real seeded campus domains (`student.ui.edu.ng` and friends all
+      // have 3+ labels) — a real student at any real seeded school could
+      // never actually pass this client-side check and reach Continue,
+      // even though the backend itself always accepted the address fine.
+      // Found via the new live domain check below never being reachable.
+      return _emailShapeRegex.hasMatch(value)
+          ? null
+          : 'Enter a valid school email address.';
     }
     final digits = value.replaceAll(RegExp(r'\D'), '');
     return digits.length >= 10 ? null : 'Enter a valid phone number.';
   }
 
+  /// Task 28: a runner's email is the real OTP contact now, same channel
+  /// a student uses — but runners are never campus-restricted (Task 26 is
+  /// students-only), so this is a plain shape check with no async
+  /// domain/campus lookup attached, unlike [_checkCampusDomain] below.
+  String? _validateRunnerEmail(String value) {
+    return _emailShapeRegex.hasMatch(value)
+        ? null
+        : 'Enter a valid email address.';
+  }
+
+  /// Task 27: real-time UX feedback only — only ever called once the email
+  /// already passes [_validateContact]'s shape check, so this never runs
+  /// on a still-incomplete domain. The real enforcement remains the
+  /// backend's 422 at OTP request time (Task 26), which this mirrors the
+  /// message of. A network hiccup here fails open (no red flash) rather
+  /// than blocking on a purely cosmetic check.
+  Future<String?> _checkCampusDomain(String value) async {
+    try {
+      final result = await ref.read(campusRepositoryProvider).checkEmail(value.trim());
+      return result.valid ? null : result.message;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _continue() async {
     final nameOk = _nameFieldKey.currentState?.validateNow() ?? false;
     final contactOk = _contactFieldKey.currentState?.validateNow() ?? false;
-    final campus = _campus;
-    setState(
-      () => _campusError = campus == null ? 'Choose your campus.' : null,
-    );
+    final runnerEmailOk = _isRunner
+        ? (_runnerEmailFieldKey.currentState?.validateNow() ?? false)
+        : true;
     if (!_agreedToTerms) {
       ref
           .read(appNotificationProvider.notifier)
           .warning('Please agree to the Terms and Privacy Policy to continue.');
     }
-    if (!nameOk || !contactOk || campus == null || !_agreedToTerms) return;
+    if (!nameOk || !contactOk || !runnerEmailOk || !_agreedToTerms) return;
+
+    final phoneDigits = '+234${_contactController.text.replaceAll(RegExp(r'\D'), '')}';
 
     final args = SignupArgs(
       name: _nameController.text.trim(),
+      // Task 28: a runner's real OTP contact is their email now, same
+      // channel a student uses — the phone field stays, but only as a
+      // separate `phone` value for admin dispute-resolution contact.
       contact: _isStudent
           ? _contactController.text.trim()
-          : '+234${_contactController.text.replaceAll(RegExp(r'\D'), '')}',
+          : _isRunner
+          ? _runnerEmailController.text.trim()
+          : phoneDigits,
       accountType: widget.accountType,
-      campus: campus,
       classOrGrade: _isStudent && _classController.text.trim().isNotEmpty
           ? _classController.text.trim()
           : null,
+      phone: _isRunner ? phoneDigits : null,
     );
 
     // Students land on a dedicated "verify your email" moment first — it
@@ -109,9 +166,30 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     }
 
     setState(() => _submitting = true);
-    await ref
-        .read(authControllerProvider.notifier)
-        .sendOtp(args.contact, accountType: args.accountType);
+    // Task 28: runner's OTP send now hits a real external API (Brevo) the
+    // same as a student's — previously this was effectively a local DB
+    // write for a runner (phone/log-based), so a failure here was
+    // unreachable in practice. Now it genuinely can fail, so this needs
+    // the same error handling verify_email_screen.dart already has for
+    // students, or a real send failure leaves the button stuck loading
+    // forever with no feedback.
+    try {
+      await ref
+          .read(authControllerProvider.notifier)
+          .sendOtp(args.contact, accountType: args.accountType);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ref.read(appNotificationProvider.notifier).error(e.message);
+      return;
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ref
+          .read(appNotificationProvider.notifier)
+          .error("Couldn't reach the server. Check your connection and try again.");
+      return;
+    }
     if (!mounted) return;
     setState(() => _submitting = false);
     context.push(AppRoutes.otp, extra: args);
@@ -215,6 +293,34 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
+                  // Task 28: a runner collects an email (the real OTP
+                  // contact now, same channel a student uses) *and* keeps
+                  // the phone field below — phone stays for admin
+                  // dispute-resolution contact, it's just no longer how
+                  // the code gets delivered. No campus/domain check here:
+                  // runners are never campus-restricted (Task 26 is
+                  // students-only), so this is a plain shape check same as
+                  // any normal email field.
+                  if (_isRunner) ...[
+                    staggered(
+                      ValidatedField(
+                        key: _runnerEmailFieldKey,
+                        controller: _runnerEmailController,
+                        hintText: 'Email address',
+                        keyboardType: TextInputType.emailAddress,
+                        prefixIcon: const Padding(
+                          padding: EdgeInsets.only(left: 20, right: 12),
+                          child: Icon(
+                            Icons.mail_rounded,
+                            size: 22,
+                            color: AppColors.primaryMaroon,
+                          ),
+                        ),
+                        validator: _validateRunnerEmail,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
                   staggered(
                     _isStudent
                         ? ValidatedField(
@@ -231,6 +337,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                               ),
                             ),
                             validator: _validateContact,
+                            asyncValidator: _checkCampusDomain,
                           )
                         : ValidatedField(
                             key: _contactFieldKey,
@@ -268,17 +375,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     ),
                     const SizedBox(height: AppSpacing.md),
                   ],
-                  staggered(
-                    CampusPickerField(
-                      selected: _campus,
-                      errorText: _campusError,
-                      onChanged: (campus) => setState(() {
-                        _campus = campus;
-                        _campusError = null;
-                      }),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
                   staggered(
                     GestureDetector(
                       onTap: () =>

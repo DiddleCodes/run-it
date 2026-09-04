@@ -79,12 +79,13 @@ class _SucceedingEscrowRepository extends EscrowRepository {
     required String orderId,
     required String studentUserId,
     required String restaurantUserId,
-    required String runnerUserId,
+    String? runnerUserId,
     required int grossAmountKobo,
     required String token,
     String? vendorId,
     List<EscrowOrderItem>? items,
     int? deliveryFeeKobo,
+    String? deliveryLocationLabel,
   }) async {}
 }
 
@@ -98,12 +99,13 @@ class _InsufficientBalanceEscrowRepository extends EscrowRepository {
     required String orderId,
     required String studentUserId,
     required String restaurantUserId,
-    required String runnerUserId,
+    String? runnerUserId,
     required int grossAmountKobo,
     required String token,
     String? vendorId,
     List<EscrowOrderItem>? items,
     int? deliveryFeeKobo,
+    String? deliveryLocationLabel,
   }) async {
     throw const ApiException(402, 'Insufficient wallet balance');
   }

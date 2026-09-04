@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:run_it/core/network/api_exception.dart';
+import 'package:run_it/core/network/campus_repository.dart';
 import 'package:run_it/core/network/vendors_repository.dart';
 import 'package:run_it/core/routing/app_router.dart';
 import 'package:run_it/core/widgets/segmented_progress_bar.dart';
@@ -22,6 +23,8 @@ import 'package:run_it/features/vendor/presentation/vendor_application_screen.da
 /// below. Starts as though no real vendor row exists yet (a fresh 404),
 /// exactly what a genuinely first-run restaurant would see.
 class _FakeMyVendorProfileController extends MyVendorProfileController {
+  String? lastRequestedCampusId;
+
   @override
   Future<MyVendorProfile> build() async {
     throw const ApiException(404, 'Create your vendor profile first via POST /vendors/me');
@@ -33,7 +36,9 @@ class _FakeMyVendorProfileController extends MyVendorProfileController {
     required String category,
     String? description,
     String? logoUrl,
+    String? requestedCampusId,
   }) async {
+    lastRequestedCampusId = requestedCampusId;
     final profile = MyVendorProfile(
       id: 'vendor-1',
       businessName: businessName,
@@ -127,6 +132,8 @@ void main() {
   });
 
   group('Vendor application wizard', () {
+    final fakeMyVendorProfileController = _FakeMyVendorProfileController();
+
     Widget buildApp() {
       final router = GoRouter(
         initialLocation: AppRoutes.vendorApplication,
@@ -148,7 +155,7 @@ void main() {
       return ProviderScope(
         overrides: [
           payoutControllerProvider.overrideWith(() => _FakePayoutController()),
-          myVendorProfileProvider.overrideWith(() => _FakeMyVendorProfileController()),
+          myVendorProfileProvider.overrideWith(() => fakeMyVendorProfileController),
           // Task 15: category is now a picker fetched from the backend's
           // controlled vocabulary, not a fixed local enum.
           vendorCategoriesProvider.overrideWith(
@@ -156,6 +163,11 @@ void main() {
               VendorCategoryOption(slug: 'nigerian', label: 'Nigerian'),
               VendorCategoryOption(slug: 'fast-food', label: 'Fast Food'),
             ],
+          ),
+          // Task 27: the campus picker now sources real backend campus
+          // data (GET /campuses) instead of a hardcoded local list.
+          campusesProvider.overrideWith(
+            (ref) async => const [CampusOption(id: 'campus-ui-test', name: 'University of Ibadan')],
           ),
         ],
         child: MaterialApp.router(routerConfig: router),
@@ -266,6 +278,9 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('RESTAURANT_ORDERS'), findsOneWidget);
+        // Task 27: the applicant's campus selection actually reaches the
+        // real POST /vendors/me call now — previously it never did.
+        expect(fakeMyVendorProfileController.lastRequestedCampusId, 'campus-ui-test');
       },
     );
   });

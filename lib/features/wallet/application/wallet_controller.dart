@@ -4,7 +4,8 @@ import '../../auth/application/auth_controller.dart';
 import '../data/wallet_repository.dart';
 import '../domain/wallet_models.dart';
 
-/// The signed-in student's real RUN-It Wallet balance (Task 8d) — backed by
+/// The signed-in user's real RUN-It Wallet balance (Task 8d; runner-usable
+/// since Task 33, once delivery earnings start crediting it) — backed by
 /// the Task 8b payments backend's ledger, not local mock state. `null`
 /// session (not yet signed in) resolves to 0 rather than an error; there's
 /// nothing to fetch yet.

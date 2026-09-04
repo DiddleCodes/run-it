@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -17,6 +18,11 @@ import 'signup_screen.dart';
 /// sends it on tap, rather than firing silently the instant the signup
 /// form is submitted. Runners skip this: their flow sends immediately and
 /// goes straight to [OtpScreen], unchanged.
+///
+/// Task 27: this screen only ever *displays* [widget.args.contact] — the
+/// student typed it back on [SignupScreen], which is where the real-time
+/// campus-domain check (`ValidatedField.asyncValidator`) actually lives.
+/// This screen has no editable field of its own to attach one to.
 class VerifyEmailScreen extends ConsumerStatefulWidget {
   const VerifyEmailScreen({super.key, required this.args});
   final SignupArgs args;
@@ -28,11 +34,31 @@ class VerifyEmailScreen extends ConsumerStatefulWidget {
 class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   bool _sending = false;
 
+  /// Task 26: this is where a real backend rejection actually surfaces —
+  /// an unrecognized school email domain now fails right here, at
+  /// requestOtp, before any code is ever sent. Previously unguarded
+  /// entirely (this screen assumed sendOtp always succeeded), which would
+  /// have left the button stuck loading forever on a real rejection
+  /// instead of showing the backend's own honest message.
   Future<void> _sendCode() async {
     setState(() => _sending = true);
-    await ref
-        .read(authControllerProvider.notifier)
-        .sendOtp(widget.args.contact, accountType: widget.args.accountType);
+    try {
+      await ref
+          .read(authControllerProvider.notifier)
+          .sendOtp(widget.args.contact, accountType: widget.args.accountType);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _sending = false);
+      ref.read(appNotificationProvider.notifier).error(e.message);
+      return;
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _sending = false);
+      ref
+          .read(appNotificationProvider.notifier)
+          .error("Couldn't reach the server. Check your connection and try again.");
+      return;
+    }
     if (!mounted) return;
     setState(() => _sending = false);
     ref
