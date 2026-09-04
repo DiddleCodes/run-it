@@ -1,13 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Column, DataTable } from "@/components/shared/data-table";
-import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Drawer, Modal } from "@/components/shared/modal";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { formatDateTime } from "@/lib/format";
 import { toast } from "@/lib/toast";
-import { AdminApiError, AdminVendorsResponse, AdminVendorDetail, AdminVendorSummary, VendorReviewStatus, adminClient } from "@/lib/api/admin-client";
+import { AdminApiError, AdminCampus, AdminVendorsResponse, AdminVendorDetail, AdminVendorSummary, VendorReviewStatus, adminClient } from "@/lib/api/admin-client";
 
 const TABS: { key: VendorReviewStatus | "all"; label: string }[] = [
   { key: "all", label: "All" },
@@ -23,14 +22,30 @@ export function VendorReviewBoard({ initialData }: { initialData: AdminVendorsRe
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminVendorDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [confirmApprove, setConfirmApprove] = useState<AdminVendorSummary | null>(null);
+  const [approveTarget, setApproveTarget] = useState<AdminVendorSummary | null>(null);
+  const [approveCampusId, setApproveCampusId] = useState("");
+  const [campuses, setCampuses] = useState<AdminCampus[]>([]);
   const [rejectTarget, setRejectTarget] = useState<AdminVendorSummary | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Effectively static real reference data — fetched once, same convention
+  // as the vendor-category vocabulary on the mobile side.
+  useEffect(() => {
+    adminClient.listCampuses().then(setCampuses).catch(() => {});
+  }, []);
+
   async function refresh() {
     const res = await adminClient.listVendors();
     setVendors(res.items);
+  }
+
+  // Task 27: opens the approve modal pre-filled with the applicant's own
+  // stated campus preference (if any) — the admin can still pick a
+  // different one, or none, before confirming.
+  function openApprove(vendor: AdminVendorSummary) {
+    setApproveTarget(vendor);
+    setApproveCampusId(vendor.requestedCampus?.id ?? "");
   }
 
   async function openDetail(vendor: AdminVendorSummary) {
@@ -46,10 +61,10 @@ export function VendorReviewBoard({ initialData }: { initialData: AdminVendorsRe
     }
   }
 
-  async function approve(vendor: AdminVendorSummary) {
+  async function approve(vendor: AdminVendorSummary, campusId: string) {
     setBusy(true);
     try {
-      await adminClient.approveVendor(vendor.id);
+      await adminClient.approveVendor(vendor.id, campusId || undefined);
       await refresh();
       if (selectedId === vendor.id) setDetail(await adminClient.getVendor(vendor.id));
       toast.success(`${vendor.businessName} approved`);
@@ -57,7 +72,7 @@ export function VendorReviewBoard({ initialData }: { initialData: AdminVendorsRe
       toast.error(err instanceof AdminApiError ? err.message : "Couldn't approve this vendor. Please try again.");
     } finally {
       setBusy(false);
-      setConfirmApprove(null);
+      setApproveTarget(null);
     }
   }
 
@@ -93,7 +108,7 @@ export function VendorReviewBoard({ initialData }: { initialData: AdminVendorsRe
         v.status === "pending" ? (
           <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
             <button
-              onClick={() => setConfirmApprove(v)}
+              onClick={() => openApprove(v)}
               className="px-3 py-1.5 rounded-lg bg-[var(--primary)] text-white text-xs font-medium hover:bg-[#5A0E25] transition-colors"
             >
               Approve
@@ -182,6 +197,11 @@ export function VendorReviewBoard({ initialData }: { initialData: AdminVendorsRe
             </div>
 
             <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] mb-1">Requested campus</p>
+              <p className="text-sm text-[var(--foreground)]">{detail.requestedCampus?.name ?? "Not stated"}</p>
+            </div>
+
+            <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] mb-1">Payout account</p>
               {detail.payoutAccount ? (
                 <>
@@ -205,7 +225,7 @@ export function VendorReviewBoard({ initialData }: { initialData: AdminVendorsRe
             {detail.status === "pending" && (
               <div className="flex gap-2">
                 <button
-                  onClick={() => setConfirmApprove(detail)}
+                  onClick={() => openApprove(detail)}
                   className="flex-1 py-2.5 rounded-lg bg-[var(--primary)] text-white font-medium hover:bg-[#5A0E25] transition-colors"
                 >
                   Approve
@@ -222,14 +242,45 @@ export function VendorReviewBoard({ initialData }: { initialData: AdminVendorsRe
         )}
       </Drawer>
 
-      <ConfirmDialog
-        open={!!confirmApprove}
-        onOpenChange={(open) => !open && setConfirmApprove(null)}
-        title="Approve this vendor?"
-        description={`${confirmApprove?.businessName ?? ""} will become visible to students and able to receive orders.`}
-        confirmLabel={busy ? "Approving…" : "Approve"}
-        onConfirm={() => confirmApprove && approve(confirmApprove)}
-      />
+      <Modal
+        open={!!approveTarget}
+        onOpenChange={(open) => !open && setApproveTarget(null)}
+        title={`Approve ${approveTarget?.businessName ?? ""}`}
+        footer={
+          <button
+            onClick={() => approveTarget && approve(approveTarget, approveCampusId)}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg bg-[var(--primary)] text-white text-sm font-medium hover:bg-[#5A0E25] transition-colors disabled:opacity-50"
+          >
+            {busy ? "Approving…" : "Approve"}
+          </button>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--muted-foreground)]">
+            {approveTarget?.businessName} will become visible to students and able to receive orders.
+          </p>
+          <div className="space-y-2">
+            <label htmlFor="approve-campus" className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+              Campus
+              {approveTarget?.requestedCampus && <span className="font-normal normal-case"> — requested: {approveTarget.requestedCampus.name}</span>}
+            </label>
+            <select
+              id="approve-campus"
+              value={approveCampusId}
+              onChange={(e) => setApproveCampusId(e.target.value)}
+              className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+            >
+              <option value="">No campus (assign later)</option>
+              {campuses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         open={!!rejectTarget}

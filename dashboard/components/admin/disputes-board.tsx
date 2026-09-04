@@ -188,11 +188,29 @@ export function DisputesBoard({ initialData }: { initialData: AdminDisputeSummar
               </div>
             </div>
 
-            {detail.order.deliveryProofUrl && (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] mb-2">Delivery proof</p>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={detail.order.deliveryProofUrl} alt="Delivery proof" className="w-full rounded-xl border border-[var(--border)]" />
+            {(detail.order.handoffPhotoUrl || detail.reporterPhotoUrl || detail.order.deliveryProofUrl) && (
+              <div className="grid grid-cols-1 gap-3">
+                {detail.reporterPhotoUrl && (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] mb-2">Photo from the student&rsquo;s report</p>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={detail.reporterPhotoUrl} alt="Student-submitted report photo" className="w-full rounded-xl border border-[var(--border)]" />
+                  </div>
+                )}
+                {detail.order.handoffPhotoUrl && (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] mb-2">Restaurant handoff photo</p>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={detail.order.handoffPhotoUrl} alt="Restaurant handoff photo" className="w-full rounded-xl border border-[var(--border)]" />
+                  </div>
+                )}
+                {detail.order.deliveryProofUrl && (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] mb-2">Delivery proof</p>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={detail.order.deliveryProofUrl} alt="Delivery proof" className="w-full rounded-xl border border-[var(--border)]" />
+                  </div>
+                )}
               </div>
             )}
 

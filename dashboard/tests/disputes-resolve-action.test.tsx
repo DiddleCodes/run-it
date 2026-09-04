@@ -12,6 +12,7 @@ const openDispute: AdminDisputeSummary = {
   orderId: "order-abc12345",
   status: "open",
   reason: "Delivery proof submitted — PIN verification unavailable",
+  reporterPhotoUrl: null,
   resolutionType: null,
   resolutionNote: null,
   resolvedBy: null,

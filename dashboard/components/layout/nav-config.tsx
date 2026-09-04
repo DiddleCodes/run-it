@@ -83,6 +83,17 @@ export const adminNav: NavItem[] = [
     ),
   },
   {
+    label: "Runner KYC",
+    href: "/admin/runner-kyc",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M3 14c0-2.76 2.24-5 5-5s5 2.24 5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <path d="M11.5 10.5l1.2 1.2 2.3-2.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  {
     label: "Disputes",
     href: "/admin/disputes",
     icon: (

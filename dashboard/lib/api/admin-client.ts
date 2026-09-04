@@ -43,6 +43,11 @@ export interface AdminPayoutAccount {
   accountName: string;
 }
 
+export interface AdminCampus {
+  id: string;
+  name: string;
+}
+
 export interface AdminVendorSummary {
   id: string;
   userId: string;
@@ -55,6 +60,9 @@ export interface AdminVendorSummary {
   createdAt: string;
   commissionRateOverride: number | null;
   user: { name: string | null; email: string | null; phone: string | null };
+  // Task 27: the applicant's own stated preference from the mobile wizard —
+  // informational only, pre-fills (never dictates) the campus picker below.
+  requestedCampus: AdminCampus | null;
 }
 
 export interface AdminVendorDetail extends AdminVendorSummary {
@@ -84,6 +92,10 @@ export interface AdminDisputeSummary {
   orderId: string;
   status: DisputeStatus;
   reason: string;
+  // Task 30: set when a student filed this via POST /orders/:orderId/report
+  // (their own optional photo evidence) — null for the auto-opened
+  // delivery-proof-unavailable path and any admin-manual open().
+  reporterPhotoUrl: string | null;
   resolutionType: DisputeResolutionType | null;
   resolutionNote: string | null;
   resolvedBy: string | null;
@@ -101,6 +113,9 @@ export interface AdminDisputeOrderItem {
 
 export interface AdminDisputeOrderDetail extends AdminDisputeOrderSummary {
   deliveryProofUrl: string | null;
+  // Task 30: the runner's required restaurant-handoff photo, captured at
+  // pickup-PIN verification — real for every order past `picked_up` now.
+  handoffPhotoUrl: string | null;
   vendor: { id: string; businessName: string };
   studentUser: { id: string; name: string | null; phone: string | null };
   runnerUser: { id: string; name: string | null; phone: string | null } | null;
@@ -166,6 +181,41 @@ export interface ReconciliationRun {
   triggeredBy: string | null;
 }
 
+// Task 29: mirrors VendorReviewStatus's own shape — see RunnerKycStatus on
+// the backend.
+export type RunnerKycReviewStatus = "pending" | "approved" | "rejected";
+export type RunnerKycRunnerType = "student_runner" | "independent_rider";
+export type RunnerKycIdType = "student_id" | "government_id";
+export type RunnerVehicleType = "bicycle" | "motorbike" | "keke";
+
+export interface AdminRunnerKycSummary {
+  id: string;
+  userId: string;
+  runnerType: RunnerKycRunnerType | null;
+  idType: RunnerKycIdType | null;
+  idPhotoUrl: string | null;
+  selfiePhotoUrl: string | null;
+  vehiclePhotoUrl: string | null;
+  vehicleType: RunnerVehicleType | null;
+  vehiclePlate: string | null;
+  status: RunnerKycReviewStatus;
+  rejectionReason: string | null;
+  submittedAt: string;
+  reviewedAt: string | null;
+  user: { name: string | null; email: string | null; phone: string | null };
+}
+
+export interface AdminRunnerKycDetail extends AdminRunnerKycSummary {
+  user: { name: string | null; email: string | null; phone: string | null; createdAt: string };
+}
+
+export interface AdminRunnerKycResponse {
+  items: AdminRunnerKycSummary[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export type AccountType = "student" | "runner" | "restaurant" | "admin";
 
 export interface AdminUserSummary {
@@ -200,9 +250,16 @@ export const adminClient = {
     return proxyFetch<AdminVendorsResponse>(`admin/vendors${qs ? `?${qs}` : ""}`);
   },
   getVendor: (id: string) => proxyFetch<AdminVendorDetail>(`admin/vendors/${id}`),
-  approveVendor: (id: string) => proxyFetch<AdminVendorDetail>(`admin/vendors/${id}/approve`, { method: "POST" }),
+  // Task 27: campusId is optional — omitting it approves with no campus
+  // assignment, same as before this task (the generic PATCH
+  // /admin/users/:id/campus route still covers assigning one later).
+  approveVendor: (id: string, campusId?: string) =>
+    proxyFetch<AdminVendorDetail>(`admin/vendors/${id}/approve`, { method: "POST", body: campusId ? { campusId } : undefined }),
   rejectVendor: (id: string, reason: string) =>
     proxyFetch<AdminVendorDetail>(`admin/vendors/${id}/reject`, { method: "POST", body: { reason } }),
+  // Public backend route, proxied like everything else so the dashboard
+  // never talks to BACKEND_URL directly (see route.ts's own doc comment).
+  listCampuses: () => proxyFetch<AdminCampus[]>("campuses"),
 
   listDisputes: (status?: DisputeStatus) =>
     proxyFetch<AdminDisputeSummary[]>(`admin/disputes${status ? `?status=${status}` : ""}`),
@@ -242,4 +299,17 @@ export const adminClient = {
   suspendUser: (id: string, reason: string) =>
     proxyFetch<AdminUserDetail>(`admin/users/${id}/suspend`, { method: "POST", body: { reason } }),
   reinstateUser: (id: string) => proxyFetch<AdminUserDetail>(`admin/users/${id}/reinstate`, { method: "POST" }),
+
+  listRunnerKyc: (params: { status?: RunnerKycReviewStatus; page?: number; limit?: number } = {}) => {
+    const search = new URLSearchParams();
+    if (params.status) search.set("status", params.status);
+    if (params.page) search.set("page", String(params.page));
+    if (params.limit) search.set("limit", String(params.limit));
+    const qs = search.toString();
+    return proxyFetch<AdminRunnerKycResponse>(`admin/runner-kyc${qs ? `?${qs}` : ""}`);
+  },
+  getRunnerKyc: (id: string) => proxyFetch<AdminRunnerKycDetail>(`admin/runner-kyc/${id}`),
+  approveRunnerKyc: (id: string) => proxyFetch<AdminRunnerKycDetail>(`admin/runner-kyc/${id}/approve`, { method: "POST" }),
+  rejectRunnerKyc: (id: string, reason: string) =>
+    proxyFetch<AdminRunnerKycDetail>(`admin/runner-kyc/${id}/reject`, { method: "POST", body: { reason } }),
 };
