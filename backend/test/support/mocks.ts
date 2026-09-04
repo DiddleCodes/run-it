@@ -13,6 +13,12 @@ export function createPrismaMock() {
       create: jest.fn(),
       update: jest.fn(),
     },
+    refreshToken: {
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
     otpVerification: {
       findFirst: jest.fn(),
       create: jest.fn(),
@@ -52,6 +58,14 @@ export function createPrismaMock() {
       create: jest.fn(),
       update: jest.fn(),
       updateMany: jest.fn(),
+      upsert: jest.fn(),
+      count: jest.fn().mockResolvedValue(0),
+    },
+    runnerKyc: {
+      findUnique: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+      create: jest.fn(),
+      update: jest.fn(),
       upsert: jest.fn(),
       count: jest.fn().mockResolvedValue(0),
     },
@@ -170,5 +184,27 @@ export function createMatchingServiceMock() {
   return {
     broadcastNewJob: jest.fn().mockResolvedValue(undefined),
     cancelPendingJobs: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
+// Task 31: AlertsService.send is deliberately never-throwing in the real
+// implementation too — this mock mirrors that rather than needing every
+// caller test to await/handle it.
+export function createAlertsMock() {
+  return {
+    send: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
+// Task 32: WalletService.initiateWithdrawal calls back into
+// WebhooksService.applyVerifiedTransferResult for the synchronous-failure
+// reversal — same shared idempotent path a delayed webhook/reconciliation
+// call uses (see that method's own doc comment) — so callers just need
+// something to call it on, not the real DB-mutating implementation.
+export function createWebhooksServiceMock() {
+  return {
+    applyVerifiedChargeSuccess: jest.fn().mockResolvedValue(undefined),
+    markChargeFailed: jest.fn().mockResolvedValue(undefined),
+    applyVerifiedTransferResult: jest.fn().mockResolvedValue(undefined),
   };
 }

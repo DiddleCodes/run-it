@@ -19,11 +19,25 @@ describe('PayoutAccountsService.create', () => {
     await expect(service.create(dto)).rejects.toThrow(NotFoundException);
   });
 
-  it('rejects students — only restaurants and runners can register payout details', async () => {
+  it('rejects account types with no payout-account use case (e.g. admin)', async () => {
     const { service, prisma } = makeService();
-    prisma.user.findUnique.mockResolvedValue({ id: 'u1', accountType: 'student' });
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', accountType: 'admin' });
 
     await expect(service.create(dto)).rejects.toThrow(BadRequestException);
+  });
+
+  // Task 32: students can now register a payout account, to receive wallet
+  // withdrawals — same resolve-then-save flow, just a different reason.
+  it('allows students — needed for wallet withdrawals', async () => {
+    const { service, prisma, paystack } = makeService();
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1', accountType: 'student' });
+    paystack.resolveAccount.mockResolvedValue({ accountNumber: '0123456789', accountName: 'Student Name' });
+    paystack.createTransferRecipient.mockResolvedValue({ recipientCode: 'RCP_student' });
+    prisma.payoutAccount.upsert.mockImplementation(({ create }: any) => Promise.resolve({ id: 'pa1', ...create }));
+
+    const result = await service.create(dto);
+
+    expect(result.paystackRecipientCode).toBe('RCP_student');
   });
 
   it('rejects and never saves anything when Paystack cannot verify the account', async () => {

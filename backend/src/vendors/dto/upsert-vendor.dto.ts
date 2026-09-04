@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { IsOptional, IsString, IsUrl, IsUUID, MaxLength } from 'class-validator';
 
 export class UpsertVendorDto {
   @IsString()
@@ -17,4 +17,13 @@ export class UpsertVendorDto {
   @IsOptional()
   @IsUrl()
   logoUrl?: string;
+
+  // Task 27: the applicant's own stated campus preference from the
+  // application wizard — informational only (see Vendor.requestedCampusId's
+  // doc comment). Omitted entirely on a later profile edit (the Restaurant
+  // Dashboard's own "edit business info" reuses this same endpoint) leaves
+  // whatever was captured at first submission untouched.
+  @IsOptional()
+  @IsUUID()
+  requestedCampusId?: string;
 }

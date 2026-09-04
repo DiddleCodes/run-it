@@ -25,7 +25,8 @@ function makeRealService(prisma: PrismaClient) {
   const config = { get: jest.fn() };
   const notifications = { emit: jest.fn() };
   const matching = { broadcastNewJob: jest.fn(), cancelPendingJobs: jest.fn().mockResolvedValue(undefined) };
-  return new OrderEscrowService(prisma as any, paystack as any, config as any, notifications as any, matching as any);
+  const alerts = { send: jest.fn().mockResolvedValue(undefined) };
+  return new OrderEscrowService(prisma as any, paystack as any, config as any, notifications as any, matching as any, alerts as any);
 }
 
 describeIfDb('OrderEscrowService.claim — real concurrent claim race', () => {
@@ -50,6 +51,14 @@ describeIfDb('OrderEscrowService.claim — real concurrent claim race', () => {
       prisma.user.create({ data: { id: vendorUserId, email: `t21a-vendor-${vendorUserId}@test.internal`, accountType: 'restaurant' } }),
       prisma.user.create({ data: { id: runnerAId, phone: `+234700${runnerAId.slice(0, 7)}`, accountType: 'runner' } }),
       prisma.user.create({ data: { id: runnerBId, phone: `+234700${runnerBId.slice(0, 7)}`, accountType: 'runner' } }),
+    ]);
+
+    // Task 29: claim() hard-gates on an approved RunnerKyc row — both
+    // runners need one or every claim below rejects on the gate itself,
+    // never reaching the race this test actually proves.
+    await Promise.all([
+      prisma.runnerKyc.create({ data: { userId: runnerAId, status: 'approved' } }),
+      prisma.runnerKyc.create({ data: { userId: runnerBId, status: 'approved' } }),
     ]);
 
     const [wallet, vendor] = await Promise.all([
@@ -96,6 +105,7 @@ describeIfDb('OrderEscrowService.claim — real concurrent claim race', () => {
     await prisma.order.delete({ where: { id: orderId } });
     await prisma.wallet.delete({ where: { id: walletId } });
     await prisma.vendor.delete({ where: { id: vendorId } });
+    await prisma.runnerKyc.deleteMany({ where: { userId: { in: [runnerAId, runnerBId] } } });
     await prisma.user.deleteMany({ where: { id: { in: [studentId, vendorUserId, runnerAId, runnerBId] } } });
     await prisma.$disconnect();
   });

@@ -40,6 +40,8 @@
     "@nestjs/throttler": "^5.2.0",
     "@nestjs/websockets": "10.4.22",
     "@prisma/client": "^5.22.0",
+    "@sentry/nestjs": "^10.73.0",
+    "@sentry/node": "^10.73.0",
     "@types/bcrypt": "^6.0.0",
     "axios": "^1.7.9",
     "bcrypt": "^6.0.0",

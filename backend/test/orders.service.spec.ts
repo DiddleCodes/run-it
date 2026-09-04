@@ -21,24 +21,29 @@ const baseOrder = {
   runnerUserId: 'runner-1',
 };
 
+const HANDOFF_PHOTO_URL = 'https://cdn.example.com/handoff/test.jpg';
+
 describe('OrdersService.verifyPickup', () => {
   it('rejects a mismatched pickup code and never advances status', async () => {
     const { service, prisma } = makeService();
     prisma.order.findUnique.mockResolvedValue({ ...baseOrder });
 
-    await expect(service.verifyPickup('order-1', '0000')).rejects.toThrow(BadRequestException);
+    await expect(service.verifyPickup('order-1', '0000', HANDOFF_PHOTO_URL)).rejects.toThrow(BadRequestException);
     expect(prisma.order.update).not.toHaveBeenCalled();
   });
 
-  it('advances to picked_up on a matching code', async () => {
+  it('advances to picked_up on a matching code, persisting the required handoff photo', async () => {
     const { service, prisma, redis } = makeService();
     prisma.order.findUnique.mockResolvedValue({ ...baseOrder });
-    prisma.order.update.mockResolvedValue({ ...baseOrder, status: 'picked_up' });
+    prisma.order.update.mockResolvedValue({ ...baseOrder, status: 'picked_up', handoffPhotoUrl: HANDOFF_PHOTO_URL });
 
-    const result = await service.verifyPickup('order-1', '1234');
+    const result = await service.verifyPickup('order-1', '1234', HANDOFF_PHOTO_URL);
 
     expect(result).toEqual({ status: 'picked_up' });
-    expect(prisma.order.update).toHaveBeenCalledWith({ where: { id: 'order-1' }, data: { status: 'picked_up' } });
+    expect(prisma.order.update).toHaveBeenCalledWith({
+      where: { id: 'order-1' },
+      data: { status: 'picked_up', handoffPhotoUrl: HANDOFF_PHOTO_URL },
+    });
     expect(redis.del).toHaveBeenCalled();
   });
 
@@ -46,7 +51,7 @@ describe('OrdersService.verifyPickup', () => {
     const { service, prisma } = makeService();
     prisma.order.findUnique.mockResolvedValue({ ...baseOrder, status: 'picked_up' });
 
-    const result = await service.verifyPickup('order-1', '1234');
+    const result = await service.verifyPickup('order-1', '1234', HANDOFF_PHOTO_URL);
 
     expect(result).toEqual({ status: 'picked_up' });
     expect(prisma.order.update).not.toHaveBeenCalled();
@@ -56,14 +61,14 @@ describe('OrdersService.verifyPickup', () => {
     const { service, prisma } = makeService();
     prisma.order.findUnique.mockResolvedValue({ ...baseOrder, status: 'cancelled' });
 
-    await expect(service.verifyPickup('order-1', '1234')).rejects.toThrow(ConflictException);
+    await expect(service.verifyPickup('order-1', '1234', HANDOFF_PHOTO_URL)).rejects.toThrow(ConflictException);
   });
 
   it('rejects pickup verification before the vendor marks the order ready (Task 12)', async () => {
     const { service, prisma } = makeService();
     prisma.order.findUnique.mockResolvedValue({ ...baseOrder, status: 'preparing' });
 
-    await expect(service.verifyPickup('order-1', '1234')).rejects.toThrow(ConflictException);
+    await expect(service.verifyPickup('order-1', '1234', HANDOFF_PHOTO_URL)).rejects.toThrow(ConflictException);
     expect(prisma.order.update).not.toHaveBeenCalled();
   });
 
@@ -76,10 +81,10 @@ describe('OrdersService.verifyPickup', () => {
     redis.incr.mockImplementation(async () => ++attempts);
 
     for (let i = 0; i < 5; i++) {
-      await expect(service.verifyPickup('order-1', '0000')).rejects.toThrow(BadRequestException);
+      await expect(service.verifyPickup('order-1', '0000', HANDOFF_PHOTO_URL)).rejects.toThrow(BadRequestException);
     }
-    await expect(service.verifyPickup('order-1', '0000')).rejects.toThrow(HttpException);
-    await expect(service.verifyPickup('order-1', '0000')).rejects.toMatchObject({ status: 429 });
+    await expect(service.verifyPickup('order-1', '0000', HANDOFF_PHOTO_URL)).rejects.toThrow(HttpException);
+    await expect(service.verifyPickup('order-1', '0000', HANDOFF_PHOTO_URL)).rejects.toMatchObject({ status: 429 });
   });
 });
 
@@ -216,5 +221,71 @@ describe('OrdersService.getOrderForViewer', () => {
     await expect(
       service.getOrderForViewer('order-1', { sub: 'stranger-1', role: 'user' }),
     ).rejects.toThrow(ForbiddenException);
+  });
+});
+
+// Task 30: the real student-facing "report a problem" entry point.
+describe('OrdersService.reportProblem', () => {
+  it('creates a real Dispute for the ordering student, with the reason and optional photo', async () => {
+    const { service, prisma } = makeService();
+    prisma.order.findUnique.mockResolvedValue({ ...baseOrder });
+    prisma.dispute.findUnique.mockResolvedValue(null);
+    prisma.dispute.create.mockResolvedValue({ id: 'dispute-1', orderId: 'order-1', status: 'open' });
+
+    await service.reportProblem('order-1', 'student-1', {
+      reason: 'My food arrived cold and half-eaten.',
+      photoUrl: 'https://cdn.example.com/dispute-report/test.jpg',
+    });
+
+    expect(prisma.dispute.create).toHaveBeenCalledWith({
+      data: {
+        orderId: 'order-1',
+        reason: 'My food arrived cold and half-eaten.',
+        reporterPhotoUrl: 'https://cdn.example.com/dispute-report/test.jpg',
+      },
+    });
+  });
+
+  it('works with no photo at all — it is optional', async () => {
+    const { service, prisma } = makeService();
+    prisma.order.findUnique.mockResolvedValue({ ...baseOrder });
+    prisma.dispute.findUnique.mockResolvedValue(null);
+    prisma.dispute.create.mockResolvedValue({ id: 'dispute-1', orderId: 'order-1', status: 'open' });
+
+    await service.reportProblem('order-1', 'student-1', { reason: 'Missing an item from my order.' });
+
+    expect(prisma.dispute.create).toHaveBeenCalledWith({
+      data: { orderId: 'order-1', reason: 'Missing an item from my order.', reporterPhotoUrl: undefined },
+    });
+  });
+
+  it('rejects a caller who is not the ordering student — scoped to their own order only', async () => {
+    const { service, prisma } = makeService();
+    prisma.order.findUnique.mockResolvedValue({ ...baseOrder });
+
+    await expect(
+      service.reportProblem('order-1', 'a-different-student', { reason: 'Not my order' }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.dispute.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a second report when a dispute already exists for this order', async () => {
+    const { service, prisma } = makeService();
+    prisma.order.findUnique.mockResolvedValue({ ...baseOrder });
+    prisma.dispute.findUnique.mockResolvedValue({ id: 'dispute-1', orderId: 'order-1' });
+
+    await expect(
+      service.reportProblem('order-1', 'student-1', { reason: 'Second report' }),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.dispute.create).not.toHaveBeenCalled();
+  });
+
+  it('throws when the order does not exist', async () => {
+    const { service, prisma } = makeService();
+    prisma.order.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.reportProblem('missing-order', 'student-1', { reason: 'x' }),
+    ).rejects.toThrow(NotFoundException);
   });
 });

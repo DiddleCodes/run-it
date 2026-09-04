@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AccountType } from '@prisma/client';
+import { CampusService } from '../../campus/campus.service';
 import { NotificationsEmitterService } from '../../notifications/notifications-emitter.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AdminAuditLogService } from '../admin-audit-log.service';
@@ -16,6 +17,7 @@ const USER_SELECT = {
   accountType: true,
   suspendedAt: true,
   createdAt: true,
+  campusId: true,
 } as const;
 
 @Injectable()
@@ -24,6 +26,7 @@ export class AdminUsersService {
     private readonly prisma: PrismaService,
     private readonly auditLog: AdminAuditLogService,
     private readonly notifications: NotificationsEmitterService,
+    private readonly campus: CampusService,
   ) {}
 
   async list(query: ListAdminUsersQueryDto) {
@@ -87,6 +90,18 @@ export class AdminUsersService {
         await tx.vendor.updateMany({ where: { userId: user.id }, data: { status: 'inactive' } });
       }
 
+      // Task 34: revoke every live refresh token this user holds.
+      // AuthService.refresh already re-checks suspendedAt directly on
+      // every call, so this isn't the only thing standing between a
+      // suspended user and a fresh access token — but it closes the token
+      // itself immediately rather than leaving a live, merely-unusable
+      // credential lying around, same defense-in-depth spirit as
+      // JwtStrategy's own per-request suspension check (Task 17).
+      await tx.refreshToken.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+
       await this.auditLog.record(
         { actorId: adminUserId, action: 'user.suspend', targetType: 'user', targetId: user.id, reason },
         tx,
@@ -126,6 +141,35 @@ export class AdminUsersService {
       title: 'Account reinstated',
       body: 'Your account has been reinstated. You can now log in again.',
       data: { userId: user.id },
+    });
+
+    return updated;
+  }
+
+  // Task 26: the actual admin-assignment mechanism for a restaurant or
+  // runner's campus — there was no runner onboarding/KYC-review flow of
+  // any shape in this backend to hang this off of (see the Task 26
+  // investigation report), so this lives on the one admin surface that
+  // already manages every account type generically. Deliberately not
+  // restricted to restaurant/runner accountType: a student's campus is
+  // normally derived, never picked, but an admin overriding a
+  // mis-derived one (e.g. a school that later gets a second valid email
+  // domain added) is a legitimate support action, not a bypass of the
+  // signup-time enforcement itself.
+  async assignCampus(adminUserId: string, id: string, campusId: string) {
+    const user = await this.requireUser(id);
+    if (user.accountType === 'admin') {
+      throw new BadRequestException('Admin accounts are never campus-scoped');
+    }
+    await this.campus.requireById(campusId);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({ where: { id: user.id }, data: { campusId }, select: USER_SELECT });
+      await this.auditLog.record(
+        { actorId: adminUserId, action: 'user.assign_campus', targetType: 'user', targetId: user.id, reason: campusId },
+        tx,
+      );
+      return updated;
     });
 
     return updated;

@@ -8,17 +8,18 @@ import { JwtPayload } from '../auth/jwt-payload.interface';
 export interface NewJobBroadcast {
   orderId: string;
   vendorId: string;
+  campusId: string | null;
 }
 
-// Task 21a: a runner has no notion of campus server-side yet (nothing in
-// this backend persists one — see Task 21's investigation report), and
-// campus enforcement is explicitly out of scope for this task. Every
-// connected, available runner joins this single pool for now, regardless
-// of campus. Swapping this for real per-campus rooms (`campus:<id>`) later
-// only touches this constant and handleConnection's room-join call — the
-// broadcast/claim logic elsewhere doesn't know or care about room
-// granularity.
-const RUNNER_POOL_ROOM = 'runners:online';
+// Task 26: real per-campus rooms — replaces the single shared
+// `runners:online` pool Task 21a's report anticipated swapping out ("a
+// one-line swap", confirmed true: this constant plus the two call sites
+// below were the whole change). A runner with no assigned campus yet joins
+// no room at all (see handleConnection) rather than some fallback shared
+// room, so they simply receive nothing until an admin assigns one —
+// consistent with MatchingService.listAvailable's same null-campus ->
+// empty default.
+const campusRoom = (campusId: string): string => `runners:campus:${campusId}`;
 
 /**
  * Task 21a: the live channel a runner's app connects to for new-job
@@ -63,7 +64,11 @@ export class RunnerDispatchGateway implements OnGatewayConnection, OnGatewayDisc
         return;
       }
 
-      await client.join(RUNNER_POOL_ROOM);
+      if (payload.campusId) {
+        await client.join(campusRoom(payload.campusId));
+      } else {
+        this.logger.warn(`Runner ${payload.sub} connected to dispatch with no assigned campus — will receive no broadcasts`);
+      }
       client.emit('connected', {});
       this.logger.log(`Runner ${payload.sub} connected to dispatch (socket ${client.id})`);
     } catch {
@@ -77,6 +82,10 @@ export class RunnerDispatchGateway implements OnGatewayConnection, OnGatewayDisc
   }
 
   broadcastNewJob(job: NewJobBroadcast): void {
-    this.server.to(RUNNER_POOL_ROOM).emit('new_job_available', job);
+    if (!job.campusId) {
+      this.logger.warn(`broadcastNewJob for order ${job.orderId} skipped — vendor has no assigned campus`);
+      return;
+    }
+    this.server.to(campusRoom(job.campusId)).emit('new_job_available', job);
   }
 }

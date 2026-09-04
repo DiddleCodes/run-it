@@ -1,10 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { JwtPayload } from '../auth/jwt-payload.interface';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { EscrowParty, EscrowPartyGuard } from '../common/guards/escrow-party.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { DeliveryProofDto } from './dto/delivery-proof.dto';
+import { ReportProblemDto } from './dto/report-problem.dto';
 import { VerifyCodeDto } from './dto/verify-code.dto';
+import { VerifyPickupDto } from './dto/verify-pickup.dto';
 import { OrdersService } from './orders.service';
 
 @Controller('orders/:orderId')
@@ -24,11 +26,13 @@ export class OrdersController {
   // The runner's own scan/entry of the vendor-shown pickup code — same
   // identity boundary as escrow release (EscrowPartyGuard, 'runner'): only
   // the runner actually assigned to this order's escrow may call it.
+  // Task 30: also where the required handoff photo is registered — see
+  // VerifyPickupDto/Order.handoffPhotoUrl's own doc comments.
   @Post('verify-pickup')
   @UseGuards(EscrowPartyGuard)
   @EscrowParty('runner')
-  verifyPickup(@Param('orderId') orderId: string, @Body() dto: VerifyCodeDto) {
-    return this.orders.verifyPickup(orderId, dto.code);
+  verifyPickup(@Param('orderId') orderId: string, @Body() dto: VerifyPickupDto) {
+    return this.orders.verifyPickup(orderId, dto.code, dto.handoffPhotoUrl);
   }
 
   // The runner's own scan/entry of the student-shown delivery PIN — this
@@ -47,5 +51,20 @@ export class OrdersController {
   @EscrowParty('runner')
   submitDeliveryProof(@Param('orderId') orderId: string, @Body() dto: DeliveryProofDto) {
     return this.orders.submitDeliveryProof(orderId, dto);
+  }
+
+  // Task 30: the real student-facing "report a problem" entry point —
+  // plain JwtAuthGuard (not EscrowPartyGuard/AdminGuard) since the
+  // authorization check here is simpler than either: just "is this JWT's
+  // subject the student who placed this exact order," enforced inside
+  // OrdersService.reportProblem itself, same style as
+  // getOrderForViewer's own inline per-viewer checks.
+  @Post('report')
+  @UseGuards(JwtAuthGuard)
+  report(@Param('orderId') orderId: string, @CurrentUser() user: JwtPayload, @Body() dto: ReportProblemDto) {
+    if (user.accountType && user.accountType !== 'student') {
+      throw new ForbiddenException('Only the ordering student may report a problem with this order');
+    }
+    return this.orders.reportProblem(orderId, user.sub, dto);
   }
 }

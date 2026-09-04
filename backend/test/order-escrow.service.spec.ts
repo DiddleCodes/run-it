@@ -1,7 +1,15 @@
-import { ConflictException, ForbiddenException, HttpException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  ConflictException,
+  ForbiddenException,
+  HttpException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { OrderEscrowService } from '../src/order-escrow/order-escrow.service';
 import {
+  createAlertsMock,
   createConfigMock,
   createMatchingServiceMock,
   createNotificationsEmitterMock,
@@ -21,8 +29,9 @@ function makeService() {
   const config = createConfigMock(ESCROW_CONFIG);
   const notifications = createNotificationsEmitterMock();
   const matching = createMatchingServiceMock();
-  const service = new OrderEscrowService(prisma as any, paystack as any, config as any, notifications as any, matching as any);
-  return { service, prisma, paystack, config, notifications, matching };
+  const alerts = createAlertsMock();
+  const service = new OrderEscrowService(prisma as any, paystack as any, config as any, notifications as any, matching as any, alerts as any);
+  return { service, prisma, paystack, config, notifications, matching, alerts };
 }
 
 describe('OrderEscrowService.hold', () => {
@@ -282,6 +291,13 @@ describe('OrderEscrowService.claim', () => {
   const unclaimedEscrow = { id: 'esc1', orderId: 'order-1', runnerUserId: null };
   const runner = { sub: 'runner-1', accountType: 'runner' as const, role: 'user' as const };
 
+  // Every test below the KYC-gating group is exercising claim() *after*
+  // that gate — approved is the default so those tests keep testing what
+  // they were written to test, not re-litigating the gate itself.
+  function approveKyc(prisma: ReturnType<typeof createPrismaMock>) {
+    prisma.runnerKyc.findUnique.mockResolvedValue({ status: 'approved' });
+  }
+
   it('rejects a non-runner account', async () => {
     const { service, prisma } = makeService();
     prisma.orderEscrow.findUnique.mockResolvedValue(unclaimedEscrow);
@@ -291,8 +307,49 @@ describe('OrderEscrowService.claim', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
+  // Task 29: the real, backend-enforced hard gate — see
+  // OrderEscrowService.claim's own doc comment on why this is a fresh DB
+  // read rather than trusting a claim embedded in the JWT.
+  describe('KYC gating', () => {
+    it('rejects a runner who has never submitted KYC (no RunnerKyc row)', async () => {
+      const { service, prisma } = makeService();
+      prisma.runnerKyc.findUnique.mockResolvedValue(null);
+
+      await expect(service.claim('order-1', runner)).rejects.toThrow(ForbiddenException);
+      // Never even looks at the order/escrow — the gate runs first.
+      expect(prisma.orderEscrow.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('rejects a runner whose KYC is still pending review', async () => {
+      const { service, prisma } = makeService();
+      prisma.runnerKyc.findUnique.mockResolvedValue({ status: 'pending' });
+
+      await expect(service.claim('order-1', runner)).rejects.toThrow(ForbiddenException);
+      expect(prisma.orderEscrow.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('rejects a runner whose KYC was rejected', async () => {
+      const { service, prisma } = makeService();
+      prisma.runnerKyc.findUnique.mockResolvedValue({ status: 'rejected' });
+
+      await expect(service.claim('order-1', runner)).rejects.toThrow(ForbiddenException);
+      expect(prisma.orderEscrow.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('allows a runner whose KYC is approved through to the normal claim flow', async () => {
+      const { service, prisma } = makeService();
+      approveKyc(prisma);
+      prisma.orderEscrow.findUnique.mockResolvedValue({ ...unclaimedEscrow, runnerUserId: 'runner-1' });
+
+      const result = await service.claim('order-1', runner);
+
+      expect(result.runnerUserId).toBe('runner-1');
+    });
+  });
+
   it('throws if the escrow does not exist', async () => {
     const { service, prisma } = makeService();
+    approveKyc(prisma);
     prisma.orderEscrow.findUnique.mockResolvedValue(null);
 
     await expect(service.claim('order-x', runner)).rejects.toThrow(NotFoundException);
@@ -300,6 +357,7 @@ describe('OrderEscrowService.claim', () => {
 
   it("is idempotent for the same runner's own already-successful claim", async () => {
     const { service, prisma } = makeService();
+    approveKyc(prisma);
     const alreadyMine = { ...unclaimedEscrow, runnerUserId: 'runner-1' };
     prisma.orderEscrow.findUnique.mockResolvedValue(alreadyMine);
 
@@ -311,6 +369,7 @@ describe('OrderEscrowService.claim', () => {
 
   it('rejects claiming an order that is not in a claimable status', async () => {
     const { service, prisma } = makeService();
+    approveKyc(prisma);
     prisma.orderEscrow.findUnique.mockResolvedValue(unclaimedEscrow);
     prisma.order.findUniqueOrThrow.mockResolvedValue({ id: 'order-1', status: 'placed' });
 
@@ -320,6 +379,7 @@ describe('OrderEscrowService.claim', () => {
 
   it('claims an unclaimed order: sets both Order and OrderEscrow runnerUserId, cancels pending matching jobs', async () => {
     const { service, prisma, matching } = makeService();
+    approveKyc(prisma);
     prisma.orderEscrow.findUnique
       .mockResolvedValueOnce(unclaimedEscrow) // initial lookup
       .mockResolvedValueOnce({ ...unclaimedEscrow, runnerUserId: 'runner-1' }); // re-fetch after claim
@@ -343,6 +403,7 @@ describe('OrderEscrowService.claim', () => {
 
   it('returns a distinct ORDER_ALREADY_CLAIMED conflict when the conditional update affects zero rows', async () => {
     const { service, prisma, matching } = makeService();
+    approveKyc(prisma);
     prisma.orderEscrow.findUnique.mockResolvedValue(unclaimedEscrow);
     prisma.order.findUniqueOrThrow.mockResolvedValue({ id: 'order-1', status: 'preparing' });
     // Simulates losing the race: another runner's claim committed first,
@@ -397,21 +458,33 @@ describe('OrderEscrowService.release', () => {
     await expect(service.release('order-1')).rejects.toThrow(UnprocessableEntityException);
   });
 
-  it('rejects when the restaurant or runner has no payout account on file', async () => {
+  it('rejects when the restaurant has no payout account on file', async () => {
     const { service, prisma } = makeService();
     prisma.orderEscrow.findUnique.mockResolvedValue({ ...heldEscrow });
-    prisma.payoutAccount.findUnique.mockResolvedValueOnce(null); // restaurant
-    prisma.payoutAccount.findUnique.mockResolvedValueOnce({ paystackRecipientCode: 'RCP_runner' }); // runner
+    prisma.payoutAccount.findUnique.mockResolvedValue(null);
+    prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-run1', userId: 'run1', balance: 0 });
 
     await expect(service.release('order-1')).rejects.toThrow(UnprocessableEntityException);
   });
 
-  it('transfers the exact restaurant and runner shares and marks the escrow released', async () => {
+  // Task 33: a runner's earnings now land in a wallet, not a bank transfer
+  // — a missing Wallet row (should never happen post-backfill/signup
+  // provisioning) is the new failure mode replacing the old "no payout
+  // account" check for this leg.
+  it('rejects when the runner has no wallet on file', async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue({ ...heldEscrow });
+    prisma.payoutAccount.findUnique.mockResolvedValue({ paystackRecipientCode: 'RCP_restaurant' });
+    prisma.wallet.findUnique.mockResolvedValue(null);
+
+    await expect(service.release('order-1')).rejects.toThrow(UnprocessableEntityException);
+  });
+
+  it('transfers the restaurant share via Paystack and credits the runner share to their wallet, marking the escrow released', async () => {
     const { service, prisma, paystack } = makeService();
     prisma.orderEscrow.findUnique.mockResolvedValue({ ...heldEscrow });
-    prisma.payoutAccount.findUnique
-      .mockResolvedValueOnce({ paystackRecipientCode: 'RCP_restaurant' })
-      .mockResolvedValueOnce({ paystackRecipientCode: 'RCP_runner' });
+    prisma.payoutAccount.findUnique.mockResolvedValue({ paystackRecipientCode: 'RCP_restaurant' });
+    prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-run1', userId: 'run1', balance: 0 });
     paystack.initiateTransfer.mockResolvedValue({ reference: 'ref', transferCode: 'TRF_x', status: 'pending' });
 
     let escrowState = { ...heldEscrow };
@@ -419,16 +492,37 @@ describe('OrderEscrowService.release', () => {
       escrowState = { ...escrowState, ...data };
       return Promise.resolve(escrowState);
     });
+    prisma.orderEscrow.updateMany.mockImplementation(({ data }: any) => {
+      escrowState = { ...escrowState, ...data };
+      return Promise.resolve({ count: 1 });
+    });
+    prisma.orderEscrow.findUniqueOrThrow.mockImplementation(() => Promise.resolve(escrowState));
 
     const result = await service.release('order-1');
 
+    // The restaurant leg is completely untouched — still a real Paystack
+    // transfer, still the only leg that ever calls it.
     expect(paystack.initiateTransfer).toHaveBeenCalledWith(
       expect.objectContaining({ amountKobo: 7_000, recipientCode: 'RCP_restaurant', reference: 'escrow_esc1_restaurant' }),
     );
-    expect(paystack.initiateTransfer).toHaveBeenCalledWith(
-      expect.objectContaining({ amountKobo: 1_500, recipientCode: 'RCP_runner', reference: 'escrow_esc1_runner' }),
-    );
-    expect(paystack.initiateTransfer).toHaveBeenCalledTimes(2);
+    expect(paystack.initiateTransfer).toHaveBeenCalledTimes(1);
+
+    // The runner leg is a wallet credit instead — no Paystack call at all.
+    expect(prisma.wallet.update).toHaveBeenCalledWith({
+      where: { id: 'wallet-run1' },
+      data: { balance: { increment: 1_500 } },
+    });
+    expect(prisma.walletTransaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        walletId: 'wallet-run1',
+        type: 'credit',
+        amount: 1_500,
+        reference: 'escrow_esc1_runner_wallet_credit',
+        status: 'success',
+        metadata: expect.objectContaining({ orderId: 'order-1', purpose: 'runner_delivery_earnings' }),
+      }),
+    });
+
     expect(result.status).toBe('released');
     expect(prisma.order.updateMany).toHaveBeenCalledWith({
       where: { id: 'order-1' },
@@ -436,22 +530,101 @@ describe('OrderEscrowService.release', () => {
     });
   });
 
-  it('does not re-transfer a leg that already has a recorded reference (safe retry)', async () => {
+  it('does not re-transfer the restaurant leg if already initiated, but still credits the runner leg (safe partial retry)', async () => {
     const { service, prisma, paystack } = makeService();
     prisma.orderEscrow.findUnique.mockResolvedValue({
       ...heldEscrow,
       restaurantTransferReference: 'escrow_esc1_restaurant', // already initiated
     });
-    prisma.payoutAccount.findUnique
-      .mockResolvedValueOnce({ paystackRecipientCode: 'RCP_restaurant' })
-      .mockResolvedValueOnce({ paystackRecipientCode: 'RCP_runner' });
-    paystack.initiateTransfer.mockResolvedValue({ reference: 'ref', transferCode: 'TRF_x', status: 'pending' });
-    prisma.orderEscrow.update.mockImplementation(({ data }: any) => Promise.resolve({ ...heldEscrow, ...data }));
+    prisma.payoutAccount.findUnique.mockResolvedValue({ paystackRecipientCode: 'RCP_restaurant' });
+    prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-run1', userId: 'run1', balance: 0 });
+
+    let escrowState = { ...heldEscrow, restaurantTransferReference: 'escrow_esc1_restaurant' };
+    prisma.orderEscrow.update.mockImplementation(({ data }: any) => {
+      escrowState = { ...escrowState, ...data };
+      return Promise.resolve(escrowState);
+    });
+    prisma.orderEscrow.updateMany.mockImplementation(({ data }: any) => {
+      escrowState = { ...escrowState, ...data };
+      return Promise.resolve({ count: 1 });
+    });
+    prisma.orderEscrow.findUniqueOrThrow.mockImplementation(() => Promise.resolve(escrowState));
 
     await service.release('order-1');
 
-    expect(paystack.initiateTransfer).toHaveBeenCalledTimes(1);
-    expect(paystack.initiateTransfer).toHaveBeenCalledWith(expect.objectContaining({ recipientCode: 'RCP_runner' }));
+    expect(paystack.initiateTransfer).not.toHaveBeenCalled();
+    expect(prisma.wallet.update).toHaveBeenCalledWith({
+      where: { id: 'wallet-run1' },
+      data: { balance: { increment: 1_500 } },
+    });
+  });
+
+  // Task 33's own retry-safety requirement: release() called again for an
+  // order whose runner leg already settled must not double-credit — the
+  // conditional `updateMany` guard (`runnerTransferReference: null`) is
+  // what makes this safe, mirroring the same shape claim() uses for the
+  // runner-assignment race.
+  it('does not double-credit the runner wallet on a full retry after both legs already settled', async () => {
+    const { service, prisma, paystack } = makeService();
+    const alreadyReleased = {
+      ...heldEscrow,
+      restaurantTransferReference: 'escrow_esc1_restaurant',
+      runnerTransferReference: 'escrow_esc1_runner_wallet_credit',
+    };
+    prisma.orderEscrow.findUnique.mockResolvedValue(alreadyReleased);
+    prisma.payoutAccount.findUnique.mockResolvedValue({ paystackRecipientCode: 'RCP_restaurant' });
+    prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-run1', userId: 'run1', balance: 1_500 });
+    prisma.orderEscrow.update.mockImplementation(({ data }: any) => Promise.resolve({ ...alreadyReleased, ...data }));
+
+    const result = await service.release('order-1');
+
+    expect(paystack.initiateTransfer).not.toHaveBeenCalled();
+    expect(prisma.wallet.update).not.toHaveBeenCalled();
+    expect(prisma.walletTransaction.create).not.toHaveBeenCalled();
+    expect(prisma.orderEscrow.updateMany).not.toHaveBeenCalled();
+    expect(result.status).toBe('released');
+  });
+
+  // Task 31: a transfer-initiation failure is real money stuck mid-payout
+  // — previously logged only. Confirms the real-time alert now fires
+  // (Sentry capture is exercised the same way but isn't observable through
+  // this mock; see the live-proof evidence in the Task 31 report instead).
+  it('alerts on a restaurant transfer failure instead of only logging it', async () => {
+    const { service, prisma, paystack, alerts } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue({ ...heldEscrow });
+    prisma.payoutAccount.findUnique.mockResolvedValue({ paystackRecipientCode: 'RCP_restaurant' });
+    prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-run1', userId: 'run1', balance: 0 });
+    prisma.orderEscrow.updateMany.mockResolvedValue({ count: 1 });
+    prisma.orderEscrow.findUniqueOrThrow.mockResolvedValue({ ...heldEscrow, runnerTransferReference: 'escrow_esc1_runner_wallet_credit' });
+    paystack.initiateTransfer.mockRejectedValue(new Error('Paystack transfer API timed out'));
+
+    await expect(service.release('order-1')).rejects.toThrow(BadGatewayException);
+
+    expect(alerts.send).toHaveBeenCalledWith(
+      'Restaurant payout transfer failed to initiate for order order-1',
+      expect.objectContaining({ orderId: 'order-1', leg: 'restaurant' }),
+    );
+  });
+
+  // Task 33: the runner leg's new failure mode is a DB error inside the
+  // wallet-credit transaction, not a Paystack rejection — same alert
+  // channel, different trigger.
+  it('alerts on a runner wallet-credit failure instead of only logging it', async () => {
+    const { service, prisma, paystack, alerts } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue({ ...heldEscrow });
+    prisma.payoutAccount.findUnique.mockResolvedValue({ paystackRecipientCode: 'RCP_restaurant' });
+    prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-run1', userId: 'run1', balance: 0 });
+    prisma.orderEscrow.update.mockImplementation(({ data }: any) => Promise.resolve({ ...heldEscrow, ...data }));
+    prisma.orderEscrow.updateMany.mockResolvedValue({ count: 1 });
+    paystack.initiateTransfer.mockResolvedValue({ reference: 'ref', transferCode: 'TRF_x', status: 'pending' });
+    prisma.wallet.update.mockRejectedValue(new Error('DB connection lost'));
+
+    await expect(service.release('order-1')).rejects.toThrow(BadGatewayException);
+
+    expect(alerts.send).toHaveBeenCalledWith(
+      'Runner wallet credit failed for order order-1',
+      expect.objectContaining({ orderId: 'order-1', leg: 'runner', error: 'DB connection lost' }),
+    );
   });
 });
 

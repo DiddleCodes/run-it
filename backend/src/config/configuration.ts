@@ -33,6 +33,13 @@ export default () => ({
     expiresIn: process.env.JWT_EXPIRES_IN ?? '1d',
   },
 
+  // The web dashboard's own public URL — distinct from DASHBOARD_ORIGIN
+  // (that one's CORS-specific, checked against the request's Origin
+  // header). Used only to build absolute links in outbound emails (e.g.
+  // password reset), which need a real, browsable URL rather than a bare
+  // path.
+  dashboardUrl: process.env.DASHBOARD_URL ?? 'http://localhost:3001',
+
   escrow: {
     // 0-1, applied to the food subtotal only — never the delivery fee.
     restaurantCommissionRate: Number(process.env.RESTAURANT_COMMISSION_RATE ?? 0.15),

@@ -1,3 +1,8 @@
+// Task 31: must be the very first import in the entire process — Sentry's
+// NestJS instrumentation patches Node's module loader, so anything
+// imported above this line would be invisible to it. See instrument.ts.
+import './instrument';
+
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';

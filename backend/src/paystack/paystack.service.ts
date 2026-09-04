@@ -1,5 +1,6 @@
 import { BadGatewayException, Injectable, Logger, UnprocessableEntityException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as Sentry from '@sentry/nestjs';
 import axios, { AxiosInstance, isAxiosError } from 'axios';
 import { createHmac, timingSafeEqual } from 'crypto';
 import {
@@ -197,6 +198,21 @@ export class PaystackService {
       if (isAxiosError(err)) {
         this.logger.error(`Paystack ${method.toUpperCase()} ${url} failed: ${JSON.stringify(err.response?.data ?? err.message)}`);
       }
+      // Task 31: every caller below rethrows a generic BadGatewayException
+      // (never the original error), which is what a client and Sentry's
+      // global filter would otherwise see — losing the actual Paystack
+      // failure reason. Captured explicitly here instead, with only the
+      // method/path/status (no request/response body — that can carry bank
+      // account details or the Paystack secret key never belongs in an
+      // error tracker either way).
+      Sentry.captureException(err, {
+        tags: { integration: 'paystack' },
+        extra: {
+          method,
+          url,
+          status: isAxiosError(err) ? err.response?.status : undefined,
+        },
+      });
       throw new BadGatewayException('Paystack request failed');
     }
   }

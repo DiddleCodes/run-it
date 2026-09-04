@@ -8,6 +8,7 @@ import { AuthService } from './auth.service';
 import { DevTokenDto } from './dev-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RequestOtpDto } from './dto/request-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -67,7 +68,26 @@ export class AuthController {
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('otp/verify')
   verifyOtp(@Body() dto: VerifyOtpDto) {
-    return this.auth.verifyOtp(dto.contact, dto.code, dto.accountType, dto.name);
+    return this.auth.verifyOtp(dto.contact, dto.code, dto.accountType, dto.name, dto.phone);
+  }
+
+  // Task 34: exchanges a still-valid refresh token for a fresh access
+  // token (and, via rotation, a fresh refresh token) — what
+  // AuthController.handleUnauthorized (Flutter) calls silently before
+  // ever forcing a full re-OTP.
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Post('refresh')
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.auth.refresh(dto.refreshToken);
+  }
+
+  // Task 34: server-side revocation — the refresh token this device was
+  // holding can never be replayed again after this, unlike a client-only
+  // "forget the token locally" logout.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('logout')
+  logout(@Body() dto: RefreshTokenDto) {
+    return this.auth.logout(dto.refreshToken);
   }
 
   @UseGuards(JwtAuthGuard)

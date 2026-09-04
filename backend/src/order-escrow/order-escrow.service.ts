@@ -11,6 +11,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OrderEscrow, OrderStatus, Prisma } from '@prisma/client';
+import * as Sentry from '@sentry/nestjs';
+import { AlertsService } from '../alerts/alerts.service';
 import { JwtPayload } from '../auth/jwt-payload.interface';
 import { MatchingService } from '../matching/matching.service';
 import { NotificationsEmitterService } from '../notifications/notifications-emitter.service';
@@ -37,6 +39,7 @@ export class OrderEscrowService {
     private readonly config: ConfigService,
     private readonly notifications: NotificationsEmitterService,
     private readonly matching: MatchingService,
+    private readonly alerts: AlertsService,
   ) {}
 
   async hold(orderId: string, dto: HoldEscrowDto): Promise<OrderEscrow> {
@@ -186,6 +189,18 @@ export class OrderEscrowService {
       throw new ForbiddenException('Only runner accounts can claim orders');
     }
 
+    // Task 29: the real, hard enforcement point — a fresh DB read (not a
+    // claim embedded in `runner`'s JWT) so this can never be bypassed by a
+    // stale token minted before approval, and a runner approved mid-session
+    // doesn't need to log out/in again to start claiming. Absence of a row
+    // (never submitted) and any non-'approved' status are both blocked —
+    // see RunnerKycService.submit's own doc comment for why there's no
+    // separate "unsubmitted" enum value to check against instead.
+    const kyc = await this.prisma.runnerKyc.findUnique({ where: { userId: runner.sub } });
+    if (kyc?.status !== 'approved') {
+      throw new ForbiddenException('Your identity verification must be approved before you can claim orders');
+    }
+
     const escrow = await this.findByOrderId(orderId);
 
     // Idempotent: the same runner's own retried claim (e.g. after a
@@ -248,16 +263,24 @@ export class OrderEscrowService {
       throw new UnprocessableEntityException(`Order ${orderId} has no runner attached — cannot release runner payout`);
     }
 
-    const [restaurantPayout, runnerPayout] = await Promise.all([
+    const [restaurantPayout, runnerWallet] = await Promise.all([
       this.prisma.payoutAccount.findUnique({ where: { userId: escrow.restaurantUserId } }),
-      this.prisma.payoutAccount.findUnique({ where: { userId: escrow.runnerUserId } }),
+      this.prisma.wallet.findUnique({ where: { userId: escrow.runnerUserId } }),
     ]);
     if (!restaurantPayout) throw new UnprocessableEntityException('Restaurant has no payout account on file');
-    if (!runnerPayout) throw new UnprocessableEntityException('Runner has no payout account on file');
+    // Task 33: runner earnings now land in their in-app wallet balance
+    // instead of a direct Paystack transfer — a runner no longer needs a
+    // payout account on file to get paid, only to later withdraw (Task
+    // 32's wallet-withdraw flow, reused unchanged). Every runner gets a
+    // Wallet row at signup now (backfilled for pre-Task-33 accounts by
+    // migration 20260903223224_backfill_runner_wallets), so a missing one
+    // here means that provisioning step was skipped, not a normal
+    // "hasn't set up payout details yet" state.
+    if (!runnerWallet) throw new UnprocessableEntityException('Runner has no wallet on file');
 
-    // Each leg only transfers if it hasn't already been initiated, so a
-    // retry after a partial failure never double-pays a leg that already
-    // went out.
+    // Each leg only transfers/credits if it hasn't already been initiated,
+    // so a retry after a partial failure never double-pays a leg that
+    // already went out.
     let transferFailure: Error | undefined;
 
     if (!escrow.restaurantTransferReference) {
@@ -275,25 +298,69 @@ export class OrderEscrowService {
         });
       } catch (err) {
         this.logger.error(`Restaurant transfer failed for order ${orderId}: ${(err as Error).message}`);
+        // Task 31: this leg's failure was previously logged only —
+        // release() below throws a single generic BadGatewayException
+        // covering either/both legs, so without capturing here the actual
+        // per-leg error (and which leg) is lost by the time anything else
+        // sees it. This is real money stuck mid-payout; both channels
+        // matter — Sentry for the stack trace, Slack for "someone needs to
+        // look at this now".
+        Sentry.captureException(err, { tags: { integration: 'paystack', leg: 'restaurant' }, extra: { orderId } });
+        void this.alerts.send(`Restaurant payout transfer failed to initiate for order ${orderId}`, {
+          orderId,
+          leg: 'restaurant',
+          error: (err as Error).message,
+        });
         transferFailure = err as Error;
       }
     }
 
     if (!escrow.runnerTransferReference) {
+      // Task 33: a wallet credit, not a transfer — settles synchronously
+      // (status 'success' immediately, no webhook/reconciliation needed,
+      // unlike a Paystack leg). The conditional `updateMany` below is the
+      // idempotency guard: it only succeeds (count===1) the first time
+      // this leg is ever settled, so a release() retried after the
+      // restaurant leg's own partial failure (Task 25's proven
+      // safe-failure shape) can never double-credit, and two genuinely
+      // concurrent release() calls for the same order can't either — same
+      // conditional-update race-closing shape claim() uses for
+      // runner-assignment, just guarding a wallet increment here instead.
+      const reference = `escrow_${escrow.id}_runner_wallet_credit`;
       try {
-        const reference = `escrow_${escrow.id}_runner`;
-        await this.paystack.initiateTransfer({
-          amountKobo: escrow.runnerShare,
-          recipientCode: runnerPayout.paystackRecipientCode,
-          reference,
-          reason: `RUN-It order ${orderId} — runner payout`,
+        await this.prisma.$transaction(async (tx) => {
+          const marked = await tx.orderEscrow.updateMany({
+            where: { id: escrow.id, runnerTransferReference: null },
+            data: { runnerTransferReference: reference, runnerTransferStatus: 'success' },
+          });
+          if (marked.count === 0) return;
+
+          await tx.wallet.update({
+            where: { id: runnerWallet.id },
+            data: { balance: { increment: escrow.runnerShare } },
+          });
+          await tx.walletTransaction.create({
+            data: {
+              walletId: runnerWallet.id,
+              type: 'credit',
+              amount: escrow.runnerShare,
+              reference,
+              status: 'success',
+              metadata: { orderId, purpose: 'runner_delivery_earnings' },
+            },
+          });
         });
-        escrow = await this.prisma.orderEscrow.update({
-          where: { id: escrow.id },
-          data: { runnerTransferReference: reference, runnerTransferStatus: 'pending' },
-        });
+        escrow = await this.prisma.orderEscrow.findUniqueOrThrow({ where: { id: escrow.id } });
       } catch (err) {
-        this.logger.error(`Runner transfer failed for order ${orderId}: ${(err as Error).message}`);
+        this.logger.error(`Runner wallet credit failed for order ${orderId}: ${(err as Error).message}`);
+        // Task 31's same "real user money" alert channel, applied to this
+        // leg's new failure mode (a DB error, not a Paystack rejection).
+        Sentry.captureException(err, { tags: { integration: 'wallet', leg: 'runner' }, extra: { orderId } });
+        void this.alerts.send(`Runner wallet credit failed for order ${orderId}`, {
+          orderId,
+          leg: 'runner',
+          error: (err as Error).message,
+        });
         transferFailure = err as Error;
       }
     }

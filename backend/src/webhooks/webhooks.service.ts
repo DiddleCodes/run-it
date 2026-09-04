@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { WalletTransaction } from '@prisma/client';
 import { PaystackChargeSuccessEvent, PaystackTransferEvent, PaystackWebhookEvent } from '../paystack/paystack.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -123,25 +124,66 @@ export class WebhooksService {
   // ReconciliationService's verify-transfer call. Atomic per-leg
   // pending -> success/failed transition, same idempotency guarantee as
   // applyVerifiedChargeSuccess.
+  //
+  // Task 32: a transfer reference now means one of two things — an escrow
+  // payout leg (restaurant/runner earnings, checked first since that's the
+  // original/more common case) or a wallet withdrawal
+  // (WalletService.initiateWithdrawal). Same webhook event type either
+  // way; this is the one place both get resolved from.
   async applyVerifiedTransferResult(reference: string, legStatus: TransferLegResult): Promise<void> {
     const escrow = await this.prisma.orderEscrow.findFirst({
       where: { OR: [{ restaurantTransferReference: reference }, { runnerTransferReference: reference }] },
     });
-    if (!escrow) {
-      this.logger.warn(`Transfer result for unknown reference ${reference}`);
+
+    if (escrow) {
+      if (escrow.restaurantTransferReference === reference) {
+        await this.prisma.orderEscrow.updateMany({
+          where: { id: escrow.id, restaurantTransferStatus: 'pending' },
+          data: { restaurantTransferStatus: legStatus },
+        });
+      } else if (escrow.runnerTransferReference === reference) {
+        await this.prisma.orderEscrow.updateMany({
+          where: { id: escrow.id, runnerTransferStatus: 'pending' },
+          data: { runnerTransferStatus: legStatus },
+        });
+      }
       return;
     }
 
-    if (escrow.restaurantTransferReference === reference) {
-      await this.prisma.orderEscrow.updateMany({
-        where: { id: escrow.id, restaurantTransferStatus: 'pending' },
-        data: { restaurantTransferStatus: legStatus },
-      });
-    } else if (escrow.runnerTransferReference === reference) {
-      await this.prisma.orderEscrow.updateMany({
-        where: { id: escrow.id, runnerTransferStatus: 'pending' },
-        data: { runnerTransferStatus: legStatus },
-      });
+    const walletTransaction = await this.prisma.walletTransaction.findUnique({ where: { reference } });
+    if (!walletTransaction) {
+      this.logger.warn(`Transfer result for unknown reference ${reference}`);
+      return;
     }
+    await this.applyVerifiedWithdrawalResult(walletTransaction, legStatus);
+  }
+
+  // Withdrawal transfers are the only debit-type WalletTransaction ever
+  // created `pending` (an escrow_hold debit is created `success`
+  // immediately — see OrderEscrowService.hold) — the balance was already
+  // taken off the wallet synchronously at withdrawal-request time
+  // (WalletService.initiateWithdrawal), so a `success` result here just
+  // marks the ledger row complete; `failed` must give the money back, or
+  // it's gone even though Paystack never sent it anywhere. Same
+  // conditional-transition idempotency as applyVerifiedChargeSuccess: a
+  // second call for an already-resolved reference is a no-op.
+  private async applyVerifiedWithdrawalResult(
+    walletTransaction: WalletTransaction,
+    legStatus: TransferLegResult,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const transitioned = await tx.walletTransaction.updateMany({
+        where: { id: walletTransaction.id, status: 'pending' },
+        data: { status: legStatus },
+      });
+      if (transitioned.count === 0) return;
+
+      if (legStatus === 'failed') {
+        await tx.wallet.update({
+          where: { id: walletTransaction.walletId },
+          data: { balance: { increment: walletTransaction.amount } },
+        });
+      }
+    });
   }
 }

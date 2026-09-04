@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/co
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { SelfOrAdminGuard } from '../common/guards/self-or-admin.guard';
 import { FundWalletDto } from './dto/fund-wallet.dto';
+import { WithdrawWalletDto } from './dto/withdraw-wallet.dto';
 import { WalletService } from './wallet.service';
 
 @Controller()
@@ -12,6 +13,11 @@ export class WalletController {
   @Post('wallet/fund/initialize')
   initializeFunding(@Body() dto: FundWalletDto) {
     return this.wallet.initializeFunding(dto);
+  }
+
+  @Post('wallet/withdraw/initiate')
+  initiateWithdrawal(@Body() dto: WithdrawWalletDto) {
+    return this.wallet.initiateWithdrawal(dto);
   }
 
   @Get('wallet/:userId/balance')

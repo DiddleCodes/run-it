@@ -30,12 +30,22 @@ function makeService() {
 
 const MINUTES_AGO = (n: number) => new Date(Date.now() - n * 60_000);
 
+// Task 32: walletTransaction.findMany is now called twice per sweep — once
+// scoped to `type: 'credit'` (wallet_transactions/top-ups) and once to
+// `type: 'debit'` (wallet withdrawals, see the describe block below) — so
+// a test proving one path needs the *other* path to see an empty result,
+// exactly as real Postgres would filter it, not the same fixture row
+// twice over.
+function mockCreditRow(prisma: ReturnType<typeof createPrismaMock>, row: unknown) {
+  prisma.walletTransaction.findMany.mockImplementation(({ where }: any) =>
+    Promise.resolve(where?.type === 'credit' ? [row] : []),
+  );
+}
+
 describe('ReconciliationService — stale wallet_transactions', () => {
   it('resolves a manually-inserted stale-pending row that actually succeeded on Paystack', async () => {
     const { service, prisma, paystack, webhooks, alerts } = makeService();
-    prisma.walletTransaction.findMany.mockResolvedValue([
-      { id: 'wt-stale-1', reference: 'wallet_fund_stale', amount: 5_000, status: 'pending', createdAt: MINUTES_AGO(15) },
-    ]);
+    mockCreditRow(prisma, { id: 'wt-stale-1', reference: 'wallet_fund_stale', amount: 5_000, status: 'pending', createdAt: MINUTES_AGO(15) });
     prisma.orderEscrow.findMany.mockResolvedValue([]);
     paystack.verifyTransaction.mockResolvedValue({ status: 'success', amount: 5_000 });
 
@@ -50,9 +60,7 @@ describe('ReconciliationService — stale wallet_transactions', () => {
 
   it('marks a stale row failed and alerts when Paystack reports it as failed/abandoned', async () => {
     const { service, prisma, paystack, webhooks, alerts } = makeService();
-    prisma.walletTransaction.findMany.mockResolvedValue([
-      { id: 'wt-stale-2', reference: 'wallet_fund_stale2', amount: 5_000, status: 'pending', createdAt: MINUTES_AGO(20) },
-    ]);
+    mockCreditRow(prisma, { id: 'wt-stale-2', reference: 'wallet_fund_stale2', amount: 5_000, status: 'pending', createdAt: MINUTES_AGO(20) });
     prisma.orderEscrow.findMany.mockResolvedValue([]);
     paystack.verifyTransaction.mockResolvedValue({ status: 'abandoned', amount: 5_000 });
 
@@ -64,9 +72,7 @@ describe('ReconciliationService — stale wallet_transactions', () => {
 
   it('alerts (without applying anything) when the transaction is still genuinely pending on Paystack', async () => {
     const { service, prisma, paystack, webhooks, alerts } = makeService();
-    prisma.walletTransaction.findMany.mockResolvedValue([
-      { id: 'wt-stale-3', reference: 'wallet_fund_stale3', amount: 5_000, status: 'pending', createdAt: MINUTES_AGO(30) },
-    ]);
+    mockCreditRow(prisma, { id: 'wt-stale-3', reference: 'wallet_fund_stale3', amount: 5_000, status: 'pending', createdAt: MINUTES_AGO(30) });
     prisma.orderEscrow.findMany.mockResolvedValue([]);
     paystack.verifyTransaction.mockResolvedValue({ status: 'pending', amount: 5_000 });
 
@@ -79,9 +85,7 @@ describe('ReconciliationService — stale wallet_transactions', () => {
 
   it('alerts (does not crash the sweep) when the Paystack verify call itself fails', async () => {
     const { service, prisma, paystack, alerts } = makeService();
-    prisma.walletTransaction.findMany.mockResolvedValue([
-      { id: 'wt-stale-4', reference: 'wallet_fund_stale4', amount: 5_000, status: 'pending', createdAt: MINUTES_AGO(15) },
-    ]);
+    mockCreditRow(prisma, { id: 'wt-stale-4', reference: 'wallet_fund_stale4', amount: 5_000, status: 'pending', createdAt: MINUTES_AGO(15) });
     prisma.orderEscrow.findMany.mockResolvedValue([]);
     paystack.verifyTransaction.mockRejectedValue(new Error('Paystack unreachable'));
 
@@ -102,8 +106,70 @@ describe('ReconciliationService — stale wallet_transactions', () => {
     await service.runReconciliation();
 
     const callArgs = prisma.walletTransaction.findMany.mock.calls[0][0];
+    expect(callArgs.where.type).toBe('credit');
     expect(callArgs.where.status).toBe('pending');
     expect(callArgs.where.createdAt.lt.getTime()).toBeLessThanOrEqual(Date.now() - 10 * 60_000 + 1000);
+  });
+});
+
+// Task 32: the withdrawal counterpart — same shape as the escrow-leg sweep
+// below, applied to WalletService.initiateWithdrawal's transfers instead.
+function mockDebitRow(prisma: ReturnType<typeof createPrismaMock>, row: unknown) {
+  prisma.walletTransaction.findMany.mockImplementation(({ where }: any) =>
+    Promise.resolve(where?.type === 'debit' ? [row] : []),
+  );
+}
+
+describe('ReconciliationService — stale wallet withdrawals', () => {
+  it('resolves a stuck withdrawal that succeeded on Paystack', async () => {
+    const { service, prisma, paystack, webhooks, alerts } = makeService();
+    mockDebitRow(prisma, { id: 'wt-wd-1', reference: 'wallet_withdraw_stale', amount: 5_000, status: 'pending', createdAt: MINUTES_AGO(15) });
+    prisma.orderEscrow.findMany.mockResolvedValue([]);
+    paystack.verifyTransferStatus.mockResolvedValue({ status: 'success' });
+
+    const result = await service.runReconciliation();
+
+    expect(paystack.verifyTransferStatus).toHaveBeenCalledWith('wallet_withdraw_stale');
+    expect(webhooks.applyVerifiedTransferResult).toHaveBeenCalledWith('wallet_withdraw_stale', 'success');
+    expect(alerts.send).not.toHaveBeenCalled();
+    expect(result.transferLegsChecked).toBe(1);
+  });
+
+  it('resolves and alerts on a withdrawal that reverses/fails on Paystack — the money must come back', async () => {
+    const { service, prisma, paystack, webhooks, alerts } = makeService();
+    mockDebitRow(prisma, { id: 'wt-wd-2', reference: 'wallet_withdraw_stale2', amount: 5_000, status: 'pending', createdAt: MINUTES_AGO(20) });
+    prisma.orderEscrow.findMany.mockResolvedValue([]);
+    paystack.verifyTransferStatus.mockResolvedValue({ status: 'reversed' });
+
+    await service.runReconciliation();
+
+    expect(webhooks.applyVerifiedTransferResult).toHaveBeenCalledWith('wallet_withdraw_stale2', 'failed');
+    expect(alerts.send).toHaveBeenCalledWith(expect.stringContaining('reversed'), expect.any(Object));
+  });
+
+  it('alerts (without applying anything) when the withdrawal is still genuinely pending on Paystack', async () => {
+    const { service, prisma, paystack, webhooks, alerts } = makeService();
+    mockDebitRow(prisma, { id: 'wt-wd-3', reference: 'wallet_withdraw_stale3', amount: 5_000, status: 'pending', createdAt: MINUTES_AGO(30) });
+    prisma.orderEscrow.findMany.mockResolvedValue([]);
+    paystack.verifyTransferStatus.mockResolvedValue({ status: 'pending' });
+
+    await service.runReconciliation();
+
+    expect(webhooks.applyVerifiedTransferResult).not.toHaveBeenCalled();
+    expect(alerts.send).toHaveBeenCalledWith(expect.stringContaining('still pending'), expect.any(Object));
+  });
+
+  it('alerts (does not crash the sweep) when the Paystack verify-transfer call itself fails', async () => {
+    const { service, prisma, paystack, alerts } = makeService();
+    mockDebitRow(prisma, { id: 'wt-wd-4', reference: 'wallet_withdraw_stale4', amount: 5_000, status: 'pending', createdAt: MINUTES_AGO(15) });
+    prisma.orderEscrow.findMany.mockResolvedValue([]);
+    paystack.verifyTransferStatus.mockRejectedValue(new Error('Paystack unreachable'));
+
+    await expect(service.runReconciliation()).resolves.toBeDefined();
+    expect(alerts.send).toHaveBeenCalledWith(
+      expect.stringContaining('failed to verify wallet withdrawal'),
+      expect.objectContaining({ error: 'Paystack unreachable' }),
+    );
   });
 });
 

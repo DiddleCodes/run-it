@@ -60,6 +60,40 @@ enum VendorStatus {
   inactive
 }
 
+// Task 29: manual-review status for a runner's identity/vehicle KYC —
+// deliberately the same three-state shape as the admin decision on a
+// Vendor, minus `inactive` (there's no equivalent "deactivated" runner
+// state yet). `RunnerKyc` has no row at all until a runner's first
+// submission — that "not submitted" state is absence, not a fourth enum
+// value, mirroring how a fresh User has no Vendor row either.
+enum RunnerKycStatus {
+  pending
+  approved
+  rejected
+}
+
+// Which KYC flow the runner went through — a student runner (light KYC,
+// no vehicle) vs. an independent rider (full KYC, vehicle required). See
+// KycCaptureScreen's own doc comment on the Flutter side for why this
+// changes which fields below are required.
+enum RunnerKycRunnerType {
+  student_runner
+  independent_rider
+}
+
+// Which kind of photo ID was captured — informational for the reviewing
+// admin, not itself a validation rule.
+enum RunnerKycIdType {
+  student_id
+  government_id
+}
+
+enum RunnerVehicleType {
+  bicycle
+  motorbike
+  keke
+}
+
 enum DisputeStatus {
   open
   resolved
@@ -87,6 +121,25 @@ enum OrderStatus {
   cancelled
 }
 
+// Task 26: a real school, not a hardcoded single-campus assumption —
+// everywhere order routing needs to respect campus (restaurant visibility,
+// runner-dispatch broadcasting) joins through User.campusId back to this.
+// `allowedEmailDomains` is a list, not a single string, since a school can
+// plausibly issue email under more than one domain (e.g. a student portal
+// domain alongside the institution's main one) — CampusService.resolveByEmail
+// matches a signup email's domain against every campus's list.
+model Campus {
+  id                 String   @id @default(uuid())
+  name               String
+  allowedEmailDomains String[] @map("allowed_email_domains")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  users            User[]
+  requestedByVendors Vendor[] @relation("VendorRequestedCampus")
+
+  @@map("campuses")
+}
+
 model User {
   id            String      @id @default(uuid())
   email         String?     @unique
@@ -107,14 +160,29 @@ model User {
   createdAt     DateTime    @default(now()) @map("created_at")
 
   // Task 13c: admin suspend/reinstate. Null = active. Enforced at login
-  // (AuthService) — there's no session store to revoke an already-issued
-  // JWT, so this blocks the *next* login, not an active session.
+  // (AuthService), per-request for an already-issued access token
+  // (JwtStrategy.validate -> assertUserNotSuspended, Task 17), and — since
+  // Task 34 — by revoking every stored RefreshToken below, so a suspended
+  // user can't mint a fresh access token via /auth/refresh either.
   suspendedAt DateTime? @map("suspended_at")
+
+  // Task 26: nullable so the migration doesn't break any existing row —
+  // backfilled for every pre-existing user rather than left null (see that
+  // migration's data step). For a student, set exactly once, derived from
+  // their verified email domain at signup (CampusService.resolveByEmail)
+  // and never user-editable from then on. For a restaurant/runner, set by
+  // an admin (AdminUsersService.assignCampus, or at vendor-approval time) —
+  // there is no self-declared path for either. Admin accounts never get one
+  // — nothing about an admin is campus-scoped.
+  campusId String? @map("campus_id")
+  campus   Campus? @relation(fields: [campusId], references: [id])
 
   wallet              Wallet?
   payoutAccount       PayoutAccount?
   vendor              Vendor?
+  runnerKyc           RunnerKyc?
   passwordResetTokens PasswordResetToken[]
+  refreshTokens       RefreshToken[]
 
   studentOrders   Order[]        @relation("StudentOrders")
   runnerOrders    Order[]        @relation("RunnerOrders")
@@ -143,6 +211,33 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
+// Task 34: the mobile OTP flow's real, revocable, rotating refresh token —
+// issued alongside a short-lived (1h) access token at
+// AuthService.verifyOtp so a routine access-token rollover doesn't force
+// a full re-OTP (see AuthController.handleUnauthorized on the Flutter
+// side). Same "only a hash lives here" shape as PasswordResetToken above,
+// via the same SHA-256 AuthService.hashToken convention OtpVerification
+// already uses — a DB read alone can never be used to mint a session.
+// Never issued for the dashboard's own login() (restaurant/admin) — that
+// stays on the long-lived, non-rotating access token it always had; see
+// AuthService.login's own note on why that's deliberately unchanged here.
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  // Set the instant this token is rotated (AuthService.refresh), revoked
+  // by an explicit logout (AuthService.logout), or an admin suspends the
+  // owning user (AdminUsersService.suspend) — null means still usable.
+  // Never deleted: kept as an audit trail of who was issued what, when.
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
 // Task 17: the mobile student/runner OTP flow's own backend-verified
 // codes — replaces the old client-only "any 6-digit code succeeds"
 // stopgap and the dev-token bridge that followed it. Keyed on `contact`
@@ -164,6 +259,43 @@ model OtpVerification {
   @@map("otp_verifications")
 }
 
+// Task 29: real, backend-persisted runner identity/vehicle verification —
+// replaces the old client-only Random()/Timer fake resolution (see the
+// Task 28 audit report). Mirrors Vendor's own shape (a separate 1:1 table,
+// not fields bolted onto User) for the same reason Vendor is separate:
+// this is submission+review state, not core identity. One row per user,
+// upserted on every (re)submission rather than versioned — a rejected
+// runner's resubmission overwrites the previous attempt's photos/fields
+// rather than accumulating a history, same as VendorsService.upsertMyVendor.
+model RunnerKyc {
+  id     String @id @default(uuid())
+  userId String @unique @map("user_id")
+  user   User   @relation(fields: [userId], references: [id])
+
+  runnerType RunnerKycRunnerType? @map("runner_type")
+  idType     RunnerKycIdType?     @map("id_type")
+  idPhotoUrl String?              @map("id_photo_url")
+
+  // Only ever set for a runner (not the light-KYC student flow, which
+  // doesn't collect one) — see SubmitRunnerKycDto.
+  selfiePhotoUrl String? @map("selfie_photo_url")
+
+  // Independent Rider only — null for a student runner, which has no
+  // vehicle step (see KycCapture.needsVehicleStep on the Flutter side).
+  vehiclePhotoUrl String?            @map("vehicle_photo_url")
+  vehicleType     RunnerVehicleType? @map("vehicle_type")
+  vehiclePlate    String?            @map("vehicle_plate")
+
+  status          RunnerKycStatus @default(pending)
+  rejectionReason String?         @map("rejection_reason")
+
+  submittedAt DateTime  @default(now()) @map("submitted_at")
+  reviewedAt  DateTime? @map("reviewed_at")
+
+  @@index([status, submittedAt])
+  @@map("runner_kyc")
+}
+
 model Vendor {
   id           String       @id @default(uuid())
   userId       String       @unique @map("user_id")
@@ -183,6 +315,15 @@ model Vendor {
   // subtotal only), overriding RESTAURANT_COMMISSION_RATE when set. Null
   // means "use the platform default" — most vendors never set this.
   commissionRateOverride Float? @map("commission_rate_override")
+
+  // Task 27: the applicant's own stated campus preference from the
+  // application wizard — purely informational, never itself the source of
+  // truth for `User.campusId` (that's still only ever admin-assigned, at
+  // approve time — see AdminVendorReviewService.approve). Lets the admin
+  // dashboard pre-fill the campus picker at approval instead of starting
+  // blank, while the admin can still freely override it.
+  requestedCampusId String? @map("requested_campus_id")
+  requestedCampus   Campus? @relation("VendorRequestedCampus", fields: [requestedCampusId], references: [id])
 
   menuItems MenuItem[]
   orders    Order[]
@@ -253,6 +394,16 @@ model Order {
   deliveryProofUrl         String?   @map("delivery_proof_url")
   deliveryProofSubmittedAt DateTime? @map("delivery_proof_submitted_at")
   needsManualReview        Boolean   @default(false) @map("needs_manual_review")
+
+  // Task 30: the restaurant-to-runner handoff's own chain-of-custody
+  // photo — the runner captures this at the same moment they verify the
+  // pickup PIN (OrdersService.verifyPickup), so it's required, not
+  // optional: `VerifyPickupDto.handoffPhotoUrl` is a required field, and
+  // there is no code path that reaches `picked_up` without one. Distinct
+  // from deliveryProofUrl above, which is a *fallback* for when the
+  // delivery PIN can't be shown — this is a routine, always-required part
+  // of pickup itself.
+  handoffPhotoUrl String? @map("handoff_photo_url")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -402,6 +553,11 @@ model OrderEscrow {
 // now a dead end with no resolution path); an admin can also open one
 // directly. Resolving as release/refund calls OrderEscrowService's
 // existing release()/refund() directly — no separate payment logic here.
+// Task 30: also the target of a student's own real "report a problem"
+// (OrdersService.reportProblem) — no separate reporter field needed,
+// since Dispute.orderId's uniqueness plus the report endpoint's own
+// student-owns-this-order check means `order.studentUser` unambiguously
+// identifies the reporter whenever one exists.
 model Dispute {
   id      String @id @default(uuid())
   orderId String @unique @map("order_id")
@@ -409,6 +565,11 @@ model Dispute {
 
   status DisputeStatus @default(open)
   reason String
+
+  // Task 30: optional photo evidence attached at report time — a student
+  // reporting a problem, not the delivery-proof-unavailable fallback
+  // (that one already has its own photo on Order.deliveryProofUrl).
+  reporterPhotoUrl String? @map("reporter_photo_url")
 
   resolutionType DisputeResolutionType? @map("resolution_type")
   resolutionNote String?                @map("resolution_note")

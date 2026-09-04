@@ -13,8 +13,12 @@ export class PayoutAccountsService {
   async create(dto: CreatePayoutAccountDto) {
     const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
     if (!user) throw new NotFoundException('User not found');
-    if (user.accountType !== 'restaurant' && user.accountType !== 'runner') {
-      throw new BadRequestException('Only restaurant and runner accounts can register payout details');
+    // Task 32: students can now register a payout account too, to receive
+    // wallet withdrawals (WalletService.initiateWithdrawal) — the same
+    // resolve-then-save flow escrow release already proved for
+    // restaurant/runner earnings, just a different money-out reason.
+    if (user.accountType !== 'restaurant' && user.accountType !== 'runner' && user.accountType !== 'student') {
+      throw new BadRequestException('Only restaurant, runner, and student accounts can register payout details');
     }
 
     // Throws UnprocessableEntityException if Paystack can't verify the pair.

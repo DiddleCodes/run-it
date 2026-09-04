@@ -13,8 +13,31 @@ const DEV_PASSWORD = 'RunIt-Dev-2026!';
 
 const prisma = new PrismaClient();
 
+// Task 26: multi-school from the start — the migration itself only seeds
+// the one campus every pre-existing user gets backfilled onto (University
+// of Ibadan, id fixed at 00000000-0000-4000-8000-000000000001 so that
+// backfill and this seed never disagree about which row is "the same
+// one"). These three are the same real schools the old Flutter-only
+// `kCampuses` static list carried (never persisted anywhere server-side
+// before this task) — domains are a reasonable placeholder convention
+// (matching student.ui.edu.ng's existing pattern in this codebase's test
+// fixtures), not verified real domains; a real deployment would confirm
+// each school's actual student email domain(s) before enabling it.
+const ADDITIONAL_CAMPUSES = [
+  { name: 'Bingham University', allowedEmailDomains: ['student.bu.edu.ng'] },
+  { name: 'Obafemi Awolowo University', allowedEmailDomains: ['student.oauife.edu.ng'] },
+  { name: 'Covenant University', allowedEmailDomains: ['student.cu.edu.ng'] },
+];
+
 async function main() {
   const passwordHash = await bcrypt.hash(DEV_PASSWORD, BCRYPT_ROUNDS);
+
+  for (const campus of ADDITIONAL_CAMPUSES) {
+    const existing = await prisma.campus.findFirst({ where: { name: campus.name } });
+    if (!existing) {
+      await prisma.campus.create({ data: campus });
+    }
+  }
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@runit.dev' },

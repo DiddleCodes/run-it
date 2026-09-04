@@ -6,8 +6,12 @@ function makeService() {
   const prisma = createPrismaMock();
   const notifications = createNotificationsEmitterMock();
   const matching = createMatchingServiceMock();
-  const service = new VendorsService(prisma as any, notifications as any, matching as any);
-  return { service, prisma, notifications, matching };
+  // Task 27: requestedCampusId is optional on every call these existing
+  // tests make, so a permissive default (never rejects) keeps them
+  // unaffected — the dedicated behavior gets its own tests below.
+  const campus = { requireById: jest.fn().mockResolvedValue({ id: 'campus-1', name: 'Test Campus' }) };
+  const service = new VendorsService(prisma as any, notifications as any, matching as any, campus as any);
+  return { service, prisma, notifications, matching, campus };
 }
 
 describe('VendorsService menu ownership enforcement', () => {
@@ -155,6 +159,61 @@ describe('VendorsService.upsertMyVendor — admin review gate', () => {
   });
 });
 
+// Task 27: the vendor application wizard's campus picker, wired to
+// actually mean something now — previously selected but never sent to the
+// backend at all (see the Task 27 report for the investigation that found
+// this). Informational only: it never sets User.campusId itself, only
+// pre-fills the admin's own campus choice at approval time.
+describe('VendorsService.upsertMyVendor — requestedCampusId (Task 27)', () => {
+  const categories = [{ slug: 'nigerian', label: 'Nigerian' }];
+
+  it('validates and persists a real requestedCampusId', async () => {
+    const { service, prisma, campus } = makeService();
+    prisma.vendorCategory.findMany.mockResolvedValue(categories);
+    prisma.vendor.findUnique.mockResolvedValue(null);
+    prisma.vendor.upsert.mockResolvedValue({ id: 'vendor-1', requestedCampusId: 'campus-1' });
+
+    await service.upsertMyVendor('user-A', {
+      businessName: 'Naija Bites',
+      category: 'Nigerian',
+      requestedCampusId: 'campus-1',
+    });
+
+    expect(campus.requireById).toHaveBeenCalledWith('campus-1');
+    expect(prisma.vendor.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ requestedCampusId: 'campus-1' }),
+      }),
+    );
+  });
+
+  it('rejects a requestedCampusId that does not name a real campus', async () => {
+    const { service, prisma, campus } = makeService();
+    prisma.vendorCategory.findMany.mockResolvedValue(categories);
+    campus.requireById.mockRejectedValue(new Error('not found'));
+
+    await expect(
+      service.upsertMyVendor('user-A', {
+        businessName: 'Naija Bites',
+        category: 'Nigerian',
+        requestedCampusId: 'not-a-real-campus',
+      }),
+    ).rejects.toThrow();
+    expect(prisma.vendor.upsert).not.toHaveBeenCalled();
+  });
+
+  it('never blocks submission when no campus preference is given at all', async () => {
+    const { service, prisma, campus } = makeService();
+    prisma.vendorCategory.findMany.mockResolvedValue(categories);
+    prisma.vendor.findUnique.mockResolvedValue(null);
+    prisma.vendor.upsert.mockResolvedValue({ id: 'vendor-1' });
+
+    await service.upsertMyVendor('user-A', { businessName: 'Naija Bites', category: 'Nigerian' });
+
+    expect(campus.requireById).not.toHaveBeenCalled();
+  });
+});
+
 describe('VendorsService.getPublicMenu', () => {
   it('only ever looks up an active vendor by id, and 404s otherwise', async () => {
     const { service, prisma } = makeService();
@@ -180,24 +239,28 @@ describe('VendorsService.listCategories', () => {
 });
 
 describe('VendorsService.listVendors', () => {
-  it('only ever queries for active vendors, even with no other filters', async () => {
+  it('only ever queries for active vendors on the caller\'s own campus, even with no other filters', async () => {
     const { service, prisma } = makeService();
 
-    await service.listVendors({});
+    await service.listVendors({}, 'campus-1');
 
     expect(prisma.vendor.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { status: 'active' } }),
+      expect.objectContaining({ where: { status: 'active', user: { campusId: 'campus-1' } } }),
     );
   });
 
   it('filters by category case-insensitively', async () => {
     const { service, prisma } = makeService();
 
-    await service.listVendors({ category: 'drinks' });
+    await service.listVendors({ category: 'drinks' }, 'campus-1');
 
     expect(prisma.vendor.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { status: 'active', category: { equals: 'drinks', mode: 'insensitive' } },
+        where: {
+          status: 'active',
+          user: { campusId: 'campus-1' },
+          category: { equals: 'drinks', mode: 'insensitive' },
+        },
       }),
     );
   });
@@ -205,12 +268,13 @@ describe('VendorsService.listVendors', () => {
   it('searches business name and description case-insensitively', async () => {
     const { service, prisma } = makeService();
 
-    await service.listVendors({ search: 'jollof' });
+    await service.listVendors({ search: 'jollof' }, 'campus-1');
 
     expect(prisma.vendor.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           status: 'active',
+          user: { campusId: 'campus-1' },
           OR: [
             { businessName: { contains: 'jollof', mode: 'insensitive' } },
             { description: { contains: 'jollof', mode: 'insensitive' } },
@@ -225,10 +289,21 @@ describe('VendorsService.listVendors', () => {
     prisma.vendor.findMany.mockResolvedValue([{ id: 'vendor-1' }]);
     prisma.vendor.count.mockResolvedValue(33);
 
-    const result = await service.listVendors({ page: 2, limit: 10 });
+    const result = await service.listVendors({ page: 2, limit: 10 }, 'campus-1');
 
     expect(prisma.vendor.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 10, take: 10 }));
     expect(result).toEqual({ items: [{ id: 'vendor-1' }], total: 33, page: 2, limit: 10 });
+  });
+
+  // Task 26: the real enforcement — no campus, no results. Never falls
+  // back to an unscoped (every-campus) list.
+  it('returns an empty page without ever querying the database when campusId is null', async () => {
+    const { service, prisma } = makeService();
+
+    const result = await service.listVendors({}, null);
+
+    expect(prisma.vendor.findMany).not.toHaveBeenCalled();
+    expect(result).toEqual({ items: [], total: 0, page: 1, limit: 20 });
   });
 });
 

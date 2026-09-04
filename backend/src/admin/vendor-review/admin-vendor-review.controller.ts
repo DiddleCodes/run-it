@@ -3,6 +3,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AdminGuard } from '../../common/guards/admin.guard';
 import { JwtPayload } from '../../auth/jwt-payload.interface';
 import { AdminVendorReviewService } from './admin-vendor-review.service';
+import { ApproveVendorDto } from './dto/approve-vendor.dto';
 import { ListAdminVendorsQueryDto } from './dto/list-admin-vendors-query.dto';
 import { RejectVendorDto } from './dto/reject-vendor.dto';
 
@@ -22,8 +23,8 @@ export class AdminVendorReviewController {
   }
 
   @Post(':id/approve')
-  approve(@CurrentUser() admin: JwtPayload, @Param('id') id: string) {
-    return this.service.approve(admin.sub, id);
+  approve(@CurrentUser() admin: JwtPayload, @Param('id') id: string, @Body() dto: ApproveVendorDto) {
+    return this.service.approve(admin.sub, id, dto.campusId);
   }
 
   @Post(':id/reject')

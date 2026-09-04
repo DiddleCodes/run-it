@@ -7,8 +7,13 @@ function makeService() {
   const prisma = createPrismaMock();
   const payoutAccounts = { findByUserId: jest.fn() };
   const auditLog = new AdminAuditLogService(prisma as any);
-  const service = new AdminVendorReviewService(prisma as any, payoutAccounts as any, auditLog);
-  return { service, prisma, payoutAccounts };
+  const campus = {
+    resolveByEmail: jest.fn(),
+    requireById: jest.fn().mockResolvedValue({ id: 'campus-1', name: 'Test Campus', allowedEmailDomains: [] }),
+    list: jest.fn(),
+  };
+  const service = new AdminVendorReviewService(prisma as any, payoutAccounts as any, auditLog, campus as any);
+  return { service, prisma, payoutAccounts, campus };
 }
 
 describe('AdminVendorReviewService.getOne', () => {
@@ -66,6 +71,28 @@ describe('AdminVendorReviewService.approve', () => {
     prisma.vendor.findUnique.mockResolvedValue(null);
 
     await expect(service.approve('admin-1', 'missing')).rejects.toThrow(NotFoundException);
+  });
+
+  // Task 26.
+  it('also assigns the owning user a campus when campusId is given, after validating it exists', async () => {
+    const { service, prisma, campus } = makeService();
+    prisma.vendor.findUnique.mockResolvedValue({ id: 'vendor-1', userId: 'user-1', status: 'pending' });
+    prisma.vendor.update.mockResolvedValue({ id: 'vendor-1', status: 'active' });
+
+    await service.approve('admin-1', 'vendor-1', 'campus-1');
+
+    expect(campus.requireById).toHaveBeenCalledWith('campus-1');
+    expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'user-1' }, data: { campusId: 'campus-1' } });
+  });
+
+  it('never touches the user table when campusId is omitted', async () => {
+    const { service, prisma } = makeService();
+    prisma.vendor.findUnique.mockResolvedValue({ id: 'vendor-1', userId: 'user-1', status: 'pending' });
+    prisma.vendor.update.mockResolvedValue({ id: 'vendor-1', status: 'active' });
+
+    await service.approve('admin-1', 'vendor-1');
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });
 

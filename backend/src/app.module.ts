@@ -1,13 +1,16 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 import Redis from 'ioredis';
 import { AdminModule } from './admin/admin.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { AuthModule } from './auth/auth.module';
+import { CampusModule } from './campus/campus.module';
 import configuration from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -18,6 +21,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RatingsModule } from './ratings/ratings.module';
 import { ReconciliationModule } from './reconciliation/reconciliation.module';
 import { RedisModule } from './redis/redis.module';
+import { RunnerKycModule } from './runner-kyc/runner-kyc.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { UsersModule } from './users/users.module';
 import { VendorsModule } from './vendors/vendors.module';
@@ -26,6 +30,11 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   imports: [
+    // Task 31: must be the first import — @sentry/nestjs's own docs are
+    // explicit about this ordering (it needs to wire up before other
+    // providers/interceptors are constructed). A no-op when SENTRY_DSN is
+    // unset (instrument.ts already skipped Sentry.init in that case).
+    SentryModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
@@ -54,6 +63,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     PrismaModule,
     RedisModule,
     AlertsModule,
+    CampusModule,
     AuthModule,
     UsersModule,
     WalletModule,
@@ -62,11 +72,23 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     OrdersModule,
     VendorsModule,
     UploadsModule,
+    RunnerKycModule,
     RatingsModule,
     WebhooksModule,
     ReconciliationModule,
     AdminModule,
     NotificationsModule,
+  ],
+  providers: [
+    // Task 31: SentryGlobalFilter must be registered before any other
+    // APP_FILTER so it sees every exception first — this app has no other
+    // exception filters, so this is the only one. It reports 5xx/uncaught
+    // errors to Sentry and rethrows to Nest's default handler for the HTTP
+    // response either way; it does NOT report expected 4xx HttpExceptions
+    // (e.g. a KYC-gate ForbiddenException, a validation 400) — those are
+    // correct behavior, not incidents, and reporting every rejected login
+    // or unapproved-runner claim attempt would drown out real signal.
+    { provide: APP_FILTER, useClass: SentryGlobalFilter },
   ],
 })
 export class AppModule {}

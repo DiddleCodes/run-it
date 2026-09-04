@@ -39,11 +39,17 @@ export class VendorsController {
     return this.vendors.getMyVendor(user.sub);
   }
 
-  // Public — the Home screen's "Popular around campus" list, category
-  // chips, and search bar all read from this (Task 14).
+  // The Home screen's "Popular around campus" list, category chips, and
+  // search bar all read from this (Task 14). Was public until Task 26 —
+  // scoping "around campus" to the caller's *actual* campus needs to know
+  // who's asking, so this now requires the same JWT every other
+  // authenticated route does; the Flutter client was already logged in by
+  // the time it ever reaches Home, so this is a tightening, not a breaking
+  // change to any real flow.
   @Get()
-  listVendors(@Query() query: ListVendorsQueryDto) {
-    return this.vendors.listVendors(query);
+  @UseGuards(JwtAuthGuard)
+  listVendors(@CurrentUser() user: JwtPayload, @Query() query: ListVendorsQueryDto) {
+    return this.vendors.listVendors(query, user.campusId ?? null);
   }
 
   // Public — the controlled category vocabulary (see VendorCategory's

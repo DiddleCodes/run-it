@@ -17,13 +17,17 @@ function makeService() {
 }
 
 describe('MatchingService.broadcastNewJob', () => {
-  it('emits the broadcast and schedules both a re-broadcast and an escalation job', async () => {
+  it('emits the broadcast (with the vendor\'s campusId) and schedules both a re-broadcast and an escalation job', async () => {
     const { service, prisma, gateway, queue } = makeService();
-    prisma.order.findUnique.mockResolvedValue({ id: 'order-1', vendorId: 'vendor-1' });
+    prisma.order.findUnique.mockResolvedValue({
+      id: 'order-1',
+      vendorId: 'vendor-1',
+      vendor: { user: { campusId: 'campus-1' } },
+    });
 
     await service.broadcastNewJob('order-1');
 
-    expect(gateway.broadcastNewJob).toHaveBeenCalledWith({ orderId: 'order-1', vendorId: 'vendor-1' });
+    expect(gateway.broadcastNewJob).toHaveBeenCalledWith({ orderId: 'order-1', vendorId: 'vendor-1', campusId: 'campus-1' });
     expect(queue.add).toHaveBeenCalledWith(
       'rebroadcast',
       { orderId: 'order-1' },
@@ -50,16 +54,28 @@ describe('MatchingService.broadcastNewJob', () => {
 describe('MatchingService.handleRebroadcast', () => {
   it('re-emits the broadcast when still unclaimed and still waiting', async () => {
     const { service, prisma, gateway } = makeService();
-    prisma.order.findUnique.mockResolvedValue({ id: 'order-1', vendorId: 'vendor-1', runnerUserId: null, status: 'preparing' });
+    prisma.order.findUnique.mockResolvedValue({
+      id: 'order-1',
+      vendorId: 'vendor-1',
+      runnerUserId: null,
+      status: 'preparing',
+      vendor: { user: { campusId: 'campus-1' } },
+    });
 
     await service.handleRebroadcast('order-1');
 
-    expect(gateway.broadcastNewJob).toHaveBeenCalledWith({ orderId: 'order-1', vendorId: 'vendor-1' });
+    expect(gateway.broadcastNewJob).toHaveBeenCalledWith({ orderId: 'order-1', vendorId: 'vendor-1', campusId: 'campus-1' });
   });
 
   it('does not re-emit once a runner has claimed it', async () => {
     const { service, prisma, gateway } = makeService();
-    prisma.order.findUnique.mockResolvedValue({ id: 'order-1', vendorId: 'vendor-1', runnerUserId: 'runner-1', status: 'preparing' });
+    prisma.order.findUnique.mockResolvedValue({
+      id: 'order-1',
+      vendorId: 'vendor-1',
+      runnerUserId: 'runner-1',
+      status: 'preparing',
+      vendor: { user: { campusId: 'campus-1' } },
+    });
 
     await service.handleRebroadcast('order-1');
 
@@ -68,7 +84,13 @@ describe('MatchingService.handleRebroadcast', () => {
 
   it('does not re-emit once the order has moved past a claimable status (e.g. cancelled)', async () => {
     const { service, prisma, gateway } = makeService();
-    prisma.order.findUnique.mockResolvedValue({ id: 'order-1', vendorId: 'vendor-1', runnerUserId: null, status: 'cancelled' });
+    prisma.order.findUnique.mockResolvedValue({
+      id: 'order-1',
+      vendorId: 'vendor-1',
+      runnerUserId: null,
+      status: 'cancelled',
+      vendor: { user: { campusId: 'campus-1' } },
+    });
 
     await service.handleRebroadcast('order-1');
 
@@ -98,6 +120,73 @@ describe('MatchingService.handleEscalate', () => {
     await service.handleEscalate('order-1');
 
     expect(prisma.dispute.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('MatchingService.listAvailable', () => {
+  it('rejects a non-runner account', async () => {
+    const { service } = makeService();
+    await expect(
+      service.listAvailable({ sub: 'student-1', accountType: 'student', role: 'user' } as any),
+    ).rejects.toThrow('Only runner accounts can browse available orders');
+  });
+
+  it('maps still-waiting, unclaimed orders into available jobs, skipping any without an escrow', async () => {
+    const { service, prisma } = makeService();
+    const createdAt = new Date('2026-08-31T12:00:00.000Z');
+    prisma.order.findMany.mockResolvedValue([
+      {
+        id: 'order-1',
+        vendorId: 'vendor-1',
+        vendor: { businessName: 'Tantalizers' },
+        deliveryLocationLabel: 'Queen Elizabeth II Hall',
+        totalAmount: 10_000,
+        escrow: { runnerShare: 850 },
+        createdAt,
+      },
+      {
+        id: 'order-2',
+        vendorId: 'vendor-2',
+        vendor: { businessName: 'No Escrow Yet' },
+        deliveryLocationLabel: null,
+        totalAmount: 5_000,
+        escrow: null,
+        createdAt,
+      },
+    ]);
+
+    const jobs = await service.listAvailable({ sub: 'runner-1', accountType: 'runner', role: 'user', campusId: 'campus-1' } as any);
+
+    expect(prisma.order.findMany).toHaveBeenCalledWith({
+      where: {
+        runnerUserId: null,
+        status: { in: ['preparing', 'ready_for_pickup'] },
+        vendor: { user: { campusId: 'campus-1' } },
+      },
+      include: { vendor: true, escrow: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(jobs).toEqual([
+      {
+        orderId: 'order-1',
+        vendorId: 'vendor-1',
+        vendorName: 'Tantalizers',
+        deliveryLocationLabel: 'Queen Elizabeth II Hall',
+        payoutAmount: 850,
+        totalAmount: 10_000,
+        createdAt,
+      },
+    ]);
+  });
+
+  // Task 26.
+  it('returns an empty list without querying the database for a runner with no assigned campus', async () => {
+    const { service, prisma } = makeService();
+
+    const jobs = await service.listAvailable({ sub: 'runner-1', accountType: 'runner', role: 'user', campusId: null } as any);
+
+    expect(prisma.order.findMany).not.toHaveBeenCalled();
+    expect(jobs).toEqual([]);
   });
 });
 

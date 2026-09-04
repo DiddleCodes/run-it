@@ -146,4 +146,82 @@ describe('WebhooksService — reconciliation entry points', () => {
       data: { runnerTransferStatus: 'failed' },
     });
   });
+
+  // Task 32: a transfer reference that matches no escrow leg falls through
+  // to a wallet withdrawal — the other real caller of the Paystack
+  // Transfers API.
+  describe('applyVerifiedTransferResult — wallet withdrawal (no matching escrow)', () => {
+    it('a successful transfer just marks the ledger row complete — balance already left the wallet at request time', async () => {
+      const { service, prisma } = makeService();
+      prisma.orderEscrow.findFirst.mockResolvedValue(null);
+      prisma.walletTransaction.findUnique.mockResolvedValue({
+        id: 'wt1',
+        walletId: 'w1',
+        amount: 5_000,
+        reference: 'wallet_withdraw_1',
+        status: 'pending',
+      });
+      prisma.walletTransaction.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.applyVerifiedTransferResult('wallet_withdraw_1', 'success');
+
+      expect(prisma.walletTransaction.updateMany).toHaveBeenCalledWith({
+        where: { id: 'wt1', status: 'pending' },
+        data: { status: 'success' },
+      });
+      expect(prisma.wallet.update).not.toHaveBeenCalled();
+    });
+
+    it('a failed transfer marks the ledger row failed AND credits the wallet back — the money never actually left', async () => {
+      const { service, prisma } = makeService();
+      prisma.orderEscrow.findFirst.mockResolvedValue(null);
+      prisma.walletTransaction.findUnique.mockResolvedValue({
+        id: 'wt1',
+        walletId: 'w1',
+        amount: 5_000,
+        reference: 'wallet_withdraw_1',
+        status: 'pending',
+      });
+      prisma.walletTransaction.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.applyVerifiedTransferResult('wallet_withdraw_1', 'failed');
+
+      expect(prisma.walletTransaction.updateMany).toHaveBeenCalledWith({
+        where: { id: 'wt1', status: 'pending' },
+        data: { status: 'failed' },
+      });
+      expect(prisma.wallet.update).toHaveBeenCalledWith({
+        where: { id: 'w1' },
+        data: { balance: { increment: 5_000 } },
+      });
+    });
+
+    it('is idempotent — a second delivery of the same failed result never double-credits the wallet', async () => {
+      const { service, prisma } = makeService();
+      prisma.orderEscrow.findFirst.mockResolvedValue(null);
+      prisma.walletTransaction.findUnique.mockResolvedValue({
+        id: 'wt1',
+        walletId: 'w1',
+        amount: 5_000,
+        reference: 'wallet_withdraw_1',
+        status: 'failed', // already resolved
+      });
+      prisma.walletTransaction.updateMany.mockResolvedValue({ count: 0 });
+
+      await service.applyVerifiedTransferResult('wallet_withdraw_1', 'failed');
+
+      expect(prisma.wallet.update).not.toHaveBeenCalled();
+    });
+
+    it('logs and no-ops for a reference matching neither an escrow leg nor a wallet transaction', async () => {
+      const { service, prisma } = makeService();
+      prisma.orderEscrow.findFirst.mockResolvedValue(null);
+      prisma.walletTransaction.findUnique.mockResolvedValue(null);
+
+      await service.applyVerifiedTransferResult('unknown_ref', 'failed');
+
+      expect(prisma.walletTransaction.updateMany).not.toHaveBeenCalled();
+      expect(prisma.wallet.update).not.toHaveBeenCalled();
+    });
+  });
 });

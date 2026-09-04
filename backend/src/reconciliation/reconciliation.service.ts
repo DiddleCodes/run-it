@@ -56,9 +56,10 @@ export class ReconciliationService implements OnModuleInit {
     const thresholdMinutes = this.config.get<number>('reconciliation.staleThresholdMinutes') as number;
     const staleBefore = new Date(Date.now() - thresholdMinutes * 60_000);
 
-    const [walletChecked, transferLegsChecked] = await Promise.all([
+    const [walletChecked, transferLegsChecked, withdrawalsChecked] = await Promise.all([
       this.reconcileWalletTransactions(staleBefore),
       this.reconcileTransferLegs(staleBefore),
+      this.reconcileWithdrawalTransfers(staleBefore),
     ]);
 
     const mismatchCount = await this.compareAgainstPaystack(staleBefore, new Date())
@@ -68,11 +69,24 @@ export class ReconciliationService implements OnModuleInit {
         return 0;
       });
 
+    // Task 32: withdrawal transfers folded into the same transferLegsChecked
+    // count rather than a new ReconciliationRun column — a withdrawal is
+    // just another transfer leg on the same Paystack Transfers API,
+    // reconciled through the exact same verify-transfer-status call.
+    const totalTransferLegsChecked = transferLegsChecked + withdrawalsChecked;
+
     await this.prisma.reconciliationRun.create({
-      data: { startedAt, finishedAt: new Date(), walletChecked, transferLegsChecked, mismatchCount, triggeredBy },
+      data: {
+        startedAt,
+        finishedAt: new Date(),
+        walletChecked,
+        transferLegsChecked: totalTransferLegsChecked,
+        mismatchCount,
+        triggeredBy,
+      },
     });
 
-    return { walletChecked, transferLegsChecked };
+    return { walletChecked, transferLegsChecked: totalTransferLegsChecked };
   }
 
   async listRuns() {
@@ -195,8 +209,14 @@ export class ReconciliationService implements OnModuleInit {
   }
 
   private async reconcileWalletTransactions(staleBefore: Date): Promise<number> {
+    // Task 32: scoped to `credit` explicitly now that a `debit` row can
+    // also be `pending` (a wallet withdrawal, mid-transfer — see
+    // reconcileWithdrawalTransfers below) — without this, a stale
+    // withdrawal would be swept up here too and checked against
+    // verifyTransaction (the charge-verify endpoint), which is the wrong
+    // Paystack API for a transfer reference.
     const stale = await this.prisma.walletTransaction.findMany({
-      where: { status: 'pending', createdAt: { lt: staleBefore } },
+      where: { type: 'credit', status: 'pending', createdAt: { lt: staleBefore } },
     });
 
     for (const txn of stale) {
@@ -297,5 +317,53 @@ export class ReconciliationService implements OnModuleInit {
     }
 
     return checked;
+  }
+
+  // Task 32: the withdrawal counterpart to reconcileTransferLegs above —
+  // same self-healing shape, applied to WalletService.initiateWithdrawal's
+  // transfers instead of escrow payout legs. A withdrawal is the only
+  // debit-type WalletTransaction ever created `pending` (see
+  // WebhooksService.applyVerifiedWithdrawalResult's own doc comment), so
+  // this query can't accidentally sweep up an escrow_hold debit.
+  private async reconcileWithdrawalTransfers(staleBefore: Date): Promise<number> {
+    const stale = await this.prisma.walletTransaction.findMany({
+      where: { type: 'debit', status: 'pending', createdAt: { lt: staleBefore } },
+    });
+
+    for (const txn of stale) {
+      const ageMinutes = Math.round((Date.now() - txn.createdAt.getTime()) / 60_000);
+      try {
+        const result = await this.paystack.verifyTransferStatus(txn.reference);
+
+        if (result.status === 'success') {
+          await this.webhooks.applyVerifiedTransferResult(txn.reference, 'success');
+          this.logger.log(`Reconciled stale withdrawal ${txn.reference} -> success`);
+        } else if (result.status === 'failed' || result.status === 'reversed') {
+          await this.webhooks.applyVerifiedTransferResult(txn.reference, 'failed');
+          await this.alerts.send(`Wallet withdrawal ${txn.reference} resolved as '${result.status}' via reconciliation`, {
+            walletTransactionId: txn.id,
+            reference: txn.reference,
+            ageMinutes,
+          });
+        } else {
+          await this.alerts.send(`Wallet withdrawal ${txn.reference} still pending on Paystack past the reconciliation threshold`, {
+            walletTransactionId: txn.id,
+            reference: txn.reference,
+            ageMinutes,
+            paystackStatus: result.status,
+          });
+        }
+      } catch (err) {
+        this.logger.error(`Reconciliation verify-transfer failed for withdrawal ${txn.reference}: ${(err as Error).message}`);
+        await this.alerts.send(`Reconciliation failed to verify wallet withdrawal ${txn.reference}`, {
+          walletTransactionId: txn.id,
+          reference: txn.reference,
+          ageMinutes,
+          error: (err as Error).message,
+        });
+      }
+    }
+
+    return stale.length;
   }
 }

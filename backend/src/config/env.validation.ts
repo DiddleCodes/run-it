@@ -34,6 +34,13 @@ export const envValidationSchema = Joi.object({
   RECONCILE_STALE_THRESHOLD_MINUTES: Joi.number().min(1).default(10),
   SLACK_ALERT_WEBHOOK_URL: Joi.string().uri().optional(),
 
+  // Optional: Sentry (backend crash/error reporting). Degrades to a logged
+  // warning when unset — see instrument.ts. Read directly from
+  // process.env there (Sentry.init must run before Nest/ConfigService even
+  // exist), but validated here too so a malformed value fails fast at
+  // startup like every other env var, instead of silently no-op-ing.
+  SENTRY_DSN: Joi.string().uri().optional(),
+
   // Optional: FcmService degrades to a logged warning (never throws) when
   // unset, so notification infra can ship and be tested before a real
   // Firebase project exists for this app — see FcmService's doc comment.

@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { MenuItem, OrderStatus } from '@prisma/client';
+import { CampusService } from '../campus/campus.service';
 import { MatchingService } from '../matching/matching.service';
 import { NotificationsEmitterService } from '../notifications/notifications-emitter.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -36,6 +37,7 @@ export class VendorsService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsEmitterService,
     private readonly matching: MatchingService,
+    private readonly campus: CampusService,
   ) {}
 
   // Task 13c: replaces the Task 12 auto-approve stopgap this comment used
@@ -47,6 +49,7 @@ export class VendorsService {
   // queue, so it flips to `pending` and clears the prior rejectionReason.
   async upsertMyVendor(userId: string, dto: UpsertVendorDto) {
     const category = await this.resolveCategoryLabel(dto.category);
+    if (dto.requestedCampusId) await this.campus.requireById(dto.requestedCampusId);
     const data = { ...dto, category };
     const existing = await this.prisma.vendor.findUnique({ where: { userId } });
 
@@ -88,17 +91,26 @@ export class VendorsService {
     return this.getOwnVendorOrThrow(userId);
   }
 
-  // Task 14: public vendor browsing (Home screen search + category chips).
-  // Only ever surfaces `active` vendors — a restaurant that's gone
-  // `inactive` shouldn't show up for a student browsing campus, even though
-  // its historical orders/menu rows still exist.
-  async listVendors(query: ListVendorsQueryDto) {
+  // Task 14/26: the Home screen's search + category chips, now scoped to
+  // the caller's own campus (see VendorsController.listVendors — a null
+  // campusId means "show nothing" rather than "show everything", since an
+  // unscoped result would leak other campuses' restaurants to whatever
+  // account type/edge case reaches this with no campus of its own). Only
+  // ever surfaces `active` vendors — a restaurant that's gone `inactive`
+  // shouldn't show up for a student browsing campus, even though its
+  // historical orders/menu rows still exist.
+  async listVendors(query: ListVendorsQueryDto, campusId: string | null) {
     const page = query.page ?? 1;
     const limit = Math.min(query.limit ?? DEFAULT_VENDOR_PAGE_SIZE, MAX_VENDOR_PAGE_SIZE);
     const search = query.search?.trim();
 
+    if (!campusId) {
+      return { items: [], total: 0, page, limit };
+    }
+
     const where = {
       status: 'active' as const,
+      user: { campusId },
       ...(query.category ? { category: { equals: query.category, mode: 'insensitive' as const } } : {}),
       ...(search
         ? {

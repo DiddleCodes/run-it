@@ -7,7 +7,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Order } from '@prisma/client';
+import { Dispute, Order } from '@prisma/client';
 import { timingSafeEqual } from 'crypto';
 import { JwtPayload } from '../auth/jwt-payload.interface';
 import { NotificationsEmitterService } from '../notifications/notifications-emitter.service';
@@ -15,6 +15,7 @@ import { OrderEscrowService } from '../order-escrow/order-escrow.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { DeliveryProofDto } from './dto/delivery-proof.dto';
+import { ReportProblemDto } from './dto/report-problem.dto';
 
 type VerificationKind = 'pickup' | 'delivery';
 
@@ -34,7 +35,13 @@ export class OrdersService {
     private readonly notifications: NotificationsEmitterService,
   ) {}
 
-  async verifyPickup(orderId: string, code: string): Promise<{ status: Order['status'] }> {
+  // Task 30: `handoffPhotoUrl` is required (VerifyPickupDto rejects a
+  // request with none before this ever runs) — the restaurant-to-runner
+  // handoff's own chain-of-custody photo, captured by the runner at the
+  // same moment they scan the vendor-shown pickup code. See
+  // Order.handoffPhotoUrl's schema doc comment for why this is a hard
+  // block rather than a soft warning.
+  async verifyPickup(orderId: string, code: string, handoffPhotoUrl: string): Promise<{ status: Order['status'] }> {
     const order = await this.getOrderOrThrow(orderId);
 
     // Idempotent: a retried correct scan after pickup already succeeded
@@ -54,7 +61,10 @@ export class OrdersService {
       throw new BadRequestException("This isn't the order you accepted.");
     }
 
-    const updated = await this.prisma.order.update({ where: { id: orderId }, data: { status: 'picked_up' } });
+    const updated = await this.prisma.order.update({
+      where: { id: orderId },
+      data: { status: 'picked_up', handoffPhotoUrl },
+    });
     await this.resetRateLimit(orderId, 'pickup');
 
     this.notifications.emit({
@@ -135,6 +145,31 @@ export class OrdersService {
         update: {},
       });
       return updated;
+    });
+  }
+
+  // Task 30: the real student-facing "report a problem" entry point —
+  // reuses the existing Dispute model exactly as the admin-only
+  // AdminDisputesService.open() does, just scoped to the order's own
+  // student rather than admin-gated. Same one-dispute-per-order
+  // constraint (Dispute.orderId is @unique) and the same 409 an admin's
+  // duplicate open() attempt gets — a student can't file two reports on
+  // the same order, and a report never clobbers an already-open dispute
+  // (e.g. a delivery-proof-fallback one) rather than silently overwriting
+  // its reason.
+  async reportProblem(orderId: string, studentUserId: string, dto: ReportProblemDto): Promise<Dispute> {
+    const order = await this.getOrderOrThrow(orderId);
+    if (order.studentUserId !== studentUserId) {
+      throw new ForbiddenException('You are not the student on this order');
+    }
+
+    const existing = await this.prisma.dispute.findUnique({ where: { orderId } });
+    if (existing) {
+      throw new ConflictException(`A dispute already exists for order ${orderId}`);
+    }
+
+    return this.prisma.dispute.create({
+      data: { orderId, reason: dto.reason, reporterPhotoUrl: dto.photoUrl },
     });
   }
 
