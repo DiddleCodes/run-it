@@ -29,7 +29,8 @@ export async function POST(req: NextRequest) {
     // No token/role in the JSON body — the client only learns the account
     // type, purely to pick which page to redirect to. Real enforcement of
     // what that account is allowed to see is the httpOnly cookie + the
-    // server-verified role check in middleware.ts, not this response.
+    // server-verified role check in proxy.ts (Next.js 16's renamed
+    // middleware.ts convention), not this response.
     const response = NextResponse.json({ accountType: result.user.accountType });
     response.cookies.set(SESSION_COOKIE_NAME, result.accessToken, {
       httpOnly: true,

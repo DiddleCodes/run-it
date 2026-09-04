@@ -16,6 +16,7 @@ const activeRestaurant: AdminUserSummary = {
   accountType: "restaurant",
   suspendedAt: null,
   createdAt: "2026-08-01T00:00:00.000Z",
+  campusId: null,
 };
 
 const initialData: AdminUsersResponse = { items: [activeRestaurant], total: 1, page: 1, limit: 20 };
@@ -32,6 +33,7 @@ describe("Users suspend/reinstate action", () => {
   it("suspending requires a reason and posts it, then only updates the row after the response resolves", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn((url: string, opts?: RequestInit) => {
+      if (url === "/api/proxy/campuses") return Promise.resolve(jsonResponse([]));
       if (opts?.method === "POST" && url === "/api/proxy/admin/users/user-1/suspend") {
         expect(JSON.parse(opts.body as string)).toEqual({ reason: "Repeated policy violations" });
         return Promise.resolve(jsonResponse({ ...activeRestaurant, suspendedAt: "2026-08-31T00:00:00.000Z" }));
@@ -62,6 +64,7 @@ describe("Users suspend/reinstate action", () => {
     const user = userEvent.setup();
     const suspendedUser: AdminUserSummary = { ...activeRestaurant, suspendedAt: "2026-08-31T00:00:00.000Z" };
     const fetchMock = vi.fn((url: string, opts?: RequestInit) => {
+      if (url === "/api/proxy/campuses") return Promise.resolve(jsonResponse([]));
       if (opts?.method === "POST" && url === "/api/proxy/admin/users/user-1/reinstate") {
         return Promise.resolve(jsonResponse({ ...suspendedUser, suspendedAt: null }));
       }

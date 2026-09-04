@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Column, DataTable } from "@/components/shared/data-table";
 import { StatCard } from "@/components/shared/stat-card";
 import { SkeletonBlock } from "@/components/shared/skeleton-block";
 import { formatKobo } from "@/lib/format";
-import { Metrics, vendorClient } from "@/lib/api/vendor-client";
+import { Metrics, MetricsItem, vendorClient } from "@/lib/api/vendor-client";
 
 const RANGES = [
   { label: "Last 7 days", days: 7 },
@@ -55,6 +56,50 @@ export function MetricsBoard({ initialData }: { initialData: Metrics }) {
   const byCount = [...metrics.mostOrderedItems].sort((a, b) => b.count - a.count).slice(0, 8);
   const byRevenue = [...metrics.mostOrderedItems].sort((a, b) => b.revenue - a.revenue);
   const revenueTotal = byRevenue.reduce((sum, i) => sum + i.revenue, 0);
+  // DataTable requires an `id` field; menuItemId can be null for an
+  // unlinked/since-deleted item, same fallback key the old row used.
+  const revenueRows = byRevenue.map((item) => ({ ...item, id: item.menuItemId ?? item.name }));
+
+  const revenueColumns: Column<MetricsItem & { id: string }>[] = [
+    {
+      key: "name",
+      header: "Item",
+      render: (item) => {
+        const rank = revenueRows.findIndex((r) => r.id === item.id) + 1;
+        return (
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full bg-[var(--secondary)] flex items-center justify-center text-[10px] font-bold text-[var(--muted-foreground)]">
+              {rank}
+            </span>
+            {item.name}
+          </div>
+        );
+      },
+    },
+    { key: "count", header: "Orders", className: "text-right", render: (item) => <span>{item.count}</span> },
+    {
+      key: "revenue",
+      header: "Revenue",
+      className: "text-right",
+      render: (item) => <span className="font-medium text-[var(--primary)]">{formatKobo(item.revenue)}</span>,
+    },
+    {
+      key: "pct",
+      header: "% of total",
+      className: "text-right",
+      render: (item) => {
+        const pct = revenueTotal > 0 ? ((item.revenue / revenueTotal) * 100).toFixed(1) : "0.0";
+        return (
+          <div className="flex items-center justify-end gap-2">
+            <div className="w-16 h-1.5 bg-[var(--muted)] rounded-full overflow-hidden">
+              <div className="h-full bg-[#7A1636] rounded-full" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="text-xs text-[var(--muted-foreground)]">{pct}%</span>
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
     <>
@@ -130,58 +175,14 @@ export function MetricsBoard({ initialData }: { initialData: Metrics }) {
         )}
       </div>
 
-      <div className="bg-card rounded-[var(--radius)] border border-[var(--border)] shadow-[0_1px_8px_rgba(0,0,0,0.06)] overflow-hidden">
-        <div className="px-5 py-4 border-b border-[var(--border)]">
-          <h3 className="font-semibold text-[var(--foreground)]">Revenue per item</h3>
-        </div>
-        {loading ? (
-          <div className="p-5 space-y-2">
-            <SkeletonBlock className="h-8" />
-            <SkeletonBlock className="h-8" />
-            <SkeletonBlock className="h-8" />
-          </div>
-        ) : byRevenue.length === 0 ? (
-          <p className="text-sm text-[var(--muted-foreground)] py-10 text-center">No orders in this date range yet.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-[var(--secondary)] border-b border-[var(--border)]">
-                <th className="px-5 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Item</th>
-                <th className="px-5 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Orders</th>
-                <th className="px-5 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Revenue</th>
-                <th className="px-5 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">% of total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {byRevenue.map((item, i) => {
-                const pct = revenueTotal > 0 ? ((item.revenue / revenueTotal) * 100).toFixed(1) : "0.0";
-                return (
-                  <tr key={item.menuItemId ?? item.name} className="border-b border-[var(--border)] last:border-0 table-row-hover">
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-[var(--secondary)] flex items-center justify-center text-[10px] font-bold text-[var(--muted-foreground)]">
-                          {i + 1}
-                        </span>
-                        {item.name}
-                      </div>
-                    </td>
-                    <td className="px-5 py-3 text-right">{item.count}</td>
-                    <td className="px-5 py-3 text-right font-medium text-[var(--primary)]">{formatKobo(item.revenue)}</td>
-                    <td className="px-5 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <div className="w-16 h-1.5 bg-[var(--muted)] rounded-full overflow-hidden">
-                          <div className="h-full bg-[#7A1636] rounded-full" style={{ width: `${pct}%` }} />
-                        </div>
-                        <span className="text-xs text-[var(--muted-foreground)]">{pct}%</span>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <h3 className="font-semibold text-[var(--foreground)] mb-3">Revenue per item</h3>
+      <DataTable
+        columns={revenueColumns}
+        data={revenueRows}
+        loading={loading}
+        emptyTitle="No revenue yet"
+        emptyDescription="No orders in this date range yet."
+      />
     </>
   );
 }

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Column, DataTable } from "@/components/shared/data-table";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Drawer, Modal } from "@/components/shared/modal";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { formatDateTime, formatKobo } from "@/lib/format";
 import { toast } from "@/lib/toast";
-import { AccountType, AdminApiError, AdminUserDetail, AdminUsersResponse, AdminUserSummary, adminClient } from "@/lib/api/admin-client";
+import { AccountType, AdminApiError, AdminCampus, AdminUserDetail, AdminUsersResponse, AdminUserSummary, adminClient } from "@/lib/api/admin-client";
 
 const ROLE_TABS: { key: AccountType | "all"; label: string }[] = [
   { key: "all", label: "All" },
@@ -28,6 +28,13 @@ export function UsersBoard({ initialData }: { initialData: AdminUsersResponse })
   const [reason, setReason] = useState("");
   const [confirmReinstate, setConfirmReinstate] = useState<AdminUserSummary | AdminUserDetail | null>(null);
   const [busy, setBusy] = useState(false);
+  const [campuses, setCampuses] = useState<AdminCampus[]>([]);
+  const [campusTarget, setCampusTarget] = useState<AdminUserSummary | AdminUserDetail | null>(null);
+  const [selectedCampusId, setSelectedCampusId] = useState("");
+
+  useEffect(() => {
+    adminClient.listCampuses().then(setCampuses).catch(() => {});
+  }, []);
 
   async function refresh() {
     const res = await adminClient.listUsers();
@@ -76,6 +83,22 @@ export function UsersBoard({ initialData }: { initialData: AdminUsersResponse })
     } finally {
       setBusy(false);
       setConfirmReinstate(null);
+    }
+  }
+
+  async function assignCampus() {
+    if (!campusTarget || !selectedCampusId) return;
+    setBusy(true);
+    try {
+      await adminClient.assignUserCampus(campusTarget.id, selectedCampusId);
+      await refresh();
+      if (selectedId === campusTarget.id) setDetail(await adminClient.getUser(campusTarget.id));
+      toast.success(`Campus updated for ${campusTarget.name ?? campusTarget.email ?? "user"}`);
+    } catch (err) {
+      toast.error(err instanceof AdminApiError ? err.message : "Couldn't update campus. Please try again.");
+    } finally {
+      setBusy(false);
+      setCampusTarget(null);
     }
   }
 
@@ -176,6 +199,26 @@ export function UsersBoard({ initialData }: { initialData: AdminUsersResponse })
               <p className="text-sm text-[var(--foreground)]">{formatDateTime(detail.createdAt)}</p>
             </div>
 
+            {detail.accountType !== "admin" && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] mb-1">Campus</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-[var(--foreground)]">
+                    {campuses.find((c) => c.id === detail.campusId)?.name ?? "Not assigned"}
+                  </p>
+                  <button
+                    onClick={() => {
+                      setCampusTarget(detail);
+                      setSelectedCampusId(detail.campusId ?? "");
+                    }}
+                    className="px-3 py-1.5 rounded-lg border border-[var(--border)] text-xs font-medium hover:bg-[var(--muted)] transition-colors"
+                  >
+                    {detail.campusId ? "Change" : "Assign"}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {detail.vendor && (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] mb-1">Vendor</p>
@@ -260,6 +303,42 @@ export function UsersBoard({ initialData }: { initialData: AdminUsersResponse })
         confirmLabel={busy ? "Reinstating…" : "Reinstate"}
         onConfirm={() => confirmReinstate && reinstate(confirmReinstate)}
       />
+
+      <Modal
+        open={!!campusTarget}
+        onOpenChange={(open) => !open && setCampusTarget(null)}
+        title={`Assign campus for ${campusTarget?.name ?? campusTarget?.email ?? ""}`}
+        footer={
+          <button
+            onClick={assignCampus}
+            disabled={!selectedCampusId || busy}
+            className="px-4 py-2 rounded-lg bg-[var(--primary)] text-white text-sm font-medium hover:bg-[#5A0E25] transition-colors disabled:opacity-50"
+          >
+            {busy ? "Saving…" : "Save"}
+          </button>
+        }
+      >
+        <div className="space-y-2">
+          <label htmlFor="assign-campus" className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+            Campus
+          </label>
+          <select
+            id="assign-campus"
+            value={selectedCampusId}
+            onChange={(e) => setSelectedCampusId(e.target.value)}
+            className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+          >
+            <option value="" disabled>
+              Select a campus…
+            </option>
+            {campuses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </Modal>
     </>
   );
 }

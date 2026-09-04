@@ -8,7 +8,8 @@ import { AuthShell } from "@/components/auth/auth-shell";
 // Deliberately just email + password. No role selector, no hidden role
 // field, no role state anywhere in this component — which portal an
 // account lands in is decided entirely server-side from the JWT the
-// backend issues (see middleware.ts), never from anything submitted here.
+// backend issues (see proxy.ts — Next.js 16's renamed middleware.ts
+// convention), never from anything submitted here.
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");

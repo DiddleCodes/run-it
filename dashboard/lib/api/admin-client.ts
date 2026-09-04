@@ -226,6 +226,7 @@ export interface AdminUserSummary {
   accountType: AccountType;
   suspendedAt: string | null;
   createdAt: string;
+  campusId: string | null;
 }
 
 export interface AdminUserDetail extends AdminUserSummary {
@@ -299,6 +300,10 @@ export const adminClient = {
   suspendUser: (id: string, reason: string) =>
     proxyFetch<AdminUserDetail>(`admin/users/${id}/suspend`, { method: "POST", body: { reason } }),
   reinstateUser: (id: string) => proxyFetch<AdminUserDetail>(`admin/users/${id}/reinstate`, { method: "POST" }),
+  // Task 37: the generic campus (re)assignment route — was already real and
+  // guarded on the backend (Task 26), just never had a dashboard UI.
+  assignUserCampus: (id: string, campusId: string) =>
+    proxyFetch<AdminUserDetail>(`admin/users/${id}/campus`, { method: "PATCH", body: { campusId } }),
 
   listRunnerKyc: (params: { status?: RunnerKycReviewStatus; page?: number; limit?: number } = {}) => {
     const search = new URLSearchParams();

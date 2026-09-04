@@ -99,6 +99,18 @@ export function ReconciliationBoard({
   // DataTable requires an `id` field; a reference is a unique enough key here.
   const rows = (report?.mismatches ?? []).map((m) => ({ ...m, id: m.reference }));
 
+  const historyColumns: Column<ReconciliationRun>[] = [
+    { key: "startedAt", header: "Started", render: (run) => formatDateTime(run.startedAt) },
+    { key: "walletChecked", header: "Wallet checked", className: "text-right", render: (run) => <span>{run.walletChecked}</span> },
+    { key: "transferLegsChecked", header: "Transfer legs checked", className: "text-right", render: (run) => <span>{run.transferLegsChecked}</span> },
+    { key: "mismatchCount", header: "Mismatches", className: "text-right", render: (run) => <span>{run.mismatchCount}</span> },
+    {
+      key: "triggeredBy",
+      header: "Triggered by",
+      render: (run) => <span className="text-[var(--muted-foreground)]">{run.triggeredBy ? "Admin" : "Scheduled sweep"}</span>,
+    },
+  ];
+
   const columns: Column<ReconciliationMismatch & { id: string }>[] = [
     { key: "reference", header: "Reference", render: (m) => <span className="font-mono text-xs">{m.reference}</span> },
     { key: "type", header: "Type", render: (m) => (m.type === "wallet_topup" ? "Wallet top-up" : "Transfer") },
@@ -177,44 +189,18 @@ export function ReconciliationBoard({
         </>
       )}
 
-      <div className="bg-card rounded-[var(--radius)] border border-[var(--border)] shadow-[0_1px_8px_rgba(0,0,0,0.06)] overflow-hidden mt-6">
-        <div className="px-5 py-4 border-b border-[var(--border)] flex items-center justify-between">
-          <h3 className="font-semibold text-[var(--foreground)]">Reconciliation run history</h3>
-          <button onClick={refreshHistory} className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
-            Refresh
-          </button>
-        </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-[var(--secondary)] border-b border-[var(--border)]">
-              <th className="px-5 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Started</th>
-              <th className="px-5 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Wallet checked</th>
-              <th className="px-5 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Transfer legs checked</th>
-              <th className="px-5 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Mismatches</th>
-              <th className="px-5 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Triggered by</th>
-            </tr>
-          </thead>
-          <tbody>
-            {history.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-10 text-center text-sm text-[var(--muted-foreground)]">
-                  No reconciliation runs logged yet.
-                </td>
-              </tr>
-            ) : (
-              history.map((run) => (
-                <tr key={run.id} className="border-b border-[var(--border)] last:border-0">
-                  <td className="px-5 py-3">{formatDateTime(run.startedAt)}</td>
-                  <td className="px-5 py-3 text-right">{run.walletChecked}</td>
-                  <td className="px-5 py-3 text-right">{run.transferLegsChecked}</td>
-                  <td className="px-5 py-3 text-right">{run.mismatchCount}</td>
-                  <td className="px-5 py-3 text-[var(--muted-foreground)]">{run.triggeredBy ? "Admin" : "Scheduled sweep"}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      <div className="flex items-center justify-between mt-6 mb-3">
+        <h3 className="font-semibold text-[var(--foreground)]">Reconciliation run history</h3>
+        <button onClick={refreshHistory} className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
+          Refresh
+        </button>
       </div>
+      <DataTable
+        columns={historyColumns}
+        data={history}
+        emptyTitle="No reconciliation runs logged yet"
+        emptyDescription="Runs appear here after the scheduled sweep or a manual trigger."
+      />
 
       <Modal
         open={!!resolving}
