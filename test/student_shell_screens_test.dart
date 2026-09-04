@@ -474,6 +474,32 @@ void main() {
       expect(find.text('Student'), findsOneWidget);
       expect(find.text('RUN-It Plus'), findsOneWidget);
     });
+
+    // Task 38: the bell used to carry a hardcoded `badge: true` red dot
+    // with no real unread-tracking behind it — the same fake-badge bug
+    // Task 22 already fixed on the Home screen, just missed here.
+    testWidgets('bell shows no fake unread badge, and tapping it is an honest "coming soon"', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _withStudentSession(const StudentProfileScreen()),
+      );
+      await tester.pump();
+
+      final bellButton = find.ancestor(
+        of: find.byIcon(CupertinoIcons.bell),
+        matching: find.byType(InkWell),
+      );
+      expect(bellButton, findsOneWidget);
+      // A `Positioned` badge dot was the only reason this button's tree
+      // ever contained a Positioned widget — asserting none exist here
+      // is a direct, load-bearing check against the fake-badge regression.
+      expect(find.descendant(of: bellButton, matching: find.byType(Positioned)), findsNothing);
+
+      await tester.tap(find.byIcon(CupertinoIcons.bell));
+      await tester.pump();
+      expect(find.text('Notifications are coming soon.'), findsOneWidget);
+    });
   });
 }
 

@@ -216,17 +216,16 @@ class _ProfileHeader extends StatelessWidget {
         ),
         _HeaderIconButton(icon: CupertinoIcons.gear, onTap: onSettingsTap),
         const SizedBox(width: 8),
-        _HeaderIconButton(icon: CupertinoIcons.bell, badge: true, onTap: onBellTap),
+        _HeaderIconButton(icon: CupertinoIcons.bell, onTap: onBellTap),
       ],
     );
   }
 }
 
 class _HeaderIconButton extends StatelessWidget {
-  const _HeaderIconButton({required this.icon, required this.onTap, this.badge = false});
+  const _HeaderIconButton({required this.icon, required this.onTap});
   final IconData icon;
   final VoidCallback onTap;
-  final bool badge;
 
   @override
   Widget build(BuildContext context) {
@@ -248,22 +247,7 @@ class _HeaderIconButton extends StatelessWidget {
             ),
           ],
         ),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Icon(icon, color: AppColors.inkText, size: 19),
-            if (badge)
-              Positioned(
-                right: -1,
-                top: -1,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
-                ),
-              ),
-          ],
-        ),
+        child: Icon(icon, color: AppColors.inkText, size: 19),
       ),
     );
   }
