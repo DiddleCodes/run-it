@@ -35,7 +35,10 @@
                                  centered as one block in the full screen height). Re-running
                                  `dart run flutter_native_splash:create` regenerates this storyboard
                                  from scratch and resets these two constraints back to dead-center —
-                                 reapply centerX/centerY exactly as below if that happens. -->
+                                 reapply centerX/centerY exactly as below if that happens.
+                                 Task 41: image itself is assets/icons/splash_icon.png now (a
+                                 tightly-cropped, single-solid-color export) — still sized to this
+                                 same 92pt box via scaleAspectFit. -->
                             <constraint firstItem="YRO-k0-Ey4" firstAttribute="width" secondItem="YRO-k0-Ey4" secondAttribute="height" multiplier="1:1" id="a1w-92-eq1"/>
                             <constraint firstItem="YRO-k0-Ey4" firstAttribute="width" constant="92" id="b2s-92-wd1"/>
                             <constraint firstItem="YRO-k0-Ey4" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="c3n-ct-erX"/>
