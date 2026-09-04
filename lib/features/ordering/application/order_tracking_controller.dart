@@ -17,6 +17,7 @@ class OrderTrackingSession {
     this.eateryName = '',
     this.deliveryLocationLabel = '',
     this.deliveryPin,
+    this.justPlaced = false,
   });
 
   final OrderStage? stage;
@@ -41,9 +42,16 @@ class OrderTrackingSession {
   /// notice rather than blocking or fabricating a code.
   final String? deliveryPin;
 
+  /// Task 43: true only for the one render right after [placeOrder] runs —
+  /// OrderTrackingScreen plays its "payment confirmed" beat exactly once
+  /// off this, then calls [OrderTrackingController.acknowledgeJustPlaced]
+  /// so revisiting an already-placed order (backgrounding the app,
+  /// navigating away and back) never replays it.
+  final bool justPlaced;
+
   bool get isActive => stage != null;
 
-  OrderTrackingSession copyWith({OrderStage? stage, String? runnerName}) =>
+  OrderTrackingSession copyWith({OrderStage? stage, String? runnerName, bool? justPlaced}) =>
       OrderTrackingSession(
         stage: stage ?? this.stage,
         orderId: orderId,
@@ -53,6 +61,7 @@ class OrderTrackingSession {
         eateryName: eateryName,
         deliveryLocationLabel: deliveryLocationLabel,
         deliveryPin: deliveryPin,
+        justPlaced: justPlaced ?? this.justPlaced,
       );
 }
 
@@ -92,8 +101,17 @@ class OrderTrackingController extends Notifier<OrderTrackingSession> {
       eateryName: eateryName,
       deliveryLocationLabel: deliveryLocationLabel,
       deliveryPin: deliveryPin,
+      justPlaced: true,
     );
     _scheduleNext();
+  }
+
+  /// Called once OrderTrackingScreen's "payment confirmed" beat has played
+  /// — a no-op otherwise so a stray call after the order has since moved on
+  /// (or been reset) can't resurrect a stale flag.
+  void acknowledgeJustPlaced() {
+    if (!state.justPlaced) return;
+    state = state.copyWith(justPlaced: false);
   }
 
   void _scheduleNext() {

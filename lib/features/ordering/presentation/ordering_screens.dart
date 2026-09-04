@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart'
     show CupertinoActionSheet, CupertinoActionSheetAction, showCupertinoModalPopup;
 import 'package:flutter/material.dart';
@@ -527,6 +529,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             vendorId: vendor?.id,
             items: escrowItems,
           );
+      // Task 43: the exact moment payment succeeded — a real escrow hold
+      // confirmed, not an optimistic guess. The matching visual beat plays
+      // moments later, as OrderTrackingScreen's first frame (see
+      // OrderTrackingSession.justPlaced) — this haptic doesn't wait for
+      // that navigation.
+      HapticFeedback.lightImpact();
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _placingOrder = false);
@@ -969,6 +977,11 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                 key: ValueKey('confirmed-${session.orderId}'),
                 orderId: session.orderId,
               )
+            else if (stage == OrderStage.placed && session.justPlaced)
+              _PaymentConfirmedBeat(
+                onComplete: () =>
+                    ref.read(orderTrackingProvider.notifier).acknowledgeJustPlaced(),
+              )
             else
               Text(
                 _statusLine(session),
@@ -1043,6 +1056,93 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
       case null:
         return '';
     }
+  }
+}
+
+/// Task 43: checkout's own success beat — a real moment for "I paid",
+/// deliberately distinct from [RouteLineReveal] (reserved for a *completed
+/// journey*: the KYC-approval/order-delivered motif). Checkout is the
+/// opposite — a journey about to begin, not one that just ended — so this
+/// is a quick, one-shot checkmark instead of a route drawing itself
+/// somewhere. It's also the app's most frequent success moment (every
+/// order, not a once-ever event like KYC), so it stays light: no confetti,
+/// under two seconds, then settles into the normal status line.
+class _PaymentConfirmedBeat extends StatefulWidget {
+  const _PaymentConfirmedBeat({required this.onComplete});
+
+  /// Called once the beat has played, so the caller can flip
+  /// [OrderTrackingSession.justPlaced] off and never replay this on a
+  /// revisit.
+  final VoidCallback onComplete;
+
+  @override
+  State<_PaymentConfirmedBeat> createState() => _PaymentConfirmedBeatState();
+}
+
+class _PaymentConfirmedBeatState extends State<_PaymentConfirmedBeat>
+    with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(vsync: this, duration: AppMotion.base);
+  Timer? _holdTimer;
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    if (MediaQuery.of(context).disableAnimations) {
+      widget.onComplete();
+      return;
+    }
+    _controller.forward();
+    // Long enough to actually register as its own moment, short enough
+    // that a student who's already moved on to their delivery PIN isn't
+    // stuck waiting for it — comfortably inside the 4s before this stage
+    // can advance on its own (OrderTrackingController._scheduleNext).
+    _holdTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) widget.onComplete();
+    });
+  }
+
+  @override
+  void dispose() {
+    _holdTimer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _controller,
+      child: ScaleTransition(
+        scale: CurvedAnimation(parent: _controller, curve: AppMotion.bouncy),
+        alignment: Alignment.centerLeft,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                color: AppColors.primaryMaroon,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check_rounded, color: AppColors.onMaroon, size: 20),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Flexible(
+              child: Text(
+                'Payment confirmed',
+                style: Theme.of(context).textTheme.headlineMedium
+                    ?.copyWith(color: OrderingColors.text(context)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

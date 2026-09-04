@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -287,6 +288,20 @@ void main() {
     testWidgets(
       'a hold failure (e.g. insufficient balance at write time) blocks order creation — never navigates to OrderTrackingScreen',
       (tester) async {
+        final hapticCalls = <String>[];
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (
+          call,
+        ) async {
+          if (call.method == 'HapticFeedback.vibrate') hapticCalls.add(call.arguments as String);
+          return null;
+        });
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+
         final router = GoRouter(
           initialLocation: AppRoutes.checkout,
           routes: [
@@ -329,6 +344,10 @@ void main() {
         final placeOrderFinder = find.textContaining('Place order');
         expect(placeOrderFinder, findsOneWidget);
         await tester.tap(placeOrderFinder);
+        // The button tap itself fires PrimaryButton's own haptic — clear it
+        // so only a checkout-success haptic (which shouldn't exist here)
+        // would show up below.
+        hapticCalls.clear();
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
 
@@ -338,12 +357,29 @@ void main() {
         expect(find.text('Track your order'), findsNothing);
         expect(find.text('Checkout'), findsOneWidget);
         expect(find.text('Insufficient wallet balance'), findsOneWidget);
+        // Task 43: the checkout success haptic only fires once the escrow
+        // hold actually succeeds — a rejected hold gets none.
+        expect(hapticCalls, isEmpty);
       },
     );
 
     testWidgets(
       'happy path: add an item, view basket, checkout with a real hold, and land in My Orders Active tab',
       (tester) async {
+        final hapticCalls = <String>[];
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (
+          call,
+        ) async {
+          if (call.method == 'HapticFeedback.vibrate') hapticCalls.add(call.arguments as String);
+          return null;
+        });
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+
         final router = GoRouter(
           initialLocation: AppRoutes.menu,
           routes: [
@@ -409,13 +445,29 @@ void main() {
         expect(find.text('Checkout'), findsOneWidget);
         final placeOrderFinder = find.textContaining('Place order');
         expect(placeOrderFinder, findsOneWidget);
+        // The tap itself resolves the (fully-faked, delay-free) checkout
+        // chain synchronously inside this same await, PrimaryButton's own
+        // tap haptic included — so isolate the checkout-success haptic by
+        // count (button tap + success = 2) rather than trying to clear
+        // between the two.
+        final hapticsBeforeTap = hapticCalls.length;
         await tester.tap(placeOrderFinder);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 200));
+        await tester.pump();
 
         // Checkout->OrderTracking is a context.go(), then we jump straight
         // to My Orders the same way tapping its nav tab would.
         expect(find.text('Track your order'), findsOneWidget);
+        // Task 43: the button's own tap haptic, plus exactly one more for
+        // the real escrow hold succeeding. OrderTrackingScreen's first
+        // frame shows the checkout success beat rather than the normal
+        // status line.
+        expect(hapticCalls.sublist(hapticsBeforeTap), [
+          'HapticFeedbackType.lightImpact',
+          'HapticFeedbackType.lightImpact',
+        ]);
+        expect(find.text('Payment confirmed'), findsOneWidget);
         router.go(AppRoutes.studentOrders);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 50));

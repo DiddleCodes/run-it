@@ -82,6 +82,16 @@ void main() {
 
       expect(container.read(orderTrackingProvider).stage, OrderStage.placed);
       expect(find.text('Order Received'), findsOneWidget);
+      // Task 43: the checkout success beat plays first, in place of the
+      // normal status line, then settles into it on its own timer.
+      expect(container.read(orderTrackingProvider).justPlaced, isTrue);
+      expect(find.text('Payment confirmed'), findsOneWidget);
+      expect(find.text('Looking for a runner nearby.'), findsNothing);
+
+      await tester.pump(const Duration(milliseconds: 1400));
+      await tester.pumpAndSettle();
+
+      expect(container.read(orderTrackingProvider).justPlaced, isFalse);
       expect(find.text('Looking for a runner nearby.'), findsOneWidget);
       expect(find.text('Cancel order'), findsOneWidget);
 
