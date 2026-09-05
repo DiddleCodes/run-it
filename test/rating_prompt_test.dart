@@ -42,15 +42,24 @@ class _RecordingRatingsRepository extends RatingsRepository {
   _RecordingRatingsRepository({this.throwOnRate});
   final ApiException? throwOnRate;
   String? lastOrderId;
-  int? lastStars;
-  String? lastComment;
+  int? lastRunnerStars;
+  int? lastVendorStars;
+  bool called = false;
 
   @override
-  Future<void> rate({required String orderId, required int stars, String? comment, required String token}) async {
+  Future<void> rate({
+    required String orderId,
+    int? runnerStars,
+    String? runnerComment,
+    int? vendorStars,
+    String? vendorComment,
+    required String token,
+  }) async {
     if (throwOnRate != null) throw throwOnRate!;
+    called = true;
     lastOrderId = orderId;
-    lastStars = stars;
-    lastComment = comment;
+    lastRunnerStars = runnerStars;
+    lastVendorStars = vendorStars;
   }
 }
 
@@ -93,18 +102,28 @@ Future<ProviderContainer> _reachConfirmed(WidgetTester tester, Widget harness, S
 }
 
 void main() {
-  group('Rating prompt (Task 14 Part D)', () {
-    testWidgets('submitting a real rating shows Thanks, then the closing message — no optimistic UI', (tester) async {
+  group('Rating prompt (Task 14 Part D, extended by Task 48 to also rate the restaurant)', () {
+    testWidgets('submitting a real rating for both the runner and the restaurant shows Thanks, then the closing message', (
+      tester,
+    ) async {
       _setPhoneViewport(tester);
       final repo = _RecordingRatingsRepository();
       await _reachConfirmed(tester, _harness(repo), 'order-rating-1');
 
-      expect(find.text('How was your delivery?'), findsOneWidget);
+      expect(find.text('How was your order?'), findsOneWidget);
+      expect(find.text('Your runner'), findsOneWidget);
+      expect(find.text('Tantalizers'), findsOneWidget);
       // No submission yet — the repository must not have been called just
       // from reaching this screen.
-      expect(repo.lastOrderId, isNull);
+      expect(repo.called, isFalse);
 
-      await tester.tap(find.byIcon(Icons.star_border_rounded).at(4)); // 5th star
+      // Two rows of 5 stars each: runner first (indices 0-4), then the
+      // restaurant (indices 5-9) — tapping the runner's 5th star fills all
+      // 5 of its icons, so the restaurant row's own stars re-index to 0-4
+      // for the next find.
+      await tester.tap(find.byIcon(Icons.star_border_rounded).at(4)); // runner: 5th star
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.star_border_rounded).at(2)); // restaurant: 3rd star (of its own row)
       await tester.pump();
       await tester.tap(find.text('Submit'));
       await tester.pump();
@@ -114,7 +133,8 @@ void main() {
       // jump straight to the closing message.
       expect(find.text('Thanks for your feedback!'), findsOneWidget);
       expect(repo.lastOrderId, 'order-rating-1');
-      expect(repo.lastStars, 5);
+      expect(repo.lastRunnerStars, 5);
+      expect(repo.lastVendorStars, 3);
 
       // The brief confirmation auto-advances into the original closing
       // message after its own short delay.
@@ -123,6 +143,28 @@ void main() {
       // Lets the "Thanks" widget's own one-shot entrance animation
       // (flutter_animate) resolve before teardown — it was disposed
       // mid-flight by the phase transition above.
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('rating only the restaurant (leaving the runner unrated) still submits a real, partial rating', (tester) async {
+      _setPhoneViewport(tester);
+      final repo = _RecordingRatingsRepository();
+      await _reachConfirmed(tester, _harness(repo), 'order-rating-partial');
+
+      // Restaurant row only — 4th star of the second row.
+      await tester.tap(find.byIcon(Icons.star_border_rounded).at(8));
+      await tester.pump();
+      await tester.tap(find.text('Submit'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(repo.called, isTrue);
+      expect(repo.lastRunnerStars, isNull);
+      expect(repo.lastVendorStars, 4);
+
+      // Drains the "Thanks" -> closing-message timer so no pending timer
+      // survives past this test's own teardown.
+      await tester.pump(const Duration(milliseconds: 950));
       await tester.pump(const Duration(seconds: 1));
     });
 
@@ -135,7 +177,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Enjoy your meal!'), findsOneWidget);
-      expect(repo.lastOrderId, isNull);
+      expect(repo.called, isFalse);
     });
 
     testWidgets('an already-rated (409) rejection is treated as a soft success, not an error', (tester) async {
@@ -143,7 +185,7 @@ void main() {
       final repo = _RecordingRatingsRepository(throwOnRate: const ApiException(409, 'This order has already been rated'));
       await _reachConfirmed(tester, _harness(repo), 'order-rating-3');
 
-      await tester.tap(find.byIcon(Icons.star_border_rounded).first); // 1st star
+      await tester.tap(find.byIcon(Icons.star_border_rounded).first); // 1st star, runner row
       await tester.pump();
       await tester.tap(find.text('Submit'));
       await tester.pump();
@@ -171,7 +213,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.text('Something went wrong on our end'), findsOneWidget);
-      expect(find.text('How was your delivery?'), findsOneWidget);
+      expect(find.text('How was your order?'), findsOneWidget);
       expect(find.text('Thanks for your feedback!'), findsNothing);
     });
   });

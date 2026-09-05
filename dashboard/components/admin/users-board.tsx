@@ -31,6 +31,7 @@ export function UsersBoard({ initialData }: { initialData: AdminUsersResponse })
   const [campuses, setCampuses] = useState<AdminCampus[]>([]);
   const [campusTarget, setCampusTarget] = useState<AdminUserSummary | AdminUserDetail | null>(null);
   const [selectedCampusId, setSelectedCampusId] = useState("");
+  const [confirmSettleDebt, setConfirmSettleDebt] = useState<AdminUserDetail | null>(null);
 
   useEffect(() => {
     adminClient.listCampuses().then(setCampuses).catch(() => {});
@@ -83,6 +84,21 @@ export function UsersBoard({ initialData }: { initialData: AdminUsersResponse })
     } finally {
       setBusy(false);
       setConfirmReinstate(null);
+    }
+  }
+
+  async function settleCashDebt() {
+    if (!confirmSettleDebt) return;
+    setBusy(true);
+    try {
+      await adminClient.settleCashDebt(confirmSettleDebt.id);
+      if (selectedId === confirmSettleDebt.id) setDetail(await adminClient.getUser(confirmSettleDebt.id));
+      toast.success(`Cash debt settled for ${confirmSettleDebt.name ?? confirmSettleDebt.email ?? "runner"}`);
+    } catch (err) {
+      toast.error(err instanceof AdminApiError ? err.message : "Couldn't settle this debt. Please try again.");
+    } finally {
+      setBusy(false);
+      setConfirmSettleDebt(null);
     }
   }
 
@@ -234,6 +250,27 @@ export function UsersBoard({ initialData }: { initialData: AdminUsersResponse })
               </div>
             )}
 
+            {detail.accountType === "runner" && !!detail.outstandingCashDebtKobo && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] mb-1">
+                  Pay on Delivery cash owed
+                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-red-600 font-medium">{formatKobo(detail.outstandingCashDebtKobo)}</p>
+                  <button
+                    onClick={() => setConfirmSettleDebt(detail)}
+                    className="px-3 py-1.5 rounded-lg border border-[var(--border)] text-xs font-medium hover:bg-[var(--muted)] transition-colors"
+                  >
+                    Mark settled
+                  </button>
+                </div>
+                <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                  The platform already paid the restaurant and runner for these deliveries — this is cash the runner
+                  collected and still owes back.
+                </p>
+              </div>
+            )}
+
             <div className="pt-2">
               {detail.suspendedAt ? (
                 <button
@@ -302,6 +339,15 @@ export function UsersBoard({ initialData }: { initialData: AdminUsersResponse })
         description="They will be able to log in again. A suspended vendor listing is not automatically re-approved — that goes through Vendor Review."
         confirmLabel={busy ? "Reinstating…" : "Reinstate"}
         onConfirm={() => confirmReinstate && reinstate(confirmReinstate)}
+      />
+
+      <ConfirmDialog
+        open={!!confirmSettleDebt}
+        onOpenChange={(open) => !open && setConfirmSettleDebt(null)}
+        title="Mark this runner's cash debt as settled?"
+        description="Only do this once you've confirmed, outside the app, that the runner has actually remitted the cash they owe. This settles every outstanding Pay on Delivery debt for them at once."
+        confirmLabel={busy ? "Settling…" : "Mark settled"}
+        onConfirm={settleCashDebt}
       />
 
       <Modal

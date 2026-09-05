@@ -137,6 +137,100 @@ describe('OrdersService.verifyDelivery', () => {
   });
 });
 
+describe('OrdersService.verifyDelivery — Task 47 Pay on Delivery', () => {
+  const podOrder = { ...baseOrder, status: 'picked_up', paymentMethod: 'pay_on_delivery', totalAmount: 10_000 };
+
+  it('rejects a Pay on Delivery order with no reported cash amount, before ever checking the PIN', async () => {
+    const { service, prisma, escrow } = makeService();
+    prisma.order.findUnique.mockResolvedValue({ ...podOrder });
+
+    await expect(service.verifyDelivery('order-1', '5678')).rejects.toThrow(BadRequestException);
+    expect(escrow.release).not.toHaveBeenCalled();
+    expect(prisma.cashCollectionDebt.upsert).not.toHaveBeenCalled();
+  });
+
+  it('releases escrow unconditionally and records a pending debt when the reported cash matches the order total', async () => {
+    const { service, prisma, escrow } = makeService();
+    prisma.order.findUnique.mockResolvedValue({ ...podOrder });
+
+    const result = await service.verifyDelivery('order-1', '5678', 10_000);
+
+    expect(result).toEqual({ status: 'delivered' });
+    expect(escrow.release).toHaveBeenCalledWith('order-1');
+    expect(prisma.cashCollectionDebt.upsert).toHaveBeenCalledWith({
+      where: { orderId: 'order-1' },
+      create: {
+        orderId: 'order-1',
+        runnerId: 'runner-1',
+        amountOwed: 10_000,
+        amountCollected: 10_000,
+        status: 'pending',
+      },
+      update: {},
+    });
+    expect(prisma.dispute.upsert).not.toHaveBeenCalled();
+  });
+
+  it('still releases escrow (restaurant/runner are never left waiting) but opens a Dispute and a disputed debt on a cash mismatch', async () => {
+    const { service, prisma, escrow } = makeService();
+    prisma.order.findUnique.mockResolvedValue({ ...podOrder });
+
+    const result = await service.verifyDelivery('order-1', '5678', 7_000);
+
+    expect(result).toEqual({ status: 'delivered' });
+    expect(escrow.release).toHaveBeenCalledWith('order-1');
+    expect(prisma.cashCollectionDebt.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ amountOwed: 10_000, amountCollected: 7_000, status: 'disputed' }),
+      }),
+    );
+    expect(prisma.dispute.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { orderId: 'order-1' },
+        create: expect.objectContaining({ orderId: 'order-1' }),
+      }),
+    );
+  });
+
+  it('never records a cash debt for a wallet order, even if a stray amountCollectedKobo is sent', async () => {
+    const { service, prisma, escrow } = makeService();
+    prisma.order.findUnique.mockResolvedValue({ ...baseOrder, status: 'picked_up', totalAmount: 10_000 });
+
+    const result = await service.verifyDelivery('order-1', '5678', 10_000);
+
+    expect(result).toEqual({ status: 'delivered' });
+    expect(escrow.release).toHaveBeenCalledWith('order-1');
+    expect(prisma.cashCollectionDebt.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('OrdersService.getMyCashDebtSummary', () => {
+  it('sums only pending/disputed debts into the running total owed', async () => {
+    const { service, prisma } = makeService();
+    prisma.cashCollectionDebt.findMany.mockResolvedValue([
+      { orderId: 'o1', amountOwed: 5_000, amountCollected: 5_000, status: 'pending', createdAt: new Date() },
+      { orderId: 'o2', amountOwed: 3_000, amountCollected: 2_000, status: 'disputed', createdAt: new Date() },
+    ]);
+
+    const result = await service.getMyCashDebtSummary('runner-1');
+
+    expect(prisma.cashCollectionDebt.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { runnerId: 'runner-1', status: { in: ['pending', 'disputed'] } } }),
+    );
+    expect(result.totalOwedKobo).toBe(8_000);
+    expect(result.debts).toHaveLength(2);
+  });
+
+  it('is zero when there are no outstanding debts', async () => {
+    const { service, prisma } = makeService();
+    prisma.cashCollectionDebt.findMany.mockResolvedValue([]);
+
+    const result = await service.getMyCashDebtSummary('runner-1');
+
+    expect(result).toEqual({ totalOwedKobo: 0, debts: [] });
+  });
+});
+
 describe('OrdersService.submitDeliveryProof', () => {
   it('flags the order for manual review without marking it delivered', async () => {
     const { service, prisma } = makeService();

@@ -12,6 +12,10 @@ extension VendorToEatery on MyVendorProfile {
     name: businessName,
     bannerUrl: logoUrl,
     blurb: (description != null && description!.trim().isNotEmpty) ? description!.trim() : category,
+    // Task 48: the restaurant's own real rating, once it has one — null
+    // until then, same "no fabricated number" rule this field's own doc
+    // comment already established.
+    rating: averageRating,
   );
 }
 

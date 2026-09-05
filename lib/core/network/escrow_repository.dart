@@ -93,6 +93,10 @@ class EscrowRepository {
     // Task 45: replaces the old per-item notes — one note for the whole
     // order.
     String? note,
+    // Task 47: 'wallet' or 'pay_on_delivery' — omitted entirely defaults to
+    // 'wallet' backend-side, so this stays optional rather than forcing
+    // every existing caller to pass it explicitly.
+    String? paymentMethod,
   }) async {
     await client.post(
       '/orders/$orderId/escrow/hold',
@@ -108,6 +112,7 @@ class EscrowRepository {
         'serviceFeeKobo': ?serviceFeeKobo,
         'deliveryLocationLabel': ?deliveryLocationLabel,
         'note': ?note,
+        'paymentMethod': ?paymentMethod,
       },
     );
   }

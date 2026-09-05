@@ -232,6 +232,11 @@ export interface AdminUserSummary {
 export interface AdminUserDetail extends AdminUserSummary {
   vendor: { id: string; businessName: string; status: string } | null;
   wallet: { balance: number } | null;
+  // Task 47: a runner's real, unsettled Pay on Delivery cash debt — the
+  // platform already funded that runner's restaurant/delivery payouts up
+  // front, so this is genuine platform financial exposure. Null for every
+  // non-runner account.
+  outstandingCashDebtKobo: number | null;
 }
 
 export interface AdminUsersResponse {
@@ -304,6 +309,14 @@ export const adminClient = {
   // guarded on the backend (Task 26), just never had a dashboard UI.
   assignUserCampus: (id: string, campusId: string) =>
     proxyFetch<AdminUserDetail>(`admin/users/${id}/campus`, { method: "PATCH", body: { campusId } }),
+  // Task 47: manual reconciliation for a runner's outstanding Pay on
+  // Delivery cash debt — settles every pending/disputed row for them at
+  // once (see AdminUsersService.settleCashDebt's own doc comment).
+  settleCashDebt: (id: string) =>
+    proxyFetch<{ runnerId: string; settledCount: number; outstandingCashDebtKobo: number }>(
+      `admin/users/${id}/settle-cash-debt`,
+      { method: "POST" },
+    ),
 
   listRunnerKyc: (params: { status?: RunnerKycReviewStatus; page?: number; limit?: number } = {}) => {
     const search = new URLSearchParams();

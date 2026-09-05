@@ -1,5 +1,6 @@
 import {
   BadGatewayException,
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   HttpException,
@@ -347,6 +348,69 @@ describe('OrderEscrowService.hold', () => {
         grossAmountKobo: 10_000,
       }),
     ).rejects.toThrow('connection reset');
+  });
+});
+
+describe('OrderEscrowService.hold — Task 47 Pay on Delivery', () => {
+  it('never touches the wallet at all for a Pay on Delivery order', async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue(null);
+    prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null, payAtDeliveryEnabled: true });
+    prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
+
+    const result = await service.hold('order-1', {
+      studentUserId: 's1',
+      restaurantUserId: 'r1',
+      runnerUserId: 'run1',
+      grossAmountKobo: 100_000,
+      deliveryFeeKobo: 50_000,
+      paymentMethod: 'pay_on_delivery',
+    });
+
+    expect(prisma.wallet.findUnique).not.toHaveBeenCalled();
+    expect(prisma.wallet.updateMany).not.toHaveBeenCalled();
+    expect(prisma.walletTransaction.create).not.toHaveBeenCalled();
+    expect(result.studentWalletTransactionId).toBeNull();
+    expect(prisma.order.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: expect.objectContaining({ paymentMethod: 'pay_on_delivery' }) }),
+    );
+    // The restaurant/runner payout math is identical to a wallet order —
+    // Pay on Delivery only changes who funds it and when.
+    expect(result.restaurantShare).toBeGreaterThan(0);
+    expect(result.runnerShare).toBe(20_000);
+  });
+
+  it("rejects a Pay on Delivery attempt when the restaurant hasn't opted in", async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue(null);
+    prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null, payAtDeliveryEnabled: false });
+
+    await expect(
+      service.hold('order-1', {
+        studentUserId: 's1',
+        restaurantUserId: 'r1',
+        grossAmountKobo: 100_000,
+        paymentMethod: 'pay_on_delivery',
+      }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.order.upsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects a Pay on Delivery attempt over the order-value cap even for an opted-in restaurant', async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue(null);
+    prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null, payAtDeliveryEnabled: true });
+
+    await expect(
+      service.hold('order-1', {
+        studentUserId: 's1',
+        restaurantUserId: 'r1',
+        grossAmountKobo: 960_000,
+        deliveryFeeKobo: 50_000,
+        paymentMethod: 'pay_on_delivery',
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.order.upsert).not.toHaveBeenCalled();
   });
 });
 
@@ -731,6 +795,28 @@ describe('OrderEscrowService.refund', () => {
       }),
     );
     expect(paystack.initiateTransfer).not.toHaveBeenCalled();
+    expect(result.status).toBe('refunded');
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'order-1' },
+      data: { status: 'cancelled', cancelledAt: expect.any(Date) },
+    });
+  });
+
+  it('Task 47: cancels a Pay on Delivery order with no wallet transaction to credit back — no wallet lookup at all', async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue({ ...heldEscrow, studentWalletTransactionId: null });
+    prisma.orderEscrow.updateMany.mockResolvedValue({ count: 1 });
+    prisma.orderEscrow.findUniqueOrThrow.mockResolvedValue({
+      ...heldEscrow,
+      studentWalletTransactionId: null,
+      status: 'refunded',
+    });
+
+    const result = await service.refund('order-1');
+
+    expect(prisma.walletTransaction.findUniqueOrThrow).not.toHaveBeenCalled();
+    expect(prisma.wallet.update).not.toHaveBeenCalled();
+    expect(prisma.walletTransaction.create).not.toHaveBeenCalled();
     expect(result.status).toBe('refunded');
     expect(prisma.order.updateMany).toHaveBeenCalledWith({
       where: { id: 'order-1' },

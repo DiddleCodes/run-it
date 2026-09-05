@@ -37,6 +37,7 @@ class MatchingRepository {
             dropoffLocation: (json['deliveryLocationLabel'] as String?) ?? 'Delivery address on file',
             payoutAmount: json['payoutAmount'] as int,
             totalAmount: json['totalAmount'] as int,
+            isPayOnDelivery: json['isPayOnDelivery'] as bool? ?? false,
             offeredAt: DateTime.parse(json['createdAt'] as String),
           ),
         )

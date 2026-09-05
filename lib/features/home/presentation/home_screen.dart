@@ -628,10 +628,10 @@ class _CampusPickCard extends StatelessWidget {
 }
 
 /// A vertical card sized for the horizontal "Popular around campus"
-/// scroller — thumbnail on top, name/blurb below. Real vendor data (Task
-/// 14) has no star rating yet (see `Eatery.rating`'s own doc comment), so
-/// this shows the vendor's real blurb (description or category) where a
-/// fabricated "4.8" used to sit.
+/// scroller — thumbnail on top, name/blurb below. Task 48: `vendor.rating`
+/// is now real once a restaurant has any ratings — shown alongside the
+/// blurb rather than replacing it, still null (and hidden) for an
+/// unrated vendor rather than a fabricated number.
 class _Vendor extends StatelessWidget {
   const _Vendor({required this.vendor});
   final Eatery vendor;
@@ -649,12 +649,28 @@ class _Vendor extends StatelessWidget {
       children: [
         MenuImagePlaceholder(seed: vendor.id, imageUrl: vendor.bannerUrl, size: 130),
         const SizedBox(height: 9),
-        Text(
-          vendor.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.titleLarge
-              ?.copyWith(fontSize: 15, color: AppColors.inkText),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                vendor.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleLarge
+                    ?.copyWith(fontSize: 15, color: AppColors.inkText),
+              ),
+            ),
+            if (vendor.rating != null) ...[
+              const SizedBox(width: 4),
+              const Icon(Icons.star_rounded, size: 13, color: AppColors.gold),
+              const SizedBox(width: 2),
+              Text(
+                vendor.rating!.toStringAsFixed(1),
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ],
         ),
         if (vendor.blurb != null) ...[
           const SizedBox(height: 4),

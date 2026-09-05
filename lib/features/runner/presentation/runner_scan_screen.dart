@@ -18,6 +18,7 @@ import '../../auth/application/auth_controller.dart';
 import '../../ordering/application/order_tracking_controller.dart';
 import '../application/runner_controller.dart';
 import '../domain/runner_models.dart';
+import 'cash_collection_screen.dart';
 import 'delivery_proof_capture_screen.dart';
 import 'handoff_photo_capture_screen.dart';
 
@@ -127,6 +128,15 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
       final handoffPhotoUrl = await _captureHandoffPhoto();
       verified = handoffPhotoUrl != null &&
           await _verifyPickup(orderId, code, handoffPhotoUrl);
+    } else if (active.job.isPayOnDelivery) {
+      // Task 47: bundled into the same verify-delivery call the backend
+      // hard-requires this for — a runner backing out of this screen
+      // (`amountCollectedKobo == null`) never reaches verify-delivery at
+      // all, same "cancelled capture = failed verification" shape the
+      // handoff-photo step above uses.
+      final amountCollectedKobo = await _collectCashPayment(active.job.totalAmount * 100);
+      verified = amountCollectedKobo != null &&
+          await _verifyDelivery(orderId, code, amountCollectedKobo: amountCollectedKobo);
     } else {
       verified = await _verifyDelivery(orderId, code);
     }
@@ -210,7 +220,24 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
     }
   }
 
-  Future<bool> _verifyDelivery(String orderId, String code) async {
+  /// Task 47: pushes the cash-collection confirmation screen and returns
+  /// the real kobo amount reported, or `null` if the runner backs out (or
+  /// their session expired) — either way, the caller must not proceed to
+  /// verify-delivery without one, same "cancelled = failed" shape
+  /// [_captureHandoffPhoto] uses.
+  Future<int?> _collectCashPayment(int orderTotalKobo) async {
+    final token = _runnerToken();
+    if (token == null) {
+      _showVerificationError('Your session has expired. Sign in again to continue.');
+      return null;
+    }
+    if (!mounted) return null;
+    return Navigator.of(context).push<int>(
+      MaterialPageRoute(builder: (_) => CashCollectionScreen(orderTotalKobo: orderTotalKobo)),
+    );
+  }
+
+  Future<bool> _verifyDelivery(String orderId, String code, {int? amountCollectedKobo}) async {
     final token = _runnerToken();
     if (token == null) {
       return _showVerificationError('Your session has expired. Sign in again to continue.');
@@ -218,7 +245,12 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
     try {
       final outcome = await ref
           .read(ordersRepositoryProvider)
-          .verifyDelivery(orderId: orderId, code: code, token: token);
+          .verifyDelivery(
+            orderId: orderId,
+            code: code,
+            token: token,
+            amountCollectedKobo: amountCollectedKobo,
+          );
       // Only a fully successful release reflects real confirmed backend
       // state (no optimistic UI on order/payment state) — a stuck payout
       // leg still means the PIN matched, but the student's own tracking

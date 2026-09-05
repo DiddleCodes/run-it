@@ -34,6 +34,24 @@ export class OrdersHistoryController {
   }
 }
 
+// Task 47: a runner's own real-time view of what they currently owe the
+// platform from completed Pay on Delivery deliveries — the Wallet screen's
+// "cash owed" total. Same "always me, never an arbitrary id" shape as
+// OrdersHistoryController above.
+@Controller('runners/me/cash-debt')
+export class RunnerCashDebtController {
+  constructor(private readonly orders: OrdersService) {}
+
+  @Get()
+  @UseGuards(JwtAuthGuard)
+  get(@CurrentUser() user: JwtPayload) {
+    if (user.accountType && user.accountType !== 'runner') {
+      throw new ForbiddenException('Only runner accounts have a cash-collection debt here');
+    }
+    return this.orders.getMyCashDebtSummary(user.sub);
+  }
+}
+
 @Controller('orders/:orderId')
 export class OrdersController {
   constructor(private readonly orders: OrdersService) {}
@@ -66,7 +84,7 @@ export class OrdersController {
   @UseGuards(EscrowPartyGuard)
   @EscrowParty('runner')
   verifyDelivery(@Param('orderId') orderId: string, @Body() dto: VerifyCodeDto) {
-    return this.orders.verifyDelivery(orderId, dto.code);
+    return this.orders.verifyDelivery(orderId, dto.code, dto.amountCollectedKobo);
   }
 
   // Fallback when PIN verification isn't possible (student's phone

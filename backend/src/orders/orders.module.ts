@@ -3,12 +3,12 @@ import { CommonModule } from '../common/common.module';
 import { EscrowPartyGuard } from '../common/guards/escrow-party.guard';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { OrderEscrowModule } from '../order-escrow/order-escrow.module';
-import { OrdersController, OrdersHistoryController } from './orders.controller';
+import { OrdersController, OrdersHistoryController, RunnerCashDebtController } from './orders.controller';
 import { OrdersService } from './orders.service';
 
 @Module({
   imports: [CommonModule, OrderEscrowModule, NotificationsModule],
-  controllers: [OrdersController, OrdersHistoryController],
+  controllers: [OrdersController, OrdersHistoryController, RunnerCashDebtController],
   providers: [OrdersService, EscrowPartyGuard],
 })
 export class OrdersModule {}

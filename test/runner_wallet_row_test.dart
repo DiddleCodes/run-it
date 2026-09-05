@@ -78,6 +78,16 @@ void main() {
     testWidgets('shows a Wallet row and navigates to WalletScreen showing the real credited balance', (
       tester,
     ) async {
+      // Task 48's added honest-framing caption makes this screen taller —
+      // the default 800x600 test surface was already tight enough that
+      // "Wallet" sat right at the sliver list's cache-extent edge; a
+      // realistic phone height (same convention most other screen tests
+      // in this suite use) gives it real room instead.
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       final router = GoRouter(
         initialLocation: AppRoutes.runnerProfile,
         routes: [

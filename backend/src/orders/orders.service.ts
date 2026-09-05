@@ -78,7 +78,11 @@ export class OrdersService {
     return { status: updated.status };
   }
 
-  async verifyDelivery(orderId: string, pin: string): Promise<{ status: Order['status'] }> {
+  async verifyDelivery(
+    orderId: string,
+    pin: string,
+    amountCollectedKobo?: number,
+  ): Promise<{ status: Order['status'] }> {
     const order = await this.getOrderOrThrow(orderId);
 
     // Idempotent: a retried correct submission after escrow already
@@ -90,6 +94,15 @@ export class OrdersService {
       throw new ConflictException(`Order ${orderId} is ${order.status}, not yet picked up`);
     }
 
+    // Task 47: bundled into this same call (not a separate "mark as paid"
+    // endpoint a runner could simply never call) so a Pay on Delivery order
+    // can never reach `delivered` without the platform recording what was
+    // actually collected — checked before the PIN itself, since there's no
+    // point burning a failed-attempt guess if this would reject anyway.
+    if (order.paymentMethod === 'pay_on_delivery' && amountCollectedKobo === undefined) {
+      throw new BadRequestException('Report the cash amount collected to confirm this delivery.');
+    }
+
     await this.assertNotRateLimited(orderId, 'delivery');
 
     if (!codesMatch(pin, order.deliveryPin)) {
@@ -99,8 +112,16 @@ export class OrdersService {
 
     // This is now the ONLY path that reaches `delivered` — escrow.release()
     // flips order.status itself, atomically with the escrow status flip.
+    // Unconditional regardless of payment method or (for POD) whatever cash
+    // figure was reported below — the restaurant/runner are never made to
+    // wait on a cash reconciliation that's a purely runner/platform matter
+    // (see Order.paymentMethod's own doc comment).
     await this.escrow.release(orderId);
     await this.resetRateLimit(orderId, 'delivery');
+
+    if (order.paymentMethod === 'pay_on_delivery' && amountCollectedKobo !== undefined) {
+      await this.recordCashCollection(order, amountCollectedKobo);
+    }
 
     this.notifications.emit({
       type: 'order_delivered',
@@ -257,6 +278,66 @@ export class OrdersService {
       total,
       page,
       limit,
+    };
+  }
+
+  // Task 47: called once, right after a Pay on Delivery order's escrow is
+  // released (see verifyDelivery above) — records what the runner actually
+  // collected as a debt owed to the platform (see CashCollectionDebt's own
+  // schema doc comment). A mismatch against the order's real total opens a
+  // real Dispute rather than silently recording a debt as if payment had
+  // matched; `upsert` on both writes so a retried verify-delivery call
+  // (idempotent per the early-return above once already `delivered`,
+  // but this only ever runs on the one call that actually reached release)
+  // can never violate either row's own one-per-order uniqueness.
+  private async recordCashCollection(order: Order, amountCollectedKobo: number): Promise<void> {
+    if (!order.runnerUserId) return;
+    const mismatched = amountCollectedKobo !== order.totalAmount;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.cashCollectionDebt.upsert({
+        where: { orderId: order.id },
+        create: {
+          orderId: order.id,
+          runnerId: order.runnerUserId!,
+          amountOwed: order.totalAmount,
+          amountCollected: amountCollectedKobo,
+          status: mismatched ? 'disputed' : 'pending',
+        },
+        update: {},
+      });
+
+      if (mismatched) {
+        await tx.dispute.upsert({
+          where: { orderId: order.id },
+          create: {
+            orderId: order.id,
+            reason: `Pay on Delivery cash mismatch — runner reported collecting ${amountCollectedKobo} kobo, order total was ${order.totalAmount} kobo`,
+          },
+          update: {},
+        });
+      }
+    });
+  }
+
+  // Task 47: what a runner currently owes the platform from completed Pay
+  // on Delivery deliveries — the running total the runner-facing Wallet
+  // screen surfaces, plus enough detail to explain it. Only pending/disputed
+  // rows count toward the total; a settled one is done, by definition.
+  async getMyCashDebtSummary(runnerUserId: string) {
+    const debts = await this.prisma.cashCollectionDebt.findMany({
+      where: { runnerId: runnerUserId, status: { in: ['pending', 'disputed'] } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return {
+      totalOwedKobo: debts.reduce((sum, debt) => sum + debt.amountOwed, 0),
+      debts: debts.map((debt) => ({
+        orderId: debt.orderId,
+        amountOwed: debt.amountOwed,
+        amountCollected: debt.amountCollected,
+        status: debt.status,
+        createdAt: debt.createdAt,
+      })),
     };
   }
 

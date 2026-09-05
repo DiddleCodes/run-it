@@ -18,6 +18,11 @@ const USER_SELECT = {
   suspendedAt: true,
   createdAt: true,
   campusId: true,
+  // Task 48: useful context for admin review (a runner-KYC decision, a
+  // support conversation) — real for any account type that's ever been
+  // rated, meaningless (null/0) for the rest.
+  averageRating: true,
+  ratingCount: true,
 } as const;
 
 @Injectable()
@@ -64,6 +69,12 @@ export class AdminUsersService {
   // + vendor row if restaurant, + wallet balance if student/runner — both
   // relations are optional on User, so this reads the same regardless of
   // accountType and simply comes back null for the non-applicable one.
+  //
+  // Task 47: + a runner's real outstanding Pay on Delivery cash debt — this
+  // is genuine platform financial exposure (the platform already funded
+  // that runner's restaurant/delivery payouts up front), so it belongs on
+  // the same admin surface as a wallet balance rather than buried in the
+  // orders/disputes lists. Only computed for a runner; null otherwise.
   async getOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
@@ -74,7 +85,52 @@ export class AdminUsersService {
       },
     });
     if (!user) throw new NotFoundException('User not found');
-    return user;
+
+    const outstandingCashDebtKobo =
+      user.accountType === 'runner' ? await this.sumOutstandingCashDebt(id) : null;
+
+    return { ...user, outstandingCashDebtKobo };
+  }
+
+  // Task 47: a deliberately simple, manual reconciliation action — settles
+  // every one of this runner's currently-outstanding (pending or disputed)
+  // cash debts at once, rather than building a per-debt settlement UI or an
+  // automatic netting-against-wallet-earnings job. An admin calls this once
+  // they've confirmed, by whatever real-world means, that the runner has
+  // actually remitted the cash they owed.
+  async settleCashDebt(adminUserId: string, id: string) {
+    const user = await this.requireUser(id);
+    if (user.accountType !== 'runner') {
+      throw new BadRequestException('Only runner accounts can carry a cash-collection debt');
+    }
+
+    const settled = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.cashCollectionDebt.updateMany({
+        where: { runnerId: id, status: { in: ['pending', 'disputed'] } },
+        data: { status: 'settled', settledAt: new Date(), settledBy: adminUserId },
+      });
+      await this.auditLog.record(
+        {
+          actorId: adminUserId,
+          action: 'user.settle_cash_debt',
+          targetType: 'user',
+          targetId: id,
+          reason: `Settled ${result.count} outstanding cash-collection debt(s)`,
+        },
+        tx,
+      );
+      return result.count;
+    });
+
+    return { runnerId: id, settledCount: settled, outstandingCashDebtKobo: await this.sumOutstandingCashDebt(id) };
+  }
+
+  private async sumOutstandingCashDebt(runnerId: string): Promise<number> {
+    const result = await this.prisma.cashCollectionDebt.aggregate({
+      where: { runnerId, status: { in: ['pending', 'disputed'] } },
+      _sum: { amountOwed: true },
+    });
+    return result._sum.amountOwed ?? 0;
   }
 
   async suspend(adminUserId: string, id: string, reason: string) {

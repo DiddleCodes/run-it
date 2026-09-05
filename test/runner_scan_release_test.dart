@@ -94,6 +94,7 @@ class _VerifyingDeliveryOrdersRepository extends OrdersRepository {
     required String orderId,
     required String code,
     required String token,
+    int? amountCollectedKobo,
   }) async => outcome;
 }
 
@@ -104,6 +105,7 @@ class _MismatchedDeliveryOrdersRepository extends OrdersRepository {
     required String orderId,
     required String code,
     required String token,
+    int? amountCollectedKobo,
   }) async {
     throw const ApiException(400, "That PIN doesn't match this order.");
   }

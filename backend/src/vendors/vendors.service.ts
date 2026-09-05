@@ -134,6 +134,10 @@ export class VendorsService {
           category: true,
           description: true,
           logoUrl: true,
+          // Task 48: real, student-facing restaurant rating — shown
+          // wherever a student browses vendors, not fabricated.
+          averageRating: true,
+          ratingCount: true,
         },
       }),
       this.prisma.vendor.count({ where }),

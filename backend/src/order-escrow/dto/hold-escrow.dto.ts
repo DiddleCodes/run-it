@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -9,6 +10,9 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+
+export const ORDER_PAYMENT_METHODS = ['wallet', 'pay_on_delivery'] as const;
+export type OrderPaymentMethodInput = (typeof ORDER_PAYMENT_METHODS)[number];
 
 export class OrderItemInputDto {
   // Nullable on the created row too — the menu item this pointed at may
@@ -81,6 +85,16 @@ export class HoldEscrowDto {
   @IsString()
   @MaxLength(280)
   note?: string;
+
+  // Task 47: how the student chose to pay at checkout. Optional, defaulting
+  // to 'wallet' — every already-shipped Flutter client omits this and must
+  // keep behaving exactly as before. 'pay_on_delivery' skips the wallet
+  // debit entirely; hold() re-validates the vendor's own opt-in and the
+  // order-value cap server-side regardless of what the client already
+  // checked (see OrderEscrowService.hold's own doc comment).
+  @IsOptional()
+  @IsIn(ORDER_PAYMENT_METHODS)
+  paymentMethod?: OrderPaymentMethodInput;
 
   // Task 9: identifies which Vendor row this order belongs to. Optional so
   // the already-shipped Flutter client (which doesn't send it) keeps

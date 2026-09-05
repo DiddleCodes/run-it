@@ -174,9 +174,31 @@ describe('MatchingService.listAvailable', () => {
         deliveryLocationLabel: 'Queen Elizabeth II Hall',
         payoutAmount: 850,
         totalAmount: 10_000,
+        isPayOnDelivery: false,
         createdAt,
       },
     ]);
+  });
+
+  it('flags a Pay on Delivery order as isPayOnDelivery for the runner job card', async () => {
+    const { service, prisma } = makeService();
+    const createdAt = new Date('2026-08-31T12:00:00Z');
+    prisma.order.findMany.mockResolvedValue([
+      {
+        id: 'order-1',
+        vendorId: 'vendor-1',
+        vendor: { businessName: 'Tantalizers' },
+        deliveryLocationLabel: 'Queen Elizabeth II Hall',
+        totalAmount: 10_000,
+        paymentMethod: 'pay_on_delivery',
+        escrow: { runnerShare: 850 },
+        createdAt,
+      },
+    ]);
+
+    const jobs = await service.listAvailable({ sub: 'runner-1', accountType: 'runner', role: 'user', campusId: 'campus-1' } as any);
+
+    expect(jobs[0].isPayOnDelivery).toBe(true);
   });
 
   // Task 26.

@@ -107,6 +107,18 @@ class RunnerProfileScreen extends ConsumerWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            // Task 48: honest framing — matching/dispatch priority doesn't
+            // actually weigh rating yet (informational only for now), so
+            // this reads as encouragement toward a real future benefit,
+            // not a claim about how jobs are assigned today.
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                'Keep your rating high — it may unlock more job opportunities and bonuses down the line.',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
+              ),
+            ),
             const SizedBox(height: 16),
             _WalletBalanceCard(
               total: totalEarnings,

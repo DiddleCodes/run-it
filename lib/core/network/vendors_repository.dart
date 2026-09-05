@@ -39,6 +39,10 @@ class VendorsRepository {
     String? description,
     String? logoUrl,
     String? requestedCampusId,
+    // Task 47: omitted entirely (not just `false`) when a caller doesn't
+    // pass it, so a routine business-info edit never accidentally flips a
+    // restaurant's existing Pay on Delivery opt-in back off.
+    bool? payAtDeliveryEnabled,
     required String token,
   }) async {
     final json =
@@ -51,6 +55,7 @@ class VendorsRepository {
                 if (description != null && description.trim().isNotEmpty) 'description': description.trim(),
                 'logoUrl': ?logoUrl,
                 'requestedCampusId': ?requestedCampusId,
+                'payAtDeliveryEnabled': ?payAtDeliveryEnabled,
               },
             )
             as Map<String, dynamic>;

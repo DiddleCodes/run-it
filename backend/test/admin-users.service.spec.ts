@@ -151,3 +151,64 @@ describe('AdminUsersService.assignCampus', () => {
     await expect(service.assignCampus('admin-1', 'missing', 'campus-1')).rejects.toThrow(NotFoundException);
   });
 });
+
+describe('AdminUsersService.getOne — Task 47 cash-collection debt visibility', () => {
+  it('surfaces a runner\'s real outstanding Pay on Delivery cash debt', async () => {
+    const { service, prisma } = makeService();
+    prisma.user.findUnique.mockResolvedValue({ id: 'runner-1', accountType: 'runner', vendor: null, wallet: { balance: 5_000 } });
+    prisma.cashCollectionDebt.aggregate.mockResolvedValue({ _sum: { amountOwed: 12_000 } });
+
+    const result = await service.getOne('runner-1');
+
+    expect(prisma.cashCollectionDebt.aggregate).toHaveBeenCalledWith({
+      where: { runnerId: 'runner-1', status: { in: ['pending', 'disputed'] } },
+      _sum: { amountOwed: true },
+    });
+    expect(result.outstandingCashDebtKobo).toBe(12_000);
+  });
+
+  it('is null for a non-runner account, without ever querying cash debts', async () => {
+    const { service, prisma } = makeService();
+    prisma.user.findUnique.mockResolvedValue({ id: 'student-1', accountType: 'student', vendor: null, wallet: { balance: 5_000 } });
+
+    const result = await service.getOne('student-1');
+
+    expect(prisma.cashCollectionDebt.aggregate).not.toHaveBeenCalled();
+    expect(result.outstandingCashDebtKobo).toBeNull();
+  });
+
+  it('throws when the user does not exist', async () => {
+    const { service, prisma } = makeService();
+    prisma.user.findUnique.mockResolvedValue(null);
+
+    await expect(service.getOne('missing')).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('AdminUsersService.settleCashDebt', () => {
+  it('settles every outstanding debt for a runner in one action and audit-logs it', async () => {
+    const { service, prisma } = makeService();
+    prisma.user.findUnique.mockResolvedValue({ id: 'runner-1', accountType: 'runner' });
+    prisma.cashCollectionDebt.updateMany.mockResolvedValue({ count: 3 });
+    prisma.cashCollectionDebt.aggregate.mockResolvedValue({ _sum: { amountOwed: 0 } });
+
+    const result = await service.settleCashDebt('admin-1', 'runner-1');
+
+    expect(prisma.cashCollectionDebt.updateMany).toHaveBeenCalledWith({
+      where: { runnerId: 'runner-1', status: { in: ['pending', 'disputed'] } },
+      data: { status: 'settled', settledAt: expect.any(Date), settledBy: 'admin-1' },
+    });
+    expect(prisma.adminAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ action: 'user.settle_cash_debt' }) }),
+    );
+    expect(result).toEqual({ runnerId: 'runner-1', settledCount: 3, outstandingCashDebtKobo: 0 });
+  });
+
+  it('rejects settling a cash debt for a non-runner account', async () => {
+    const { service, prisma } = makeService();
+    prisma.user.findUnique.mockResolvedValue({ id: 'student-1', accountType: 'student' });
+
+    await expect(service.settleCashDebt('admin-1', 'student-1')).rejects.toThrow(BadRequestException);
+    expect(prisma.cashCollectionDebt.updateMany).not.toHaveBeenCalled();
+  });
+});

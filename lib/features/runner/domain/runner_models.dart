@@ -29,6 +29,7 @@ class DeliveryJob {
     required this.dropoffLocation,
     required this.payoutAmount,
     required this.totalAmount,
+    this.isPayOnDelivery = false,
     required this.offeredAt,
   });
   /// The order id — also what `POST /orders/:id/escrow/claim` takes.
@@ -42,6 +43,12 @@ class DeliveryJob {
   /// The order's full total (Task 21b) — a real, honest stand-in for the
   /// old fabricated distance/ETA stat, shown on the Available card instead.
   final int totalAmount;
+
+  /// Task 47: this delivery needs cash collected from the student at
+  /// drop-off — shown as a badge before the runner even accepts, and
+  /// what tells the scan screen to require a "mark as paid" confirmation
+  /// alongside the delivery PIN.
+  final bool isPayOnDelivery;
   final DateTime offeredAt;
 }
 

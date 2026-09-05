@@ -15,6 +15,10 @@ export interface AvailableJob {
   deliveryLocationLabel: string | null;
   payoutAmount: number;
   totalAmount: number;
+  // Task 47: lets the runner see, before accepting, that this delivery
+  // needs cash collected from the student rather than nothing further to
+  // do at drop-off — surfaced as a badge on the job card.
+  isPayOnDelivery: boolean;
   createdAt: Date;
 }
 
@@ -159,6 +163,7 @@ export class MatchingService {
         deliveryLocationLabel: order.deliveryLocationLabel,
         payoutAmount: order.escrow!.runnerShare,
         totalAmount: order.totalAmount,
+        isPayOnDelivery: order.paymentMethod === 'pay_on_delivery',
         createdAt: order.createdAt,
       }));
   }

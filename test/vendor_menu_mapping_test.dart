@@ -19,10 +19,23 @@ void main() {
       expect(eatery.name, 'Tantalizers');
       expect(eatery.bannerUrl, 'https://cdn.example.com/logo.png');
       expect(eatery.blurb, 'Jollof rice, grilled chicken, and sides.');
-      // No vendor-level rating/prep-time backend field exists yet — never
-      // fabricated.
+      // Task 48: null here since this fixture never sets averageRating —
+      // an unrated vendor genuinely has no rating, never a fabricated one.
+      // No vendor-level prep-time backend field exists yet either.
       expect(eatery.rating, isNull);
       expect(eatery.prepTimeMinutes, isNull);
+    });
+
+    test('Task 48: carries the vendor\'s real average rating through once it has one', () {
+      const vendor = MyVendorProfile(
+        id: 'vendor-1',
+        businessName: 'Tantalizers',
+        category: 'Meals',
+        averageRating: 4.6,
+        ratingCount: 23,
+      );
+
+      expect(vendor.toEatery().rating, 4.6);
     });
 
     test('falls back to category as the blurb when there is no description', () {

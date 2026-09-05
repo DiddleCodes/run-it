@@ -85,6 +85,7 @@ class _RecordingEscrowRepository extends EscrowRepository {
     int? serviceFeeKobo,
     String? deliveryLocationLabel,
     String? note,
+    String? paymentMethod,
   }) async {
     calls.add({
       'restaurantUserId': restaurantUserId,

@@ -27,7 +27,7 @@ export class AdminRunnerKycService {
         orderBy: { submittedAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
-        include: { user: { select: { name: true, email: true, phone: true } } },
+        include: { user: { select: { name: true, email: true, phone: true, averageRating: true, ratingCount: true } } },
       }),
       this.prisma.runnerKyc.count({ where }),
     ]);
@@ -38,7 +38,7 @@ export class AdminRunnerKycService {
   async getOne(id: string) {
     const kyc = await this.prisma.runnerKyc.findUnique({
       where: { id },
-      include: { user: { select: { name: true, email: true, phone: true, createdAt: true } } },
+      include: { user: { select: { name: true, email: true, phone: true, createdAt: true, averageRating: true, ratingCount: true } } },
     });
     if (!kyc) throw new NotFoundException('Runner KYC submission not found');
     return kyc;

@@ -1,5 +1,6 @@
 import {
   BadGatewayException,
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   HttpException,
@@ -29,6 +30,12 @@ import { generateVerificationCode } from '../orders/pin-code.util';
 // STILL_WAITING_STATUSES.
 const CLAIMABLE_STATUSES: OrderStatus[] = ['preparing', 'ready_for_pickup'];
 
+// Task 47: Pay on Delivery is unavailable above this order value regardless
+// of the restaurant's own opt-in — a flat, hard business rule, not a
+// per-vendor or per-environment knob, so it's a plain constant rather than
+// another `escrow.*` config value.
+export const PAY_ON_DELIVERY_MAX_TOTAL_KOBO = 1_000_000;
+
 @Injectable()
 export class OrderEscrowService {
   private readonly logger = new Logger(OrderEscrowService.name);
@@ -46,14 +53,23 @@ export class OrderEscrowService {
     const existing = await this.prisma.orderEscrow.findUnique({ where: { orderId } });
     if (existing) throw new ConflictException(`Escrow already exists for order ${orderId} (status: ${existing.status})`);
 
-    const wallet = await this.prisma.wallet.findUnique({ where: { userId: dto.studentUserId } });
-    if (!wallet) throw new NotFoundException('No wallet for this student');
+    const paymentMethod = dto.paymentMethod ?? 'wallet';
 
     const foodSubtotalKobo = dto.grossAmountKobo;
     const deliveryFeeKobo =
       dto.deliveryFeeKobo ?? (this.config.get<number>('escrow.defaultDeliveryFeeKobo') as number);
     const serviceFeeKobo = dto.serviceFeeKobo ?? 0;
     const totalAmountKobo = foodSubtotalKobo + deliveryFeeKobo + serviceFeeKobo;
+
+    // Task 47: a Pay on Delivery order never touches the student's wallet
+    // at all — no lookup, no debit. A wallet order keeps the exact
+    // pre-existing behavior (a missing wallet row is a genuine error, not
+    // something POD needs to care about).
+    const wallet =
+      paymentMethod === 'wallet'
+        ? await this.prisma.wallet.findUnique({ where: { userId: dto.studentUserId } })
+        : null;
+    if (paymentMethod === 'wallet' && !wallet) throw new NotFoundException('No wallet for this student');
 
     // Populated inside the transaction below, read after it commits — the
     // order_placed notification must never fire for a hold that ultimately
@@ -63,29 +79,53 @@ export class OrderEscrowService {
     const escrow = await this.prisma.$transaction(async (tx) => {
       // Conditional decrement: only succeeds if the balance still covers the
       // debit at the moment of the write, so concurrent holds on the same
-      // wallet can't overdraw it.
-      const debited = await tx.wallet.updateMany({
-        where: { id: wallet.id, balance: { gte: totalAmountKobo } },
-        data: { balance: { decrement: totalAmountKobo } },
-      });
-      if (debited.count === 0) {
-        throw new HttpException('Insufficient wallet balance', HttpStatus.PAYMENT_REQUIRED);
-      }
+      // wallet can't overdraw it. Skipped entirely for Pay on Delivery — see
+      // this method's own doc comment above. Runs before vendor resolution
+      // below (same order as before Task 47) so a wallet order with an
+      // insufficient balance fails fast without touching the vendor row at
+      // all.
+      let studentWalletTransactionId: string | null = null;
+      if (paymentMethod === 'wallet') {
+        const debited = await tx.wallet.updateMany({
+          where: { id: wallet!.id, balance: { gte: totalAmountKobo } },
+          data: { balance: { decrement: totalAmountKobo } },
+        });
+        if (debited.count === 0) {
+          throw new HttpException('Insufficient wallet balance', HttpStatus.PAYMENT_REQUIRED);
+        }
 
-      const walletTransaction = await tx.walletTransaction.create({
-        data: {
-          walletId: wallet.id,
-          type: 'debit',
-          amount: totalAmountKobo,
-          reference: `escrow_hold_${orderId}`,
-          status: 'success',
-          metadata: { orderId, purpose: 'escrow_hold' },
-        },
-      });
+        const walletTransaction = await tx.walletTransaction.create({
+          data: {
+            walletId: wallet!.id,
+            type: 'debit',
+            amount: totalAmountKobo,
+            reference: `escrow_hold_${orderId}`,
+            status: 'success',
+            metadata: { orderId, purpose: 'escrow_hold' },
+          },
+        });
+        studentWalletTransactionId = walletTransaction.id;
+      }
 
       const resolved = await this.resolveVendor(tx, dto.restaurantUserId, dto.vendorId);
       vendorId = resolved.vendorId;
       const { commissionRateOverride } = resolved;
+
+      // Task 47: the real, server-side enforcement — the checkout UI's
+      // greyed-out state is honest UX on top of this, never a substitute
+      // for it. Checked inside the transaction (after vendor resolution,
+      // which is what actually knows the opt-in) so a rejected POD attempt
+      // never leaves a half-written order behind.
+      if (paymentMethod === 'pay_on_delivery') {
+        if (!resolved.payAtDeliveryEnabled) {
+          throw new ForbiddenException('This restaurant requires payment before delivery');
+        }
+        if (totalAmountKobo > PAY_ON_DELIVERY_MAX_TOTAL_KOBO) {
+          throw new BadRequestException(
+            `Pay on Delivery isn't available for orders over ₦${PAY_ON_DELIVERY_MAX_TOTAL_KOBO / 100}`,
+          );
+        }
+      }
 
       const { platformFee, restaurantShare, runnerShare, foodSubtotal, restaurantCommission, restaurantPlatformFee } =
         computeCommissionShares(foodSubtotalKobo, deliveryFeeKobo, serviceFeeKobo, {
@@ -110,6 +150,7 @@ export class OrderEscrowService {
           // real runner-matching rather than a runner resolved up front.
           runnerUserId: dto.runnerUserId ?? null,
           status: 'placed',
+          paymentMethod,
           totalAmount: totalAmountKobo,
           deliveryLocationLabel: dto.deliveryLocationLabel,
           note: dto.note,
@@ -137,7 +178,7 @@ export class OrderEscrowService {
         return await tx.orderEscrow.create({
           data: {
             orderId,
-            studentWalletTransactionId: walletTransaction.id,
+            studentWalletTransactionId,
             restaurantUserId: dto.restaurantUserId,
             runnerUserId: dto.runnerUserId ?? null,
             status: 'held',
@@ -412,9 +453,15 @@ export class OrderEscrowService {
       throw new ConflictException(`Escrow for order ${orderId} is ${escrow.status}, not held — nothing to refund`);
     }
 
-    const studentTransaction = await this.prisma.walletTransaction.findUniqueOrThrow({
-      where: { id: escrow.studentWalletTransactionId },
-    });
+    // Task 47: a Pay on Delivery order has no wallet debit to reverse — the
+    // student never paid anything up front, so refunding one is purely a
+    // status flip (see the order.updateMany below). A wallet order keeps
+    // the exact pre-existing credit-back behavior.
+    const studentTransaction = escrow.studentWalletTransactionId
+      ? await this.prisma.walletTransaction.findUniqueOrThrow({
+          where: { id: escrow.studentWalletTransactionId },
+        })
+      : null;
 
     return this.prisma.$transaction(async (tx) => {
       // Conditional transition guards against two concurrent refund calls
@@ -427,21 +474,23 @@ export class OrderEscrowService {
         throw new ConflictException(`Escrow for order ${orderId} is not held — nothing to refund`);
       }
 
-      await tx.wallet.update({
-        where: { id: studentTransaction.walletId },
-        data: { balance: { increment: escrow.grossAmount } },
-      });
+      if (studentTransaction) {
+        await tx.wallet.update({
+          where: { id: studentTransaction.walletId },
+          data: { balance: { increment: escrow.grossAmount } },
+        });
 
-      await tx.walletTransaction.create({
-        data: {
-          walletId: studentTransaction.walletId,
-          type: 'credit',
-          amount: escrow.grossAmount,
-          reference: `escrow_refund_${orderId}`,
-          status: 'success',
-          metadata: { orderId, purpose: 'escrow_refund' },
-        },
-      });
+        await tx.walletTransaction.create({
+          data: {
+            walletId: studentTransaction.walletId,
+            type: 'credit',
+            amount: escrow.grossAmount,
+            reference: `escrow_refund_${orderId}`,
+            status: 'success',
+            metadata: { orderId, purpose: 'escrow_refund' },
+          },
+        });
+      }
 
       // See release()'s comment: updateMany so a missing Order row can
       // never turn a successful refund into a thrown error. Safe to set
@@ -472,21 +521,35 @@ export class OrderEscrowService {
     tx: Prisma.TransactionClient,
     restaurantUserId: string,
     explicitVendorId?: string,
-  ): Promise<{ vendorId: string; commissionRateOverride: number | null }> {
+  ): Promise<{ vendorId: string; commissionRateOverride: number | null; payAtDeliveryEnabled: boolean }> {
     if (explicitVendorId) {
       // Trusts the caller-supplied id as before; a vendor that doesn't
-      // exist just falls back to the global default rate rather than
-      // failing the hold.
+      // exist just falls back to the global default rate (and no POD
+      // opt-in) rather than failing the hold.
       const vendor = await tx.vendor.findUnique({ where: { id: explicitVendorId } });
-      return { vendorId: explicitVendorId, commissionRateOverride: vendor?.commissionRateOverride ?? null };
+      return {
+        vendorId: explicitVendorId,
+        commissionRateOverride: vendor?.commissionRateOverride ?? null,
+        payAtDeliveryEnabled: vendor?.payAtDeliveryEnabled ?? false,
+      };
     }
 
     const vendor = await tx.vendor.findUnique({ where: { userId: restaurantUserId } });
-    if (vendor) return { vendorId: vendor.id, commissionRateOverride: vendor.commissionRateOverride };
+    if (vendor) {
+      return {
+        vendorId: vendor.id,
+        commissionRateOverride: vendor.commissionRateOverride,
+        payAtDeliveryEnabled: vendor.payAtDeliveryEnabled,
+      };
+    }
 
     const created = await tx.vendor.create({
       data: { userId: restaurantUserId, businessName: 'Unnamed vendor', category: 'General' },
     });
-    return { vendorId: created.id, commissionRateOverride: created.commissionRateOverride };
+    return {
+      vendorId: created.id,
+      commissionRateOverride: created.commissionRateOverride,
+      payAtDeliveryEnabled: created.payAtDeliveryEnabled,
+    };
   }
 }

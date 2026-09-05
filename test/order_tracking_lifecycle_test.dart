@@ -170,9 +170,10 @@ void main() {
           .jumpTo(0);
       await tester.pumpAndSettle();
       expect(find.text('Confirmed'), findsWidgets);
-      // The rating prompt (Task 14 Part D) comes first — Skip reaches the
-      // original closing message without submitting a rating.
-      expect(find.text('How was your delivery?'), findsOneWidget);
+      // The rating prompt (Task 14 Part D, extended by Task 48) comes
+      // first — Skip reaches the original closing message without
+      // submitting a rating.
+      expect(find.text('How was your order?'), findsOneWidget);
       await tester.tap(find.text('Skip'));
       await tester.pumpAndSettle();
 
@@ -205,6 +206,17 @@ void main() {
         ..markDelivered();
       await tester.pumpAndSettle();
       notifier.confirmDelivery();
+      await tester.pumpAndSettle();
+
+      // Task 48's taller two-party rating prompt pushes "Back to menu"
+      // far enough down that it's genuinely culled from the sliver list's
+      // element tree (not just off-screen) — same issue the lifecycle
+      // test above documents; jumping the scroll position directly is
+      // what actually brings it back.
+      tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position
+          .jumpTo(tester.state<ScrollableState>(find.byType(Scrollable).first).position.maxScrollExtent);
       await tester.pumpAndSettle();
 
       await tester.ensureVisible(find.text('Back to menu'));

@@ -39,4 +39,11 @@ export class AdminUsersController {
   assignCampus(@CurrentUser() admin: JwtPayload, @Param('id') id: string, @Body() dto: AssignCampusDto) {
     return this.service.assignCampus(admin.sub, id, dto.campusId);
   }
+
+  // Task 47: manual reconciliation for a runner's Pay on Delivery cash
+  // debt — see AdminUsersService.settleCashDebt's own doc comment.
+  @Post(':id/settle-cash-debt')
+  settleCashDebt(@CurrentUser() admin: JwtPayload, @Param('id') id: string) {
+    return this.service.settleCashDebt(admin.sub, id);
+  }
 }

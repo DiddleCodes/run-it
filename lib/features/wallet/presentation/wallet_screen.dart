@@ -19,6 +19,7 @@ import '../../../core/widgets/skeleton.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../ordering/presentation/widgets/ordering_components.dart';
 import '../../payout/application/payout_controller.dart';
+import '../../runner/application/runner_cash_debt_controller.dart';
 import '../application/wallet_controller.dart';
 import '../data/wallet_repository.dart';
 import '../domain/wallet_models.dart';
@@ -66,6 +67,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     final transactionsAsync = ref.watch(walletTransactionsProvider);
     final balance = balanceAsync.valueOrNull ?? 0;
     final transactions = transactionsAsync.valueOrNull ?? const <WalletTransaction>[];
+    // Task 47: null for a non-runner session — see
+    // RunnerCashDebtController's own doc comment.
+    final cashDebt = ref.watch(runnerCashDebtProvider).valueOrNull;
 
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,
@@ -122,6 +126,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                             ).textTheme.labelSmall?.copyWith(color: AppColors.error),
                           ),
                         ),
+                      if (cashDebt != null && cashDebt.totalOwedKobo > 0) ...[
+                        const SizedBox(height: 16),
+                        _CashOwedBanner(totalOwedKobo: cashDebt.totalOwedKobo),
+                      ],
                       const SizedBox(height: 16),
                       _ReferralBanner(
                         onTap: () => ref
@@ -479,6 +487,57 @@ class _ReferralBanner extends StatelessWidget {
             const Icon(CupertinoIcons.chevron_right, color: AppColors.mutedText, size: 16),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Task 47: a runner's real, running Pay on Delivery cash debt — the
+/// platform already funded that runner's own restaurant/delivery payouts
+/// up front, so this is a genuine amount owed back, not decorative. Purely
+/// informational (no action here — remitting/settling is an admin-side
+/// reconciliation, see AdminUsersService.settleCashDebt).
+class _CashOwedBanner extends StatelessWidget {
+  const _CashOwedBanner({required this.totalOwedKobo});
+  final int totalOwedKobo;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.accentRose,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(color: AppColors.primaryMaroon, shape: BoxShape.circle),
+            child: const Icon(Icons.payments_outlined, color: Colors.white, size: 19),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${naira(totalOwedKobo ~/ 100)} owed to RUN-It',
+                  style: Theme.of(context).textTheme.labelLarge
+                      ?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  "From Pay on Delivery cash you've collected — settled by an admin.",
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

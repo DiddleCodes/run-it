@@ -79,13 +79,18 @@ export class EscrowPartyGuard implements CanActivate {
     if (!escrow) throw new UnauthorizedException('No escrow for this order');
 
     const party = this.reflector.get<'runner' | 'student'>(ESCROW_PARTY_KEY, context.getHandler());
+    // Task 47: resolved directly off Order.studentUserId rather than
+    // walking studentWalletTransactionId -> Wallet.userId — that chain
+    // assumed every order debited a wallet, which a Pay on Delivery order
+    // never does (its studentWalletTransactionId is null). Order.studentUserId
+    // is already the source of truth for who placed the order regardless of
+    // payment method, so this is also simpler for the wallet case.
     const authorizedUserId =
       party === 'runner'
         ? escrow.runnerUserId
-        : await this.prisma.walletTransaction
-            .findUniqueOrThrow({ where: { id: escrow.studentWalletTransactionId } })
-            .then((txn) => this.prisma.wallet.findUniqueOrThrow({ where: { id: txn.walletId } }))
-            .then((wallet) => wallet.userId);
+        : await this.prisma.order
+            .findUniqueOrThrow({ where: { id: orderId } })
+            .then((order) => order.studentUserId);
 
     if (payload.sub !== authorizedUserId) {
       // 403, not 401: this is a valid, authenticated token that just isn't

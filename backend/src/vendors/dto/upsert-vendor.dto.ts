@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUrl, IsUUID, MaxLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsUrl, IsUUID, MaxLength } from 'class-validator';
 
 export class UpsertVendorDto {
   @IsString()
@@ -26,4 +26,12 @@ export class UpsertVendorDto {
   @IsOptional()
   @IsUUID()
   requestedCampusId?: string;
+
+  // Task 47: the restaurant's own opt-in for Pay on Delivery — omitted
+  // entirely on a routine business-info edit (this same endpoint's other
+  // use) leaves whatever was set before untouched, same convention as
+  // requestedCampusId above.
+  @IsOptional()
+  @IsBoolean()
+  payAtDeliveryEnabled?: boolean;
 }

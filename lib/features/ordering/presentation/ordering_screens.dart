@@ -480,6 +480,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       final restaurantUserId =
           vendor?.userId ??
           await ref.read(demoIdentityServiceProvider).ensureRestaurantUserId();
+      final form = ref.read(checkoutFormProvider);
 
       await ref
           .read(escrowRepositoryProvider)
@@ -502,7 +503,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             token: session.accessToken,
             vendorId: vendor?.id,
             items: escrowItems,
-            note: ref.read(checkoutFormProvider).note,
+            note: form.note,
+            // Task 47: the real server-side enforcement (vendor opt-in,
+            // order-value cap) happens on the backend regardless — this
+            // greyed-out-until-eligible UI is honest UX on top of it, not a
+            // substitute for it.
+            paymentMethod: form.paymentMethod == PaymentMethod.payOnDelivery
+                ? 'pay_on_delivery'
+                : 'wallet',
           );
       // Task 43: the exact moment payment succeeded — a real escrow hold
       // confirmed, not an optimistic guess. The matching visual beat plays
@@ -584,7 +592,30 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final form = ref.watch(checkoutFormProvider);
     final wallet = ref.watch(walletBalanceProvider).valueOrNull ?? 0;
     final pricing = PricingService.calculate(basket: basket, menuItems: menu);
-    final insufficient = wallet < pricing.total;
+    final walletInsufficient = wallet < pricing.total;
+    // Task 47: only actually blocks placing the order when Wallet is the
+    // chosen method — a low wallet balance is irrelevant once Pay on
+    // Delivery is selected instead.
+    final insufficient = form.paymentMethod == PaymentMethod.wallet && walletInsufficient;
+
+    // Task 47: the real server-side enforcement lives in
+    // OrderEscrowService.hold — this is honest UX on top of it, greying the
+    // option out with a specific reason rather than hiding it outright.
+    final vendor = ref.watch(selectedVendorProfileProvider).valueOrNull;
+    final overPodCap = pricing.total > PricingService.payOnDeliveryMaxTotal;
+    final restaurantAcceptsPod = vendor?.payAtDeliveryEnabled ?? false;
+    final podEligible = restaurantAcceptsPod && !overPodCap;
+    final podSubtitle = overPodCap
+        ? "Pay on Delivery isn't available for orders over ${naira(PricingService.payOnDeliveryMaxTotal)}."
+        : !restaurantAcceptsPod
+        ? 'This restaurant requires payment before delivery.'
+        : 'Pay cash when your order arrives.';
+    // Defensive: Pay on Delivery must never actually place an order once
+    // it's no longer eligible (e.g. the vendor profile reloads with the
+    // opt-in now off), even if it was selected while it was.
+    final podSelectedButNowIneligible =
+        form.paymentMethod == PaymentMethod.payOnDelivery && !podEligible;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Checkout')),
       body: ListView(
@@ -598,12 +629,26 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             icon: Icons.account_balance_wallet_outlined,
             title: 'RUN IT Wallet',
             subtitle:
-                'Balance ${naira(wallet)}${insufficient ? ' · Not enough for this order' : ''}',
+                'Balance ${naira(wallet)}${walletInsufficient ? ' · Not enough for this order' : ''}',
             selected: form.paymentMethod == PaymentMethod.wallet,
             warning: insufficient,
             onTap: () => ref
                 .read(checkoutFormProvider.notifier)
                 .setPayment(PaymentMethod.wallet),
+          ),
+          const SizedBox(height: 10),
+          _PaymentOption(
+            icon: Icons.payments_outlined,
+            title: 'Pay on Delivery',
+            subtitle: podSubtitle,
+            selected: podEligible && form.paymentMethod == PaymentMethod.payOnDelivery,
+            // Same "greyed out, tap explains why" convention as the Card /
+            // Bank stub below — never silently does nothing.
+            onTap: podEligible
+                ? () => ref
+                      .read(checkoutFormProvider.notifier)
+                      .setPayment(PaymentMethod.payOnDelivery)
+                : () => ref.read(appNotificationProvider.notifier).info(podSubtitle),
           ),
           if (insufficient)
             Padding(
@@ -707,7 +752,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 ? 'Wallet balance is insufficient'
                 : 'Place order · ${naira(pricing.total)}',
             loading: _placingOrder,
-            onPressed: (insufficient || _placingOrder)
+            onPressed: (insufficient || podSelectedButNowIneligible || _placingOrder)
                 ? null
                 : () => _placeOrder(
                     orderItems: [
@@ -871,6 +916,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
               _ConfirmedClosingMessage(
                 key: ValueKey('confirmed-${session.orderId}'),
                 orderId: session.orderId,
+                eateryName: session.eateryName,
               )
             else if (stage == OrderStage.placed && session.justPlaced)
               _PaymentConfirmedBeat(
@@ -1106,8 +1152,9 @@ enum _ClosingPhase { rating, thanks, message }
 /// submission: from the student's own perspective nothing went wrong, so
 /// there's nothing to alarm them with.
 class _ConfirmedClosingMessage extends ConsumerStatefulWidget {
-  const _ConfirmedClosingMessage({super.key, required this.orderId});
+  const _ConfirmedClosingMessage({super.key, required this.orderId, required this.eateryName});
   final String? orderId;
+  final String eateryName;
 
   @override
   ConsumerState<_ConfirmedClosingMessage> createState() =>
@@ -1117,7 +1164,8 @@ class _ConfirmedClosingMessage extends ConsumerStatefulWidget {
 class _ConfirmedClosingMessageState
     extends ConsumerState<_ConfirmedClosingMessage> {
   _ClosingPhase _phase = _ClosingPhase.rating;
-  int _stars = 0;
+  int _runnerStars = 0;
+  int _vendorStars = 0;
   bool _submitting = false;
   final _commentController = TextEditingController();
 
@@ -1139,10 +1187,15 @@ class _ConfirmedClosingMessageState
     if (mounted) setState(() => _phase = _ClosingPhase.message);
   }
 
+  /// Task 48: rates the runner and/or the restaurant in one call — whichever
+  /// star row the student actually filled in. Both are independently
+  /// optional backend-side, so a student who only rates one of the two
+  /// still gets a real submission, not a blocked one.
   Future<void> _submit() async {
     final orderId = widget.orderId;
     final session = ref.read(authControllerProvider);
-    if (orderId == null || _stars == 0 || session == null) return;
+    if (orderId == null || session == null) return;
+    if (_runnerStars == 0 && _vendorStars == 0) return;
     setState(() => _submitting = true);
 
     try {
@@ -1150,13 +1203,15 @@ class _ConfirmedClosingMessageState
           .read(ratingsRepositoryProvider)
           .rate(
             orderId: orderId,
-            stars: _stars,
-            comment: _commentController.text,
+            runnerStars: _runnerStars == 0 ? null : _runnerStars,
+            vendorStars: _vendorStars == 0 ? null : _vendorStars,
+            runnerComment: _commentController.text,
+            vendorComment: _commentController.text,
             token: session.accessToken,
           );
     } on ApiException catch (e) {
-      // "This order has already been rated" is an expected, non-alarming
-      // outcome here (e.g. a double-tap) — not a real failure to surface.
+      // "Already rated" (409) is an expected, non-alarming outcome here
+      // (e.g. a double-tap) — not a real failure to surface.
       if (e.statusCode == 409) {
         await _showThanksThenMessage();
         return;
@@ -1183,8 +1238,11 @@ class _ConfirmedClosingMessageState
     switch (_phase) {
       case _ClosingPhase.rating:
         return _RatingPrompt(
-          stars: _stars,
-          onStarsChanged: (value) => setState(() => _stars = value),
+          eateryName: widget.eateryName,
+          runnerStars: _runnerStars,
+          onRunnerStarsChanged: (value) => setState(() => _runnerStars = value),
+          vendorStars: _vendorStars,
+          onVendorStarsChanged: (value) => setState(() => _vendorStars = value),
           commentController: _commentController,
           submitting: _submitting,
           onSkip: _skip,
@@ -1198,20 +1256,27 @@ class _ConfirmedClosingMessageState
   }
 }
 
-/// "How was your delivery?" — 1-5 stars, an optional short comment, and a
-/// clear Skip so this never blocks the closing screen a student just wants
-/// to leave.
+/// "How was your order?" — Task 48: two independent 1-5 star rows (runner,
+/// restaurant), a shared optional comment, and a clear Skip so this never
+/// blocks the closing screen a student just wants to leave. Submitting
+/// only requires at least one of the two rows to be filled in.
 class _RatingPrompt extends StatelessWidget {
   const _RatingPrompt({
-    required this.stars,
-    required this.onStarsChanged,
+    required this.eateryName,
+    required this.runnerStars,
+    required this.onRunnerStarsChanged,
+    required this.vendorStars,
+    required this.onVendorStarsChanged,
     required this.commentController,
     required this.submitting,
     required this.onSkip,
     required this.onSubmit,
   });
-  final int stars;
-  final ValueChanged<int> onStarsChanged;
+  final String eateryName;
+  final int runnerStars;
+  final ValueChanged<int> onRunnerStarsChanged;
+  final int vendorStars;
+  final ValueChanged<int> onVendorStarsChanged;
   final TextEditingController commentController;
   final bool submitting;
   final VoidCallback onSkip;
@@ -1219,6 +1284,7 @@ class _RatingPrompt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final canSubmit = runnerStars > 0 || vendorStars > 0;
     return Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -1230,38 +1296,27 @@ class _RatingPrompt extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'How was your delivery?',
+                'How was your order?',
                 style: Theme.of(context).textTheme.titleLarge
                     ?.copyWith(color: OrderingColors.text(context)),
               ),
               const SizedBox(height: 4),
               Text(
-                'Rate your runner — it only takes a second.',
+                'Rate your runner and the restaurant — it only takes a second.',
                 style: Theme.of(context).textTheme.bodyMedium
                     ?.copyWith(color: AppColors.mutedText),
               ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (var i = 1; i <= 5; i++)
-                    InkWell(
-                      onTap: () => onStarsChanged(i),
-                      customBorder: const CircleBorder(),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          i <= stars
-                              ? Icons.star_rounded
-                              : Icons.star_border_rounded,
-                          size: 34,
-                          color: i <= stars
-                              ? AppColors.gold
-                              : AppColors.mutedText,
-                        ),
-                      ),
-                    ),
-                ],
+              const SizedBox(height: 18),
+              _RatingStarsRow(
+                label: 'Your runner',
+                stars: runnerStars,
+                onChanged: onRunnerStarsChanged,
+              ),
+              const SizedBox(height: 14),
+              _RatingStarsRow(
+                label: eateryName,
+                stars: vendorStars,
+                onChanged: onVendorStarsChanged,
               ),
               const SizedBox(height: 16),
               AppTextField(
@@ -1274,7 +1329,7 @@ class _RatingPrompt extends StatelessWidget {
               PrimaryButton(
                 label: 'Submit',
                 loading: submitting,
-                onPressed: (stars == 0 || submitting) ? null : onSubmit,
+                onPressed: (!canSubmit || submitting) ? null : onSubmit,
               ),
               const SizedBox(height: 4),
               Center(
@@ -1294,6 +1349,49 @@ class _RatingPrompt extends StatelessWidget {
           duration: AppMotion.base,
           curve: AppMotion.emphasized,
         );
+  }
+}
+
+/// One labeled row of 5 tappable stars — shared layout for both the
+/// runner and restaurant rating rows in [_RatingPrompt].
+class _RatingStarsRow extends StatelessWidget {
+  const _RatingStarsRow({required this.label, required this.stars, required this.onChanged});
+  final String label;
+  final int stars;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelLarge
+              ?.copyWith(color: OrderingColors.text(context), fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            for (var i = 1; i <= 5; i++)
+              InkWell(
+                onTap: () => onChanged(i),
+                customBorder: const CircleBorder(),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    i <= stars ? Icons.star_rounded : Icons.star_border_rounded,
+                    size: 30,
+                    color: i <= stars ? AppColors.gold : AppColors.mutedText,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
   }
 }
 
@@ -1567,11 +1665,12 @@ class _EateryHero extends StatelessWidget {
           style: Theme.of(context).textTheme.headlineMedium
               ?.copyWith(color: Colors.white),
         ),
-        // No vendor-level rating/prep-time estimate exists on the backend
-        // yet (Eatery.rating/prepTimeMinutes are null for every real
-        // vendor) — this row simply doesn't render rather than showing a
-        // fabricated number. Falls back to the vendor's own blurb
-        // (description or category) so the hero isn't left empty here.
+        // Task 48: eatery.rating is real once the restaurant has any
+        // ratings (null until then) — this row simply doesn't render
+        // rather than showing a fabricated number. No prep-time estimate
+        // exists on the backend yet, so that half stays null-guarded the
+        // same way. Falls back to the vendor's own blurb (description or
+        // category) so the hero isn't left empty here.
         if (eatery.rating != null || eatery.prepTimeMinutes != null)
           Row(
             children: [
@@ -1583,7 +1682,7 @@ class _EateryHero extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  '${eatery.rating}',
+                  eatery.rating!.toStringAsFixed(1),
                   style: Theme.of(context).textTheme.labelMedium
                       ?.copyWith(color: Colors.white),
                 ),

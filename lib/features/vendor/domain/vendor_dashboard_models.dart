@@ -141,12 +141,30 @@ class MyVendorProfile {
     this.description,
     this.logoUrl,
     this.userId,
+    this.payAtDeliveryEnabled = false,
+    this.averageRating,
+    this.ratingCount = 0,
   });
   final String id;
   final String businessName;
   final String category;
   final String? description;
   final String? logoUrl;
+
+  // Task 48: the restaurant's own real, student-submitted rating —
+  // `null` until it's ever been rated (never a fabricated starting
+  // number). Populated from every shape this class is parsed from (public
+  // list, menu fetch, and the restaurant's own `GET/POST /vendors/me`),
+  // since the backend's Vendor row carries it unconditionally.
+  final double? averageRating;
+  final int ratingCount;
+
+  // Task 47: the restaurant's own opt-in for Pay on Delivery — read by
+  // checkout (via `GET /vendors/:id/menu`'s unfiltered `vendor` object,
+  // same as `userId` below) to decide whether to show the option as
+  // available at all, and by the Restaurant Dashboard's own Profile tab to
+  // render the toggle's current state.
+  final bool payAtDeliveryEnabled;
 
   // Only ever populated from `GET /vendors/:id/menu` (whose `vendor` object
   // is an unfiltered Prisma row, `userId` included) — never from the public
@@ -164,6 +182,9 @@ class MyVendorProfile {
     description: json['description'] as String?,
     logoUrl: json['logoUrl'] as String?,
     userId: json['userId'] as String?,
+    payAtDeliveryEnabled: json['payAtDeliveryEnabled'] as bool? ?? false,
+    averageRating: (json['averageRating'] as num?)?.toDouble(),
+    ratingCount: json['ratingCount'] as int? ?? 0,
   );
 }
 

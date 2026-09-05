@@ -539,21 +539,53 @@ class _AvailableJobCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (isNew)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.successBackground,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                  child: Text(
-                    'New',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: AppColors.success,
-                      fontWeight: FontWeight.w700,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (isNew)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.successBackground,
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                      ),
+                      child: Text(
+                        'New',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppColors.success,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  // Task 47: told upfront, before accepting, that this
+                  // delivery needs cash collected from the student rather
+                  // than nothing further to do at drop-off.
+                  if (job.isPayOnDelivery) ...[
+                    if (isNew) const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.goldTint,
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.payments_outlined, size: 12, color: AppColors.primaryMaroonDeep),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Cash',
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: AppColors.primaryMaroonDeep,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 14),

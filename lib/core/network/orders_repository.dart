@@ -46,16 +46,22 @@ class OrdersRepository {
 
   /// See [DeliveryVerificationResult] — an [ApiException] (400/429) means
   /// the PIN itself was rejected and callers must not advance anything.
+  /// Task 47: [amountCollectedKobo] is the runner's "mark as paid"
+  /// confirmation for a Pay on Delivery order — the backend rejects this
+  /// call with no PIN check at all if the order is Pay on Delivery and
+  /// this is omitted (see OrdersService.verifyDelivery's own doc comment).
+  /// Meaningless, and ignored, for a wallet order.
   Future<DeliveryVerificationResult> verifyDelivery({
     required String orderId,
     required String code,
     required String token,
+    int? amountCollectedKobo,
   }) async {
     try {
       await client.post(
         '/orders/$orderId/verify-delivery',
         token: token,
-        body: {'code': code},
+        body: {'code': code, 'amountCollectedKobo': ?amountCollectedKobo},
       );
       return DeliveryVerificationResult.delivered;
     } on ApiException catch (e) {
@@ -136,4 +142,50 @@ class OrdersRepository {
       body: {'reason': reason, 'photoUrl': ?photoUrl},
     );
   }
+
+  /// Task 47: the runner's own real, running Pay on Delivery cash debt —
+  /// backs the Wallet screen's "cash owed" total.
+  Future<CashDebtSummary> fetchCashDebtSummary({required String token}) async {
+    final result = await client.get('/runners/me/cash-debt', token: token) as Map<String, dynamic>;
+    return CashDebtSummary.fromJson(result);
+  }
+}
+
+/// Task 47: one entry in [CashDebtSummary] — a single Pay on Delivery
+/// order's still-outstanding (pending or disputed) debt.
+class CashDebtEntry {
+  const CashDebtEntry({
+    required this.orderId,
+    required this.amountOwedKobo,
+    required this.amountCollectedKobo,
+    required this.status,
+    required this.createdAt,
+  });
+  final String orderId;
+  final int amountOwedKobo;
+  final int amountCollectedKobo;
+
+  /// 'pending' or 'disputed' — a settled debt never appears here at all
+  /// (see OrdersService.getMyCashDebtSummary backend-side).
+  final String status;
+  final DateTime createdAt;
+
+  factory CashDebtEntry.fromJson(Map<String, dynamic> json) => CashDebtEntry(
+    orderId: json['orderId'] as String,
+    amountOwedKobo: json['amountOwed'] as int,
+    amountCollectedKobo: json['amountCollected'] as int,
+    status: json['status'] as String,
+    createdAt: DateTime.parse(json['createdAt'] as String),
+  );
+}
+
+class CashDebtSummary {
+  const CashDebtSummary({required this.totalOwedKobo, required this.debts});
+  final int totalOwedKobo;
+  final List<CashDebtEntry> debts;
+
+  factory CashDebtSummary.fromJson(Map<String, dynamic> json) => CashDebtSummary(
+    totalOwedKobo: json['totalOwedKobo'] as int,
+    debts: (json['debts'] as List).map((e) => CashDebtEntry.fromJson(e as Map<String, dynamic>)).toList(),
+  );
 }

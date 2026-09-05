@@ -69,8 +69,7 @@ describe('EscrowPartyGuard', () => {
   it("allows the ordering student's own JWT to refund their own order's escrow", async () => {
     jwt.verifyAsync.mockResolvedValue({ sub: 'student-1', role: 'user' });
     prisma.orderEscrow.findUnique.mockResolvedValue({ runnerUserId: 'runner-1', studentWalletTransactionId: 'txn-1' });
-    prisma.walletTransaction.findUniqueOrThrow.mockResolvedValue({ walletId: 'wallet-1' });
-    prisma.wallet.findUniqueOrThrow = jest.fn().mockResolvedValue({ userId: 'student-1' });
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ studentUserId: 'student-1' });
     reflector.get.mockReturnValue('student');
     const request: any = { headers: { authorization: 'Bearer student-token' }, params: { orderId: 'order-1' } };
     await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
@@ -79,11 +78,19 @@ describe('EscrowPartyGuard', () => {
   it("rejects a different student's JWT for someone else's refund", async () => {
     jwt.verifyAsync.mockResolvedValue({ sub: 'student-2', role: 'user' });
     prisma.orderEscrow.findUnique.mockResolvedValue({ runnerUserId: 'runner-1', studentWalletTransactionId: 'txn-1' });
-    prisma.walletTransaction.findUniqueOrThrow.mockResolvedValue({ walletId: 'wallet-1' });
-    prisma.wallet.findUniqueOrThrow = jest.fn().mockResolvedValue({ userId: 'student-1' });
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ studentUserId: 'student-1' });
     reflector.get.mockReturnValue('student');
     const request: any = { headers: { authorization: 'Bearer student-token' }, params: { orderId: 'order-1' } };
     await expect(guard.canActivate(contextFor(request))).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("allows the ordering student's own JWT to refund a Pay on Delivery order with no wallet transaction at all", async () => {
+    jwt.verifyAsync.mockResolvedValue({ sub: 'student-1', role: 'user' });
+    prisma.orderEscrow.findUnique.mockResolvedValue({ runnerUserId: 'runner-1', studentWalletTransactionId: null });
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ studentUserId: 'student-1' });
+    reflector.get.mockReturnValue('student');
+    const request: any = { headers: { authorization: 'Bearer student-token' }, params: { orderId: 'order-1' } };
+    await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
   });
 
   it('rejects when there is no escrow for the given order', async () => {

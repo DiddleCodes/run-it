@@ -52,6 +52,28 @@ class MyVendorProfileController extends AsyncNotifier<MyVendorProfile> {
     state = AsyncValue.data(updated);
     return updated;
   }
+
+  /// Task 47: the Profile tab's own Pay on Delivery toggle — reuses the
+  /// same `POST /vendors/me` upsert endpoint (per its own doc comment
+  /// on "editing an already-reviewed vendor's profile"), re-sending the
+  /// restaurant's own current business info alongside the new flag rather
+  /// than needing a second, partial-update endpoint.
+  Future<void> setPayAtDeliveryEnabled(bool enabled) async {
+    final session = ref.read(authControllerProvider);
+    final current = state.valueOrNull;
+    if (session == null || current == null) return;
+    final updated = await ref
+        .read(vendorsRepositoryProvider)
+        .upsertMyVendor(
+          businessName: current.businessName,
+          category: current.category,
+          description: current.description,
+          logoUrl: current.logoUrl,
+          payAtDeliveryEnabled: enabled,
+          token: session.accessToken,
+        );
+    state = AsyncValue.data(updated);
+  }
 }
 
 final myVendorProfileProvider = AsyncNotifierProvider<MyVendorProfileController, MyVendorProfile>(

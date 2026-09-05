@@ -99,6 +99,28 @@ enum DisputeStatus {
   resolved
 }
 
+// Task 47: how an order was actually paid for. `pay_on_delivery` skips the
+// wallet debit/escrow hold entirely at order time — the restaurant/runner
+// are still paid through the exact same OrderEscrowService.release() path
+// as a wallet order (funded by the platform up front); what the student
+// owes in cash is tracked separately via CashCollectionDebt.
+enum OrderPaymentMethod {
+  wallet
+  pay_on_delivery
+}
+
+// Task 47: whether a runner's reported cash collection for a Pay on
+// Delivery order has been squared with the platform. `disputed` means the
+// runner reported collecting something other than the order total — see
+// OrdersService.verifyDelivery's own doc comment — and stays that way
+// until an admin resolves it (whether through the linked Dispute or a
+// direct settle action; both funnel through AdminUsersService.settleCashDebt).
+enum CashCollectionDebtStatus {
+  pending
+  settled
+  disputed
+}
+
 enum DisputeResolutionType {
   release
   refund
@@ -129,12 +151,12 @@ enum OrderStatus {
 // domain alongside the institution's main one) — CampusService.resolveByEmail
 // matches a signup email's domain against every campus's list.
 model Campus {
-  id                 String   @id @default(uuid())
-  name               String
+  id                  String   @id @default(uuid())
+  name                String
   allowedEmailDomains String[] @map("allowed_email_domains")
-  createdAt          DateTime @default(now()) @map("created_at")
+  createdAt           DateTime @default(now()) @map("created_at")
 
-  users            User[]
+  users              User[]
   requestedByVendors Vendor[] @relation("VendorRequestedCampus")
 
   @@map("campuses")
@@ -184,13 +206,19 @@ model User {
   passwordResetTokens PasswordResetToken[]
   refreshTokens       RefreshToken[]
 
-  studentOrders   Order[]        @relation("StudentOrders")
-  runnerOrders    Order[]        @relation("RunnerOrders")
-  ratingsReceived RunnerRating[] @relation("RunnerRatingsReceived")
-  ratingsGiven    RunnerRating[] @relation("StudentRatingsGiven")
+  studentOrders      Order[]        @relation("StudentOrders")
+  runnerOrders       Order[]        @relation("RunnerOrders")
+  ratingsReceived    RunnerRating[] @relation("RunnerRatingsReceived")
+  ratingsGiven       RunnerRating[] @relation("StudentRatingsGiven")
+  // Task 48: a student's own restaurant ratings given — distinct from
+  // ratingsGiven above (runner ratings), since the two are separate tables.
+  vendorRatingsGiven VendorRating[] @relation("StudentVendorRatingsGiven")
 
   notifications Notification[]
   deviceTokens  DeviceToken[]
+
+  // Task 47: a runner's own outstanding Pay on Delivery cash debts.
+  cashCollectionDebts CashCollectionDebt[] @relation("RunnerCashDebts")
 
   @@map("users")
 }
@@ -325,8 +353,23 @@ model Vendor {
   requestedCampusId String? @map("requested_campus_id")
   requestedCampus   Campus? @relation("VendorRequestedCampus", fields: [requestedCampusId], references: [id])
 
+  // Task 47: restaurant opt-in for Pay on Delivery — off by default. A
+  // student can only choose POD at checkout for a vendor with this set,
+  // and OrderEscrowService.hold() re-checks it server-side regardless of
+  // what the client shows (the UI's greyed-out state is honest UX on top
+  // of a real enforcement point, not the enforcement itself).
+  payAtDeliveryEnabled Boolean @default(false) @map("pay_at_delivery_enabled")
+
+  // Task 48: same denormalized-and-recalculated-per-rating shape as
+  // User.averageRating/ratingCount (RatingsService.rate) — real,
+  // student-submitted restaurant feedback, informational only for now
+  // (no effect on ranking/matching — see VendorRating's own doc comment).
+  averageRating Float? @map("average_rating")
+  ratingCount   Int    @default(0) @map("rating_count")
+
   menuItems MenuItem[]
   orders    Order[]
+  ratings   VendorRating[]
 
   @@map("vendors")
 }
@@ -356,11 +399,11 @@ model MenuItem {
 // existing single-request-per-order contract intact instead of requiring a
 // second call the already-shipped Flutter client doesn't make.
 model Order {
-  id                    String      @id @default(uuid())
-  studentUserId         String      @map("student_user_id")
-  studentUser           User        @relation("StudentOrders", fields: [studentUserId], references: [id])
-  vendorId              String      @map("vendor_id")
-  vendor                Vendor      @relation(fields: [vendorId], references: [id])
+  id                    String             @id @default(uuid())
+  studentUserId         String             @map("student_user_id")
+  studentUser           User               @relation("StudentOrders", fields: [studentUserId], references: [id])
+  vendorId              String             @map("vendor_id")
+  vendor                Vendor             @relation(fields: [vendorId], references: [id])
   // Task 21a: nullable since order creation — a broadcast-and-claim runner
   // may not exist yet. Kept in sync with OrderEscrow.runnerUserId (the
   // authorization/payout source of truth — see its own doc comment) by
@@ -368,12 +411,17 @@ model Order {
   // 21a) sets both atomically on a successful claim. This copy exists for
   // ownership checks on the Order side (e.g. getOrderForViewer) without a
   // join back to OrderEscrow.
-  runnerUserId          String?     @map("runner_user_id")
-  runnerUser            User?       @relation("RunnerOrders", fields: [runnerUserId], references: [id])
-  status                OrderStatus @default(placed)
+  runnerUserId          String?            @map("runner_user_id")
+  runnerUser            User?              @relation("RunnerOrders", fields: [runnerUserId], references: [id])
+  status                OrderStatus        @default(placed)
+  // Task 47: set once, at hold() time, from what the student actually
+  // chose at checkout — never inferred later from the presence/absence of
+  // an OrderEscrow.studentWalletTransactionId, so it stays meaningful even
+  // if that FK's own nullability ever changes for an unrelated reason.
+  paymentMethod         OrderPaymentMethod @default(wallet) @map("payment_method")
   // Integer kobo. Never a float.
-  totalAmount           Int         @map("total_amount")
-  deliveryLocationLabel String?     @map("delivery_location_label")
+  totalAmount           Int                @map("total_amount")
+  deliveryLocationLabel String?            @map("delivery_location_label")
   // Task 45: one note for the whole order (e.g. "leave at the gate"),
   // replacing the old per-item OrderItem.notes — a single field is what the
   // checkout UI actually collects (one box, not one per line), and it's
@@ -427,10 +475,12 @@ model Order {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  items   OrderItem[]
-  escrow  OrderEscrow?
-  rating  RunnerRating?
-  dispute Dispute?
+  items              OrderItem[]
+  escrow             OrderEscrow?
+  rating             RunnerRating?
+  vendorRating       VendorRating?
+  dispute            Dispute?
+  cashCollectionDebt CashCollectionDebt?
 
   @@index([vendorId, createdAt])
   @@map("orders")
@@ -469,6 +519,28 @@ model RunnerRating {
 
   @@index([runnerId])
   @@map("runner_ratings")
+}
+
+// Task 48: the restaurant-side counterpart to RunnerRating above — same
+// shape, same one-rating-per-order-per-party enforcement (orderId
+// unique), separate table rather than a shared/polymorphic one since a
+// student rates the runner and the restaurant independently for the same
+// order (see RatingsService.rate's own doc comment for why one request can
+// carry either, both, or — on a retry — neither).
+model VendorRating {
+  id        String   @id @default(uuid())
+  orderId   String   @unique @map("order_id")
+  order     Order    @relation(fields: [orderId], references: [id])
+  vendorId  String   @map("vendor_id")
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
+  studentId String   @map("student_id")
+  student   User     @relation("StudentVendorRatingsGiven", fields: [studentId], references: [id])
+  stars     Int
+  comment   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([vendorId])
+  @@map("vendor_ratings")
 }
 
 model Wallet {
@@ -518,14 +590,18 @@ model PayoutAccount {
 }
 
 model OrderEscrow {
-  id                         String            @id @default(uuid())
-  orderId                    String            @unique @map("order_id")
+  id                         String             @id @default(uuid())
+  orderId                    String             @unique @map("order_id")
   // Safe as a hard FK (not just a loose string) because hold() always
   // creates the Order row itself, in the same transaction, before creating
   // this row — see Order's doc comment.
-  order                      Order             @relation(fields: [orderId], references: [id])
-  studentWalletTransactionId String            @unique @map("student_wallet_transaction_id")
-  studentWalletTransaction   WalletTransaction @relation(fields: [studentWalletTransactionId], references: [id])
+  order                      Order              @relation(fields: [orderId], references: [id])
+  // Task 47: nullable — a Pay on Delivery order never debits the
+  // student's wallet at all, so there is no WalletTransaction row to point
+  // at. release()/refund() both already branch on this being present
+  // rather than assuming it — see their own doc comments.
+  studentWalletTransactionId String?            @unique @map("student_wallet_transaction_id")
+  studentWalletTransaction   WalletTransaction? @relation(fields: [studentWalletTransactionId], references: [id])
 
   // Not in the original spec table, but required for /release to look up
   // "the restaurant's and runner's payout_accounts" without a second request
@@ -553,9 +629,9 @@ model OrderEscrow {
   // payout breakdown. Lets the dashboard show the real line-item math (food
   // subtotal, minus commission, minus the flat platform fee, equals
   // restaurantShare) instead of re-deriving it from current config.
-  foodSubtotal           Int @map("food_subtotal")
-  restaurantCommission   Int @map("restaurant_commission")
-  restaurantPlatformFee  Int @map("restaurant_platform_fee")
+  foodSubtotal          Int @map("food_subtotal")
+  restaurantCommission  Int @map("restaurant_commission")
+  restaurantPlatformFee Int @map("restaurant_platform_fee")
 
   restaurantTransferReference String? @map("restaurant_transfer_reference")
   runnerTransferReference     String? @map("runner_transfer_reference")
@@ -607,6 +683,43 @@ model Dispute {
 
   @@index([status, openedAt])
   @@map("disputes")
+}
+
+// Task 47: what a runner owes the platform after completing a Pay on
+// Delivery order — the platform already funded the restaurant's and
+// runner's own payouts via the normal OrderEscrowService.release() path
+// (see Order.paymentMethod's doc comment), so the cash the runner
+// collects from the student is a debt to the platform, not new money the
+// runner keeps. One row per order (created at the same moment
+// OrdersService.verifyDelivery records the runner's "mark as paid"
+// confirmation), never accumulated/netted automatically — settling is a
+// deliberate, auditable admin action (AdminUsersService.settleCashDebt),
+// not a background job against the runner's own wallet balance.
+model CashCollectionDebt {
+  id       String @id @default(uuid())
+  orderId  String @unique @map("order_id")
+  order    Order  @relation(fields: [orderId], references: [id])
+  runnerId String @map("runner_id")
+  runner   User   @relation("RunnerCashDebts", fields: [runnerId], references: [id])
+
+  // Integer kobo, always the order's full total — what the runner should
+  // have collected, and therefore owes regardless of what they actually
+  // report (see `amountCollected` below).
+  amountOwed      Int @map("amount_owed")
+  // Integer kobo, exactly what the runner reported collecting via
+  // "mark as paid" — may differ from amountOwed (short payment, refusal),
+  // which is what puts this row into `disputed` rather than `pending`.
+  amountCollected Int @map("amount_collected")
+
+  status CashCollectionDebtStatus @default(pending)
+
+  settledAt DateTime? @map("settled_at")
+  settledBy String?   @map("settled_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([runnerId, status])
+  @@map("cash_collection_debts")
 }
 
 // Task 13c: generic audit trail for every admin mutation (vendor

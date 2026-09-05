@@ -111,7 +111,21 @@ export function createPrismaMock() {
     orderItem: {
       createMany: jest.fn(),
     },
+    cashCollectionDebt: {
+      findUnique: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+      create: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      upsert: jest.fn(),
+      aggregate: jest.fn().mockResolvedValue({ _sum: { amountOwed: 0 } }),
+    },
     runnerRating: {
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      aggregate: jest.fn(),
+    },
+    vendorRating: {
       findUnique: jest.fn(),
       create: jest.fn(),
       aggregate: jest.fn(),

@@ -1,4 +1,4 @@
-enum PaymentMethod { wallet, card }
+enum PaymentMethod { wallet, card, payOnDelivery }
 
 /// The student-side delivery lifecycle. Kept separate from the runner's
 /// `DeliveryStage` since the student sees one extra stage before a runner
@@ -32,9 +32,8 @@ class Eatery {
   // Real vendor description if given, else its category — shown as the
   // one-line subtitle under the vendor's name. Never a fabricated blurb.
   final String? blurb;
-  // No backend concept of a vendor-level star rating exists yet (only
-  // per-runner ratings, Task 14 Part D) — null everywhere real data is
-  // used; UI hides the rating row rather than showing a fake number.
+  // Task 48: the restaurant's own real, student-submitted average rating —
+  // null until it's ever been rated (still no fabricated starting number).
   final double? rating;
   // Same story: no backend prep-time estimate exists yet.
   final int? prepTimeMinutes;
