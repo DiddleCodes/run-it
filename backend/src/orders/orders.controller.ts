@@ -1,13 +1,38 @@
-import { Body, Controller, ForbiddenException, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtPayload } from '../auth/jwt-payload.interface';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { EscrowParty, EscrowPartyGuard } from '../common/guards/escrow-party.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { DeliveryProofDto } from './dto/delivery-proof.dto';
+import { DEFAULT_PAGE_SIZE, ListMyOrdersQueryDto, MAX_PAGE_SIZE } from './dto/list-my-orders-query.dto';
 import { ReportProblemDto } from './dto/report-problem.dto';
 import { VerifyCodeDto } from './dto/verify-code.dto';
 import { VerifyPickupDto } from './dto/verify-pickup.dto';
 import { OrdersService } from './orders.service';
+
+// Task 46: a separate, param-less controller class from the one below
+// (`orders/:orderId`) — `GET /orders` and `GET /orders/:orderId` don't
+// collide (Nest routes purely on path shape), and this keeps the
+// student-only "my history" concern out of the party-scoped single-order
+// one.
+@Controller('orders')
+export class OrdersHistoryController {
+  constructor(private readonly orders: OrdersService) {}
+
+  // Deliberately ignores any studentUserId the caller might try to pass —
+  // this is always "my own orders," scoped by the JWT, never an arbitrary
+  // id (that would let one student page through another's order history).
+  @Get()
+  @UseGuards(JwtAuthGuard)
+  list(@CurrentUser() user: JwtPayload, @Query() query: ListMyOrdersQueryDto) {
+    if (user.accountType && user.accountType !== 'student') {
+      throw new ForbiddenException('Only student accounts have an order history here');
+    }
+    const page = query.page ?? 1;
+    const limit = Math.min(query.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+    return this.orders.getOrderHistoryForStudent(user.sub, page, limit);
+  }
+}
 
 @Controller('orders/:orderId')
 export class OrdersController {

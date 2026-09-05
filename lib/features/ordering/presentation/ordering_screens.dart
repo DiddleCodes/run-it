@@ -771,17 +771,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
       return;
     }
     if (!mounted) return;
-    ref
-        .read(cancelledOrdersProvider.notifier)
-        .recordCancellation(
-          CancelledOrder(
-            id: orderId,
-            eateryName: orderSession.eateryName,
-            itemsSummary: orderSession.orderItems.join(', '),
-            refundedAmount: orderSession.total,
-            cancelledAt: DateTime.now(),
-          ),
-        );
+    // Task 46: the cancelled order now comes from a real backend fetch
+    // (Order.status/cancelledAt), not a client-recorded local guess —
+    // refresh so it's there the next time the Cancelled tab is viewed.
+    unawaited(ref.read(orderHistoryProvider.notifier).refresh());
     ref.read(orderTrackingProvider.notifier).resetOrder();
     ref.read(walletBalanceProvider.notifier).refresh();
     setState(() => _cancelling = false);

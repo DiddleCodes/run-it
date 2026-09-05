@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:run_it/core/network/orders_repository.dart';
 import 'package:run_it/core/network/vendors_repository.dart';
 import 'package:run_it/core/routing/app_router.dart';
 import 'package:run_it/core/widgets/app_nav_shell.dart';
@@ -13,6 +14,7 @@ import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
 import 'package:run_it/features/home/presentation/home_screen.dart';
 import 'package:run_it/features/ordering/application/ordering_providers.dart';
+import 'package:run_it/features/ordering/domain/order_history_models.dart';
 import 'package:run_it/features/ordering/domain/ordering_models.dart';
 import 'package:run_it/features/ordering/presentation/my_orders_screen.dart';
 import 'package:run_it/features/payout/application/payout_controller.dart';
@@ -27,6 +29,44 @@ import 'package:run_it/features/wallet/presentation/wallet_screen.dart';
 class _FixedBalanceWallet extends WalletBalanceController {
   @override
   Future<int> build() async => 8450;
+}
+
+/// Task 46: one real delivered order (no cancelled ones) — stands in for
+/// `GET /orders` so the Past/Cancelled tabs have something real to bucket
+/// rather than hitting the live backend (flutter_test's HttpClient always
+/// 400s a real request).
+class _FakeOrdersRepository extends OrdersRepository {
+  const _FakeOrdersRepository();
+  @override
+  Future<OrderHistoryPage> fetchOrderHistory({
+    int page = 1,
+    int limit = 20,
+    required String token,
+  }) async {
+    return OrderHistoryPage(
+      items: [
+        OrderHistoryEntry(
+          id: 'order-past-1',
+          status: 'delivered',
+          vendorName: 'Tantalizers',
+          totalKobo: 230000,
+          note: null,
+          deliveryLocationLabel: 'Hostel B',
+          items: const [
+            OrderHistoryItemLine(name: 'Fried Rice', quantity: 1, priceKobo: 150000),
+            OrderHistoryItemLine(name: 'Chicken', quantity: 1, priceKobo: 80000),
+          ],
+          createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 1)),
+          acceptedAt: DateTime.now().subtract(const Duration(days: 1, minutes: 50)),
+          pickedUpAt: DateTime.now().subtract(const Duration(days: 1, minutes: 30)),
+          deliveredAt: DateTime.now().subtract(const Duration(days: 1)),
+        ),
+      ],
+      total: 1,
+      page: page,
+      limit: limit,
+    );
+  }
 }
 
 /// Task 42: a balance that genuinely moves across a real `.refresh()` — the
@@ -299,16 +339,25 @@ void main() {
     testWidgets(
       'defaults to Active tab; shows the empty state with no active order',
       (tester) async {
-        await tester.pumpWidget(_withStudentSession(const MyOrdersScreen()));
+        await tester.pumpWidget(
+          _withStudentSession(
+            const MyOrdersScreen(),
+            extraOverrides: [
+              ordersRepositoryProvider.overrideWithValue(const _FakeOrdersRepository()),
+            ],
+          ),
+        );
         await tester.pump();
 
         expect(find.text('Active (0)'), findsOneWidget);
         expect(find.text('No active order'), findsOneWidget);
 
         await tester.tap(find.text('Past'));
+        // Task 46: a real (fake-backed) fetch now, not synchronous fake
+        // data — let it resolve.
+        await tester.pump();
         await tester.pump();
         expect(find.text('Tantalizers'), findsOneWidget);
-        expect(find.text('Reorder'), findsWidgets);
 
         await tester.tap(find.text('Cancelled'));
         await tester.pump();

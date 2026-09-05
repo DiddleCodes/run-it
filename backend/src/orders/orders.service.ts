@@ -63,7 +63,7 @@ export class OrdersService {
 
     const updated = await this.prisma.order.update({
       where: { id: orderId },
-      data: { status: 'picked_up', handoffPhotoUrl },
+      data: { status: 'picked_up', handoffPhotoUrl, pickedUpAt: new Date() },
     });
     await this.resetRateLimit(orderId, 'pickup');
 
@@ -174,7 +174,10 @@ export class OrdersService {
   }
 
   async getOrderForViewer(orderId: string, user: JwtPayload) {
-    const order = await this.prisma.order.findUnique({ where: { id: orderId }, include: { vendor: true } });
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { vendor: true, items: true },
+    });
     if (!order) throw new NotFoundException('Order not found');
 
     const isAdmin = user.role === 'admin' || user.role === 'internal_service';
@@ -195,6 +198,65 @@ export class OrdersService {
       // feature exists to enforce.
       pickupCode: isVendorOwner || isAdmin ? order.pickupCode : undefined,
       deliveryPin: isStudent || isAdmin ? order.deliveryPin : undefined,
+      // Task 46: the rest of a real order-history detail view — every
+      // party already allowed to see this order at all can see its own
+      // vendor/items/total/note and the full timestamped lifecycle.
+      vendorName: order.vendor.businessName,
+      totalAmount: order.totalAmount,
+      deliveryLocationLabel: order.deliveryLocationLabel,
+      note: order.note,
+      items: order.items.map((item) => ({
+        name: item.nameSnapshot,
+        quantity: item.quantity,
+        priceKobo: item.priceSnapshot,
+      })),
+      createdAt: order.createdAt,
+      acceptedAt: order.acceptedAt,
+      pickedUpAt: order.pickedUpAt,
+      deliveredAt: order.deliveredAt,
+      cancelledAt: order.cancelledAt,
+    };
+  }
+
+  // Task 46: the student's own real order history — every order they've
+  // ever placed (any status), most recent first. Deliberately no runner/
+  // vendor equivalent here — out of this task's scope, and the vendor side
+  // already has its own paginated list (VendorsService.listIncomingOrders).
+  async getOrderHistoryForStudent(studentUserId: string, page: number, limit: number) {
+    const where = { studentUserId };
+    const [items, total] = await Promise.all([
+      this.prisma.order.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: { vendor: true, items: true },
+      }),
+      this.prisma.order.count({ where }),
+    ]);
+
+    return {
+      items: items.map((order) => ({
+        id: order.id,
+        status: order.status,
+        vendorName: order.vendor.businessName,
+        totalAmount: order.totalAmount,
+        note: order.note,
+        deliveryLocationLabel: order.deliveryLocationLabel,
+        items: order.items.map((item) => ({
+          name: item.nameSnapshot,
+          quantity: item.quantity,
+          priceKobo: item.priceSnapshot,
+        })),
+        createdAt: order.createdAt,
+        acceptedAt: order.acceptedAt,
+        pickedUpAt: order.pickedUpAt,
+        deliveredAt: order.deliveredAt,
+        cancelledAt: order.cancelledAt,
+      })),
+      total,
+      page,
+      limit,
     };
   }
 

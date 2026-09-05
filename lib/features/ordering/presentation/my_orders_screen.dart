@@ -4,95 +4,49 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/network/orders_repository.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/skeleton.dart';
 import '../../../core/widgets/status_stepper.dart';
+import '../../auth/application/auth_controller.dart';
 import '../application/order_tracking_controller.dart';
+import '../domain/order_history_models.dart';
 import '../domain/ordering_models.dart';
 import 'widgets/ordering_components.dart';
 
-/// A row in the Past-orders list. Local/demo data only — there's no
-/// order-history backend yet, same spirit as the runner side's
-/// `EarningsRecord`/`SystemNotice` and this feature's own `ChatThread`.
-class OrderHistoryEntry {
-  const OrderHistoryEntry({
-    required this.id,
-    required this.eateryName,
-    required this.itemsSummary,
-    required this.total,
-    required this.deliveredAt,
-  });
-  final String id;
-  final String eateryName;
-  final String itemsSummary;
-  final int total;
-  final DateTime deliveredAt;
-}
-
-/// A row in the Cancelled tab — real data (Task 8d), populated when
-/// [OrderTrackingScreen]'s Cancel action successfully refunds an order's
-/// escrow. Unlike [OrderHistoryEntry] above, [refundedAmount] reflects
-/// what the backend actually credited back, not just the order total —
-/// they're the same value today (a held order is always refunded in
-/// full), but keeping them distinct instead of assuming that equivalence
-/// forever is exactly the group of assumptions this task replaced.
-class CancelledOrder {
-  const CancelledOrder({
-    required this.id,
-    required this.eateryName,
-    required this.itemsSummary,
-    required this.refundedAmount,
-    required this.cancelledAt,
-  });
-  final String id;
-  final String eateryName;
-  final String itemsSummary;
-  final int refundedAmount;
-  final DateTime cancelledAt;
-}
-
-class CancelledOrdersController extends Notifier<List<CancelledOrder>> {
+/// Task 46: the student's real order history — every order they've ever
+/// placed, fetched once from `GET /orders` and bucketed client-side by
+/// status into the Past (delivered) and Cancelled tabs below. Replaces the
+/// old hardcoded-fake `OrderHistoryEntry` list and the separate
+/// in-memory-only `CancelledOrdersController` — both were standing in for
+/// exactly this one real fetch.
+class OrderHistoryController extends AsyncNotifier<List<OrderHistoryEntry>> {
   @override
-  List<CancelledOrder> build() => const [];
+  Future<List<OrderHistoryEntry>> build() async {
+    final session = ref.watch(authControllerProvider);
+    if (session == null) return const [];
+    final page = await ref
+        .watch(ordersRepositoryProvider)
+        .fetchOrderHistory(token: session.accessToken);
+    return page.items;
+  }
 
-  void recordCancellation(CancelledOrder order) {
-    state = [order, ...state];
+  /// Re-fetches from the backend — called after a successful cancellation
+  /// so the just-cancelled order shows up in the Cancelled tab without
+  /// waiting for some unrelated rebuild to happen to trigger it.
+  Future<void> refresh() async {
+    ref.invalidateSelf();
+    await future;
   }
 }
 
-final cancelledOrdersProvider =
-    NotifierProvider<CancelledOrdersController, List<CancelledOrder>>(
-      CancelledOrdersController.new,
+final orderHistoryProvider =
+    AsyncNotifierProvider<OrderHistoryController, List<OrderHistoryEntry>>(
+      OrderHistoryController.new,
     );
-
-final orderHistoryProvider = Provider<List<OrderHistoryEntry>>((ref) {
-  final now = DateTime.now();
-  return [
-    OrderHistoryEntry(
-      id: 'hist-1',
-      eateryName: 'Tantalizers',
-      itemsSummary: 'Fried Rice + Chicken',
-      total: 2300,
-      deliveredAt: now.subtract(const Duration(days: 1)),
-    ),
-    OrderHistoryEntry(
-      id: 'hist-2',
-      eateryName: 'FoodCo',
-      itemsSummary: 'Burger + Coke',
-      total: 2800,
-      deliveredAt: now.subtract(const Duration(days: 2)),
-    ),
-    OrderHistoryEntry(
-      id: 'hist-3',
-      eateryName: 'UI Snacks',
-      itemsSummary: 'Meat Pie + Zobo',
-      total: 1500,
-      deliveredAt: now.subtract(const Duration(days: 5)),
-    ),
-  ];
-});
 
 /// Deterministic per-runner demo rating — mirrors the runner side's own
 /// `_demoRating`; there's no ratings backend for either direction yet.
@@ -122,7 +76,6 @@ class _MyOrdersScreenState extends ConsumerState<MyOrdersScreen> {
         session.stage != OrderStage.delivered &&
         session.stage != OrderStage.confirmed;
     final history = ref.watch(orderHistoryProvider);
-    final cancelled = ref.watch(cancelledOrdersProvider);
 
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,
@@ -132,53 +85,20 @@ class _MyOrdersScreenState extends ConsumerState<MyOrdersScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 6, AppSpacing.lg, 0),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'My Orders',
-                          style: Theme.of(context).textTheme.headlineLarge
-                              ?.copyWith(color: AppColors.inkText, fontSize: 28),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Track, repeat or review your meals.',
-                          style: Theme.of(
-                            context,
-                          ).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
-                        ),
-                      ],
-                    ),
+                  Text(
+                    'My Orders',
+                    style: Theme.of(context).textTheme.headlineLarge
+                        ?.copyWith(color: AppColors.inkText, fontSize: 28),
                   ),
-                  InkWell(
-                    onTap: () => ref
-                        .read(appNotificationProvider.notifier)
-                        .info('Full order history is coming soon.'),
-                    customBorder: const CircleBorder(),
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceCard,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.maroonShadow,
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        CupertinoIcons.clock,
-                        color: AppColors.inkText,
-                        size: 19,
-                      ),
-                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Track, repeat or review your meals.',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
                   ),
                 ],
               ),
@@ -201,20 +121,38 @@ class _MyOrdersScreenState extends ConsumerState<MyOrdersScreen> {
                         title: 'No active order',
                         subtitle: 'Place an order and track it here in real time.',
                       ),
-                _OrdersTab.past => history.isEmpty
-                    ? const _EmptyState(
-                        icon: Icons.history_rounded,
-                        title: 'No past orders yet',
-                        subtitle: 'Orders you complete will show up here.',
-                      )
-                    : _PastOrdersTab(history: history),
-                _OrdersTab.cancelled => cancelled.isEmpty
-                    ? const _EmptyState(
-                        icon: Icons.cancel_outlined,
-                        title: 'No cancelled orders',
-                        subtitle: 'Anything you cancel will be listed here.',
-                      )
-                    : _CancelledOrdersTab(cancelled: cancelled),
+                _OrdersTab.past => history.when(
+                  loading: () => const _HistoryLoading(),
+                  error: (_, _) => _HistoryError(
+                    onRetry: () => ref.read(orderHistoryProvider.notifier).refresh(),
+                  ),
+                  data: (orders) {
+                    final past = orders.where((o) => o.status == 'delivered').toList();
+                    return past.isEmpty
+                        ? const _EmptyState(
+                            icon: Icons.history_rounded,
+                            title: 'No past orders yet',
+                            subtitle: 'Orders you complete will show up here.',
+                          )
+                        : _PastOrdersTab(history: past);
+                  },
+                ),
+                _OrdersTab.cancelled => history.when(
+                  loading: () => const _HistoryLoading(),
+                  error: (_, _) => _HistoryError(
+                    onRetry: () => ref.read(orderHistoryProvider.notifier).refresh(),
+                  ),
+                  data: (orders) {
+                    final cancelled = orders.where((o) => o.status == 'cancelled').toList();
+                    return cancelled.isEmpty
+                        ? const _EmptyState(
+                            icon: Icons.cancel_outlined,
+                            title: 'No cancelled orders',
+                            subtitle: 'Anything you cancel will be listed here.',
+                          )
+                        : _CancelledOrdersTab(cancelled: cancelled);
+                  },
+                ),
               },
             ),
           ],
@@ -546,12 +484,12 @@ class _RunnerActionButton extends StatelessWidget {
   }
 }
 
-class _PastOrdersTab extends ConsumerWidget {
+class _PastOrdersTab extends StatelessWidget {
   const _PastOrdersTab({required this.history});
   final List<OrderHistoryEntry> history;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final formatter = DateFormat('MMM d');
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 14, AppSpacing.lg, 24),
@@ -559,71 +497,68 @@ class _PastOrdersTab extends ConsumerWidget {
       separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final entry = history[index];
-        final isYesterday =
-            DateTime.now().difference(entry.deliveredAt).inDays == 1;
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceCard,
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            border: Border.all(color: AppColors.borderSubtle),
-          ),
-          child: Row(
-            children: [
-              MenuImagePlaceholder(seed: entry.eateryName, size: 56),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        final deliveredAt = entry.deliveredAt!;
+        final isYesterday = DateTime.now().difference(deliveredAt).inDays == 1;
+        return InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          onTap: () => context.push(AppRoutes.orderDetail, extra: entry.id),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceCard,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: Border.all(color: AppColors.borderSubtle),
+            ),
+            child: Row(
+              children: [
+                MenuImagePlaceholder(seed: entry.vendorName, size: 56),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        entry.vendorName,
+                        style: Theme.of(context).textTheme.labelLarge
+                            ?.copyWith(color: AppColors.inkText),
+                      ),
+                      Text(
+                        entry.itemsSummary,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(
+                          context,
+                        ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Delivered ${isYesterday ? 'Yesterday' : formatter.format(deliveredAt)}',
+                        style: Theme.of(
+                          context,
+                        ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      entry.eateryName,
+                      naira(entry.totalKobo ~/ 100),
                       style: Theme.of(context).textTheme.labelLarge
-                          ?.copyWith(color: AppColors.inkText),
+                          ?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w700),
                     ),
-                    Text(
-                      entry.itemsSummary,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      'Delivered ${isYesterday ? 'Yesterday' : formatter.format(entry.deliveredAt)}',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
+                    const SizedBox(height: 6),
+                    const Icon(
+                      CupertinoIcons.chevron_right,
+                      size: 14,
+                      color: AppColors.mutedText,
                     ),
                   ],
                 ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    naira(entry.total),
-                    style: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.primaryMaroon,
-                      side: const BorderSide(color: AppColors.primaryMaroon),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                      minimumSize: Size.zero,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.pill),
-                      ),
-                    ),
-                    onPressed: () => ref
-                        .read(appNotificationProvider.notifier)
-                        .info('Reordering is coming soon.'),
-                    child: const Text('Reorder'),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -633,7 +568,7 @@ class _PastOrdersTab extends ConsumerWidget {
 
 class _CancelledOrdersTab extends StatelessWidget {
   const _CancelledOrdersTab({required this.cancelled});
-  final List<CancelledOrder> cancelled;
+  final List<OrderHistoryEntry> cancelled;
 
   @override
   Widget build(BuildContext context) {
@@ -644,71 +579,114 @@ class _CancelledOrdersTab extends StatelessWidget {
       separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final entry = cancelled[index];
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceCard,
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            border: Border.all(color: AppColors.borderSubtle),
-          ),
-          child: Row(
-            children: [
-              MenuImagePlaceholder(seed: entry.eateryName, size: 56),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        return InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          onTap: () => context.push(AppRoutes.orderDetail, extra: entry.id),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceCard,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: Border.all(color: AppColors.borderSubtle),
+            ),
+            child: Row(
+              children: [
+                MenuImagePlaceholder(seed: entry.vendorName, size: 56),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        entry.vendorName,
+                        style: Theme.of(context).textTheme.labelLarge
+                            ?.copyWith(color: AppColors.inkText),
+                      ),
+                      Text(
+                        entry.itemsSummary,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(
+                          context,
+                        ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Cancelled ${formatter.format(entry.cancelledAt!)}',
+                        style: Theme.of(
+                          context,
+                        ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      entry.eateryName,
+                      '+${naira(entry.totalKobo ~/ 100)}',
                       style: Theme.of(context).textTheme.labelLarge
-                          ?.copyWith(color: AppColors.inkText),
+                          ?.copyWith(color: AppColors.success, fontWeight: FontWeight.w700),
                     ),
-                    Text(
-                      entry.itemsSummary,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      'Cancelled ${formatter.format(entry.cancelledAt)}',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.successBackground,
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                      ),
+                      child: Text(
+                        'Refunded',
+                        style: Theme.of(context).textTheme.labelSmall
+                            ?.copyWith(color: AppColors.success, fontWeight: FontWeight.w600),
+                      ),
                     ),
                   ],
                 ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '+${naira(entry.refundedAmount)}',
-                    style: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(color: AppColors.success, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: AppColors.successBackground,
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                    ),
-                    child: Text(
-                      'Refunded',
-                      style: Theme.of(context).textTheme.labelSmall
-                          ?.copyWith(color: AppColors.success, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
     );
   }
+}
+
+class _HistoryLoading extends StatelessWidget {
+  const _HistoryLoading();
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.fromLTRB(AppSpacing.lg, 14, AppSpacing.lg, 24),
+    child: SkeletonList(count: 4),
+  );
+}
+
+class _HistoryError extends StatelessWidget {
+  const _HistoryError({required this.onRetry});
+  final VoidCallback onRetry;
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            "Couldn't load your orders",
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(color: AppColors.inkText),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Check your connection and try again.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
+          ),
+          const SizedBox(height: 16),
+          TextButton(onPressed: onRetry, child: const Text('Try again')),
+        ],
+      ),
+    ),
+  );
 }
 
 class _EmptyState extends StatelessWidget {

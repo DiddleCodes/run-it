@@ -412,6 +412,18 @@ model Order {
   // of pickup itself.
   handoffPhotoUrl String? @map("handoff_photo_url")
 
+  // Task 46: one timestamp per real lifecycle transition, each set at the
+  // exact point that transition already happens elsewhere in the codebase
+  // (VendorsService.advanceOrderStatus, OrdersService.verifyPickup/
+  // verifyDelivery, OrderEscrowService.refund) — not derived or
+  // backfilled. Nullable since most orders will only ever reach some of
+  // these. Powers the student-facing order-history detail view's real
+  // timestamped lifecycle.
+  acceptedAt  DateTime? @map("accepted_at")
+  pickedUpAt  DateTime? @map("picked_up_at")
+  deliveredAt DateTime? @map("delivered_at")
+  cancelledAt DateTime? @map("cancelled_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

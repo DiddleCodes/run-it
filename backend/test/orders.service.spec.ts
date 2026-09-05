@@ -42,7 +42,7 @@ describe('OrdersService.verifyPickup', () => {
     expect(result).toEqual({ status: 'picked_up' });
     expect(prisma.order.update).toHaveBeenCalledWith({
       where: { id: 'order-1' },
-      data: { status: 'picked_up', handoffPhotoUrl: HANDOFF_PHOTO_URL },
+      data: { status: 'picked_up', handoffPhotoUrl: HANDOFF_PHOTO_URL, pickedUpAt: expect.any(Date) },
     });
     expect(redis.del).toHaveBeenCalled();
   });
@@ -181,7 +181,12 @@ describe('OrdersService.submitDeliveryProof', () => {
 
 describe('OrdersService.getOrderForViewer', () => {
   function orderWithVendor(overrides: Partial<typeof baseOrder> = {}) {
-    return { ...baseOrder, ...overrides, vendor: { userId: 'vendor-owner-1' } };
+    return {
+      ...baseOrder,
+      ...overrides,
+      vendor: { userId: 'vendor-owner-1', businessName: 'Tantalizers' },
+      items: [],
+    };
   }
 
   it('shows the pickup code to the owning vendor, not the delivery PIN', async () => {
@@ -214,6 +219,26 @@ describe('OrdersService.getOrderForViewer', () => {
     expect(result.deliveryPin).toBeUndefined();
   });
 
+  // Task 46: the detail view's real timestamped lifecycle.
+  it('includes vendor name, items, and the full timestamped lifecycle for any party', async () => {
+    const { service, prisma } = makeService();
+    prisma.order.findUnique.mockResolvedValue(
+      orderWithVendor({
+        acceptedAt: new Date('2026-01-01T10:02:00.000Z'),
+        pickedUpAt: new Date('2026-01-01T10:20:00.000Z'),
+        deliveredAt: null,
+        cancelledAt: null,
+      } as Partial<typeof baseOrder>),
+    );
+
+    const result = await service.getOrderForViewer('order-1', { sub: 'student-1', role: 'user' });
+
+    expect(result.vendorName).toBe('Tantalizers');
+    expect(result.acceptedAt).toEqual(new Date('2026-01-01T10:02:00.000Z'));
+    expect(result.pickedUpAt).toEqual(new Date('2026-01-01T10:20:00.000Z'));
+    expect(result.deliveredAt).toBeNull();
+  });
+
   it('rejects a caller who is not a party to the order', async () => {
     const { service, prisma } = makeService();
     prisma.order.findUnique.mockResolvedValue(orderWithVendor());
@@ -221,6 +246,98 @@ describe('OrdersService.getOrderForViewer', () => {
     await expect(
       service.getOrderForViewer('order-1', { sub: 'stranger-1', role: 'user' }),
     ).rejects.toThrow(ForbiddenException);
+  });
+});
+
+// Task 46: real order history for students — replaces the old
+// hardcoded-fake "Past" tab and the in-memory-only Cancelled tab.
+describe('OrdersService.getOrderHistoryForStudent', () => {
+  function historyOrder(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'order-1',
+      status: 'delivered',
+      totalAmount: 3500,
+      note: null,
+      deliveryLocationLabel: 'Hostel B',
+      vendor: { businessName: 'Tantalizers' },
+      items: [{ nameSnapshot: 'Jollof Rice', quantity: 2, priceSnapshot: 1500 }],
+      createdAt: new Date('2026-01-01T10:00:00.000Z'),
+      acceptedAt: new Date('2026-01-01T10:02:00.000Z'),
+      pickedUpAt: new Date('2026-01-01T10:20:00.000Z'),
+      deliveredAt: new Date('2026-01-01T10:35:00.000Z'),
+      cancelledAt: null,
+      ...overrides,
+    };
+  }
+
+  it('scopes to exactly the calling student, most recent first', async () => {
+    const { service, prisma } = makeService();
+    prisma.order.findMany.mockResolvedValue([]);
+    prisma.order.count.mockResolvedValue(0);
+
+    await service.getOrderHistoryForStudent('student-1', 1, 20);
+
+    expect(prisma.order.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { studentUserId: 'student-1' },
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
+  });
+
+  it('paginates with skip/take derived from page and limit', async () => {
+    const { service, prisma } = makeService();
+    prisma.order.findMany.mockResolvedValue([]);
+    prisma.order.count.mockResolvedValue(47);
+
+    const result = await service.getOrderHistoryForStudent('student-1', 3, 10);
+
+    expect(prisma.order.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 20, take: 10 }));
+    expect(result).toEqual({ items: [], total: 47, page: 3, limit: 10 });
+  });
+
+  it('shapes each order with its vendor name, items, and full timestamped lifecycle', async () => {
+    const { service, prisma } = makeService();
+    prisma.order.findMany.mockResolvedValue([historyOrder()]);
+    prisma.order.count.mockResolvedValue(1);
+
+    const result = await service.getOrderHistoryForStudent('student-1', 1, 20);
+
+    expect(result.items).toEqual([
+      {
+        id: 'order-1',
+        status: 'delivered',
+        vendorName: 'Tantalizers',
+        totalAmount: 3500,
+        note: null,
+        deliveryLocationLabel: 'Hostel B',
+        items: [{ name: 'Jollof Rice', quantity: 2, priceKobo: 1500 }],
+        createdAt: new Date('2026-01-01T10:00:00.000Z'),
+        acceptedAt: new Date('2026-01-01T10:02:00.000Z'),
+        pickedUpAt: new Date('2026-01-01T10:20:00.000Z'),
+        deliveredAt: new Date('2026-01-01T10:35:00.000Z'),
+        cancelledAt: null,
+      },
+    ]);
+  });
+
+  it('includes cancelled orders in the same list, with cancelledAt set and no delivery timestamps', async () => {
+    const { service, prisma } = makeService();
+    prisma.order.findMany.mockResolvedValue([
+      historyOrder({
+        status: 'cancelled',
+        pickedUpAt: null,
+        deliveredAt: null,
+        cancelledAt: new Date('2026-01-01T10:05:00.000Z'),
+      }),
+    ]);
+    prisma.order.count.mockResolvedValue(1);
+
+    const result = await service.getOrderHistoryForStudent('student-1', 1, 20);
+
+    expect(result.items[0].status).toBe('cancelled');
+    expect(result.items[0].cancelledAt).toEqual(new Date('2026-01-01T10:05:00.000Z'));
+    expect(result.items[0].deliveredAt).toBeNull();
   });
 });
 

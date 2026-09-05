@@ -448,7 +448,7 @@ describe('VendorsService.advanceOrderStatus', () => {
     expect(result.status).toBe('preparing');
     expect(prisma.order.update).toHaveBeenCalledWith({
       where: { id: 'order-1' },
-      data: { status: 'preparing' },
+      data: { status: 'preparing', acceptedAt: expect.any(Date) },
     });
   });
 

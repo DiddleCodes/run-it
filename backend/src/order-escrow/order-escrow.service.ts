@@ -393,7 +393,15 @@ export class OrderEscrowService {
       // updateMany, not update: never let this bookkeeping side-effect
       // throw and roll back an otherwise-successful release just because
       // no Order row matched (e.g. an escrow created before Task 9).
-      this.prisma.order.updateMany({ where: { id: orderId }, data: { status: 'delivered' } }),
+      // Task 46: deliveredAt reuses escrow.releasedAt's own
+      // already-idempotent `?? new Date()` fallback — release() can be
+      // retried after a partial leg failure (see this method's own doc
+      // comment), and a retried call must not overwrite the real, first
+      // delivery timestamp with a later one.
+      this.prisma.order.updateMany({
+        where: { id: orderId },
+        data: { status: 'delivered', deliveredAt: escrow.releasedAt ?? new Date() },
+      }),
     ]);
     return releasedEscrow;
   }
@@ -436,8 +444,13 @@ export class OrderEscrowService {
       });
 
       // See release()'s comment: updateMany so a missing Order row can
-      // never turn a successful refund into a thrown error.
-      await tx.order.updateMany({ where: { id: orderId }, data: { status: 'cancelled' } });
+      // never turn a successful refund into a thrown error. Safe to set
+      // cancelledAt unconditionally — the `status: 'held'` guard above
+      // ensures this transaction body only ever runs once per order.
+      await tx.order.updateMany({
+        where: { id: orderId },
+        data: { status: 'cancelled', cancelledAt: new Date() },
+      });
 
       return tx.orderEscrow.findUniqueOrThrow({ where: { id: escrow.id } });
     });

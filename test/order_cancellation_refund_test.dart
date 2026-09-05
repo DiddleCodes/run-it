@@ -4,11 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:run_it/core/network/api_exception.dart';
 import 'package:run_it/core/network/escrow_repository.dart';
+import 'package:run_it/core/network/orders_repository.dart';
 import 'package:run_it/core/routing/app_router.dart';
 import 'package:run_it/core/widgets/app_notification.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
 import 'package:run_it/features/ordering/application/order_tracking_controller.dart';
+import 'package:run_it/features/ordering/domain/order_history_models.dart';
 import 'package:run_it/features/ordering/domain/ordering_models.dart';
 import 'package:run_it/features/ordering/presentation/my_orders_screen.dart';
 import 'package:run_it/features/ordering/presentation/ordering_screens.dart';
@@ -81,6 +83,41 @@ class _NoOpBalanceWallet extends WalletBalanceController {
   Future<int> build() async => 0;
 }
 
+/// Task 46: the Cancelled tab now comes from a real `GET /orders` fetch,
+/// not a client-recorded local guess — this fake stands in for the
+/// backend already having recorded the cancellation (real status +
+/// cancelledAt + the actual stored total) by the time MyOrdersScreen
+/// re-fetches after the cancel action's own refresh() call.
+class _FakeOrdersRepository extends OrdersRepository {
+  const _FakeOrdersRepository();
+  @override
+  Future<OrderHistoryPage> fetchOrderHistory({
+    int page = 1,
+    int limit = 20,
+    required String token,
+  }) async {
+    return OrderHistoryPage(
+      items: [
+        OrderHistoryEntry(
+          id: 'order-cancel-1',
+          status: 'cancelled',
+          vendorName: 'Tantalizers',
+          totalKobo: 360000,
+          note: null,
+          deliveryLocationLabel: 'Hostel B',
+          items: const [],
+          createdAt: DateTime(2026, 1, 1, 9, 0),
+          cancelledAt: DateTime(2026, 1, 1, 9, 5),
+        ),
+      ],
+      total: 1,
+      page: page,
+      limit: limit,
+    );
+  }
+}
+
+
 Widget _harness({required List<Override> overrides}) {
   final router = GoRouter(
     initialLocation: AppRoutes.orderTracking,
@@ -117,7 +154,7 @@ void _setPhoneViewport(WidgetTester tester) {
 
 void main() {
   testWidgets(
-    'cancelling a placed order refunds its escrow and moves it into the Cancelled tab with the real refunded amount',
+    'cancelling a placed order refunds its escrow and moves it into the Cancelled tab with the real, backend-fetched order',
     (tester) async {
       _setPhoneViewport(tester);
       await tester.pumpWidget(
@@ -128,6 +165,7 @@ void main() {
             escrowRepositoryProvider.overrideWithValue(
               const _SucceedingRefundEscrowRepository(),
             ),
+            ordersRepositoryProvider.overrideWithValue(const _FakeOrdersRepository()),
             walletBalanceProvider.overrideWith(() => _NoOpBalanceWallet()),
           ],
         ),
@@ -148,15 +186,20 @@ void main() {
       // navigation the cancel action performs.
       expect(find.text('My Orders'), findsOneWidget);
 
+      // Task 46: switch to the Cancelled tab and let the real (fake-backed)
+      // fetch resolve — the row shown is whatever the backend says, not a
+      // client-guessed local record.
+      await tester.tap(find.text('Cancelled'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tantalizers'), findsOneWidget);
+      expect(find.textContaining('+₦3600'), findsOneWidget);
+      expect(find.text('Refunded'), findsOneWidget);
+
+      // The order-tracking session is genuinely cleared, not left dangling.
       final container = ProviderScope.containerOf(
         tester.element(find.byType(MyOrdersScreen)),
       );
-      final cancelled = container.read(cancelledOrdersProvider);
-      expect(cancelled, hasLength(1));
-      expect(cancelled.first.eateryName, 'Tantalizers');
-      expect(cancelled.first.refundedAmount, 3600);
-
-      // The order-tracking session is genuinely cleared, not left dangling.
       expect(container.read(orderTrackingProvider).isActive, isFalse);
     },
   );
@@ -213,7 +256,6 @@ void main() {
         tester.element(find.byType(OrderTrackingScreen)),
       );
       expect(container.read(orderTrackingProvider).isActive, isTrue);
-      expect(container.read(cancelledOrdersProvider), isEmpty);
     },
   );
 }

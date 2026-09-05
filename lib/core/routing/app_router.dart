@@ -18,6 +18,7 @@ import '../../features/auth/presentation/welcome_back_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/ordering/presentation/my_orders_screen.dart';
+import '../../features/ordering/presentation/order_detail_screen.dart';
 import '../../features/ordering/presentation/ordering_screens.dart';
 import '../../features/payout/presentation/payout_account_screen.dart';
 import '../../features/profile/presentation/run_it_plus_screen.dart';
@@ -106,6 +107,9 @@ abstract class AppRoutes {
   static const checkout = '/checkout';
   static const orderTracking = '/order-tracking';
   static const studentOrders = '/orders';
+  // Task 46: pushed with `extra: orderId` (String) — same convention as
+  // [menu]'s vendorId, not a path parameter.
+  static const orderDetail = '/order-detail';
   static const studentWallet = '/wallet';
   static const studentProfile = '/profile';
   static const runItPlus = '/plus';
@@ -384,6 +388,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.studentOrders,
         builder: (context, state) =>
             const StudentShell(child: MyOrdersScreen()),
+      ),
+      // Task 46: pushed on top (not shell-wrapped) from a Past/Cancelled
+      // row — `extra` is the real order id, same convention as [menu]'s
+      // vendorId.
+      GoRoute(
+        path: AppRoutes.orderDetail,
+        builder: (context, state) => OrderDetailScreen(orderId: state.extra as String),
       ),
       GoRoute(
         path: AppRoutes.studentWallet,

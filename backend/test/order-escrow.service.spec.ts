@@ -589,7 +589,7 @@ describe('OrderEscrowService.release', () => {
     expect(result.status).toBe('released');
     expect(prisma.order.updateMany).toHaveBeenCalledWith({
       where: { id: 'order-1' },
-      data: { status: 'delivered' },
+      data: { status: 'delivered', deliveredAt: expect.any(Date) },
     });
   });
 
@@ -734,7 +734,7 @@ describe('OrderEscrowService.refund', () => {
     expect(result.status).toBe('refunded');
     expect(prisma.order.updateMany).toHaveBeenCalledWith({
       where: { id: 'order-1' },
-      data: { status: 'cancelled' },
+      data: { status: 'cancelled', cancelledAt: expect.any(Date) },
     });
   });
 });

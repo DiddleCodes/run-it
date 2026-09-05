@@ -259,7 +259,13 @@ export class VendorsService {
       );
     }
 
-    const updated = await this.prisma.order.update({ where: { id: orderId }, data: { status: dto.status } });
+    const updated = await this.prisma.order.update({
+      where: { id: orderId },
+      // Task 46: "preparing" is the vendor's acceptance moment — the one
+      // real event this transition set covers (ready_for_pickup has no
+      // timestamp of its own, per this task's exact four fields).
+      data: { status: dto.status, ...(dto.status === 'preparing' ? { acceptedAt: new Date() } : {}) },
+    });
 
     // "preparing" is the vendor's acceptance of the order — the student-
     // facing "order accepted" moment. "ready_for_pickup" has no event of

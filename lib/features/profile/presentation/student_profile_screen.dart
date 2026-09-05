@@ -27,7 +27,10 @@ class StudentProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authControllerProvider)?.user;
     if (user == null) return const SizedBox.shrink();
-    final history = ref.watch(orderHistoryProvider);
+    // Task 46: real order history now, not 3 hardcoded fake entries —
+    // `valueOrNull` degrades to an empty list while loading/on error rather
+    // than blocking this whole screen on a fetch nothing else here needs.
+    final history = ref.watch(orderHistoryProvider).valueOrNull ?? const [];
     // Task 10 performance audit: this screen only cares whether an order is
     // active and, if so, its total — not every intermediate stage change,
     // which is what a plain watch of the whole session would rebuild on.
@@ -35,8 +38,13 @@ class StudentProfileScreen extends ConsumerWidget {
       orderTrackingProvider.select((s) => (s.isActive, s.total)),
     );
     final ordersCount = history.length + (isActive ? 1 : 0);
+    // Only orders that actually completed count toward spend — a
+    // cancelled order was refunded in full, so it contributed nothing net.
     final totalSpent =
-        history.fold(0, (sum, e) => sum + e.total) + (isActive ? activeTotal : 0);
+        history
+            .where((e) => e.status == 'delivered')
+            .fold(0, (sum, e) => sum + e.totalKobo ~/ 100) +
+        (isActive ? activeTotal : 0);
 
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,

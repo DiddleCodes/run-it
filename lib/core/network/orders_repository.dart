@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/ordering/domain/order_history_models.dart';
 import 'api_client.dart';
 import 'api_exception.dart';
 
@@ -88,6 +89,34 @@ class OrdersRepository {
   }) async {
     final result = await client.get('/orders/$orderId', token: token) as Map<String, dynamic>;
     return result['deliveryPin'] as String?;
+  }
+
+  /// Task 46: the real order-detail view — the same `GET /orders/:orderId`
+  /// endpoint `fetchDeliveryPin` above uses, now also carrying the vendor
+  /// name, items, total, note, and the full timestamped lifecycle.
+  Future<OrderHistoryEntry> fetchOrderDetail({
+    required String orderId,
+    required String token,
+  }) async {
+    final result = await client.get('/orders/$orderId', token: token) as Map<String, dynamic>;
+    return OrderHistoryEntry.fromJson(result);
+  }
+
+  /// Task 46: the student's real order history (any status) — most recent
+  /// first, backing both the "Past" (delivered) and "Cancelled" tabs of
+  /// MyOrdersScreen from one fetch, replacing the old hardcoded fake
+  /// entries and the in-memory-only CancelledOrdersController.
+  Future<OrderHistoryPage> fetchOrderHistory({
+    int page = 1,
+    int limit = 20,
+    required String token,
+  }) async {
+    final path = Uri(
+      path: '/orders',
+      queryParameters: {'page': '$page', 'limit': '$limit'},
+    ).toString();
+    final result = await client.get(path, token: token) as Map<String, dynamic>;
+    return OrderHistoryPage.fromJson(result);
   }
 
   /// Task 30: the real student-facing "report a problem" call — creates a
