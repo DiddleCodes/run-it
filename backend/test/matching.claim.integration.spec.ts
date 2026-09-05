@@ -95,6 +95,9 @@ describeIfDb('OrderEscrowService.claim — real concurrent claim race', () => {
         platformFee: 1_500,
         restaurantShare: 8_000,
         runnerShare: 500,
+        foodSubtotal: 10_000,
+        restaurantCommission: 1_500,
+        restaurantPlatformFee: 500,
       },
     });
   });

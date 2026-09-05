@@ -18,11 +18,13 @@ class PriceBreakdown {
 class PricingService {
   const PricingService._();
 
+  /// Task 45: a single flat delivery fee — no more campus-zone tiers.
+  static const int flatDeliveryFee = 500;
+
   /// One source of truth for all money shown in basket and checkout.
   static PriceBreakdown calculate({
     required Basket basket,
     required Iterable<MenuItem> menuItems,
-    required DeliveryFeeZone zone,
   }) {
     final byId = {for (final item in menuItems) item.id: item};
     var subtotal = 0;
@@ -38,7 +40,7 @@ class PricingService {
     return PriceBreakdown(
       subtotal: subtotal,
       packagingTotal: packaging,
-      deliveryFee: basket.isEmpty ? 0 : zone.fee,
+      deliveryFee: basket.isEmpty ? 0 : flatDeliveryFee,
       serviceFee: service,
     );
   }

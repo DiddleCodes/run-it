@@ -13,16 +13,6 @@ enum PaymentMethod { wallet, card }
 /// a real acknowledgement, not an assumption.
 enum OrderStage { placed, runnerAssigned, pickedUp, delivered, confirmed }
 
-enum DeliveryFeeZone {
-  north('North Campus', 450),
-  central('Central Campus', 350),
-  south('South Campus', 500);
-
-  const DeliveryFeeZone(this.label, this.fee);
-  final String label;
-  final int fee;
-}
-
 class Eatery {
   const Eatery({
     required this.id,
@@ -80,20 +70,12 @@ class MenuItem {
 }
 
 class BasketItem {
-  const BasketItem({
-    required this.menuItemId,
-    required this.quantity,
-    this.note,
-  });
+  const BasketItem({required this.menuItemId, required this.quantity});
   final String menuItemId;
   final int quantity;
-  final String? note;
 
-  BasketItem copyWith({int? quantity, String? note}) => BasketItem(
-    menuItemId: menuItemId,
-    quantity: quantity ?? this.quantity,
-    note: note ?? this.note,
-  );
+  BasketItem copyWith({int? quantity}) =>
+      BasketItem(menuItemId: menuItemId, quantity: quantity ?? this.quantity);
 }
 
 class Basket {
@@ -113,9 +95,8 @@ class Basket {
 }
 
 class DeliveryLocation {
-  const DeliveryLocation({required this.label, required this.zone});
+  const DeliveryLocation({required this.label});
   final String label;
-  final DeliveryFeeZone zone;
 }
 
 class Order {

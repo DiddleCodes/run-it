@@ -52,7 +52,8 @@ export class OrderEscrowService {
     const foodSubtotalKobo = dto.grossAmountKobo;
     const deliveryFeeKobo =
       dto.deliveryFeeKobo ?? (this.config.get<number>('escrow.defaultDeliveryFeeKobo') as number);
-    const totalAmountKobo = foodSubtotalKobo + deliveryFeeKobo;
+    const serviceFeeKobo = dto.serviceFeeKobo ?? 0;
+    const totalAmountKobo = foodSubtotalKobo + deliveryFeeKobo + serviceFeeKobo;
 
     // Populated inside the transaction below, read after it commits — the
     // order_placed notification must never fire for a hold that ultimately
@@ -86,15 +87,13 @@ export class OrderEscrowService {
       vendorId = resolved.vendorId;
       const { commissionRateOverride } = resolved;
 
-      const { platformFee, restaurantShare, runnerShare } = computeCommissionShares(
-        foodSubtotalKobo,
-        deliveryFeeKobo,
-        {
+      const { platformFee, restaurantShare, runnerShare, foodSubtotal, restaurantCommission, restaurantPlatformFee } =
+        computeCommissionShares(foodSubtotalKobo, deliveryFeeKobo, serviceFeeKobo, {
           restaurantCommissionRate:
             commissionRateOverride ?? (this.config.get<number>('escrow.restaurantCommissionRate') as number),
-          runnerDeliveryFeeShare: this.config.get<number>('escrow.runnerDeliveryFeeShare') as number,
-        },
-      );
+          restaurantPlatformFeeKobo: this.config.get<number>('escrow.restaurantPlatformFeeKobo') as number,
+          runnerDeliveryPayKobo: this.config.get<number>('escrow.runnerDeliveryPayKobo') as number,
+        });
 
       // Task 9: this is the only place an Order row is ever created — see
       // Order's schema doc comment for why that's deliberate. Upsert rather
@@ -113,6 +112,7 @@ export class OrderEscrowService {
           status: 'placed',
           totalAmount: totalAmountKobo,
           deliveryLocationLabel: dto.deliveryLocationLabel,
+          note: dto.note,
           // Task 11: generated once, at creation, never regenerated on a
           // retried upsert (the `update: {}` below leaves them untouched).
           pickupCode: generateVerificationCode(),
@@ -129,7 +129,6 @@ export class OrderEscrowService {
             nameSnapshot: item.name,
             priceSnapshot: item.priceKobo,
             quantity: item.quantity,
-            notes: item.notes,
           })),
         });
       }
@@ -146,6 +145,9 @@ export class OrderEscrowService {
             platformFee,
             restaurantShare,
             runnerShare,
+            foodSubtotal,
+            restaurantCommission,
+            restaurantPlatformFee,
           },
         });
       } catch (err) {

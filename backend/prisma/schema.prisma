@@ -374,6 +374,13 @@ model Order {
   // Integer kobo. Never a float.
   totalAmount           Int         @map("total_amount")
   deliveryLocationLabel String?     @map("delivery_location_label")
+  // Task 45: one note for the whole order (e.g. "leave at the gate"),
+  // replacing the old per-item OrderItem.notes — a single field is what the
+  // checkout UI actually collects (one box, not one per line), and it's
+  // this simple to show a restaurant rather than making them scan every
+  // line for a scattered customization request. Capped at 280 chars by
+  // HoldEscrowDto — not enforced at the DB layer.
+  note                  String?
 
   // Task 11: short, human-enterable codes generated server-side at order
   // creation (OrderEscrowService.hold()) — never derived from the order id
@@ -429,9 +436,6 @@ model OrderItem {
   nameSnapshot  String    @map("name_snapshot")
   priceSnapshot Int       @map("price_snapshot")
   quantity      Int
-  // Student customization request, e.g. "no onions". Capped at 280 chars
-  // by CreateOrderItemDto — not enforced at the DB layer.
-  notes         String?
   createdAt     DateTime  @default(now()) @map("created_at")
 
   @@index([orderId])
@@ -530,6 +534,16 @@ model OrderEscrow {
   platformFee     Int @map("platform_fee")
   restaurantShare Int @map("restaurant_share")
   runnerShare     Int @map("runner_share")
+
+  // Task 45: snapshots of the inputs that produced restaurantShare above —
+  // frozen at hold time so a later change to RESTAURANT_COMMISSION_RATE or
+  // RESTAURANT_PLATFORM_FEE never rewrites the meaning of a past order's
+  // payout breakdown. Lets the dashboard show the real line-item math (food
+  // subtotal, minus commission, minus the flat platform fee, equals
+  // restaurantShare) instead of re-deriving it from current config.
+  foodSubtotal           Int @map("food_subtotal")
+  restaurantCommission   Int @map("restaurant_commission")
+  restaurantPlatformFee  Int @map("restaurant_platform_fee")
 
   restaurantTransferReference String? @map("restaurant_transfer_reference")
   runnerTransferReference     String? @map("runner_transfer_reference")

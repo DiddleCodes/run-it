@@ -29,11 +29,6 @@ export class OrderItemInputDto {
   @IsInt()
   @Min(1)
   quantity!: number;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(280)
-  notes?: string;
 }
 
 export class HoldEscrowDto {
@@ -63,10 +58,29 @@ export class HoldEscrowDto {
   // food subtotal above, never subject to restaurant commission. Optional
   // so the not-yet-updated Flutter client (which omits it) still works —
   // hold() falls back to the configured DEFAULT_DELIVERY_FEE when omitted.
+  // Task 45: now a single flat fee (no more zone tiers), and 100% platform
+  // revenue — see commission.util.ts.
   @IsOptional()
   @IsInt()
   @Min(0)
   deliveryFeeKobo?: number;
+
+  // Kobo, integer, never a float. Task 45: a separate line item from the
+  // food subtotal, same spirit as deliveryFeeKobo above — never subject to
+  // restaurant commission, flows 100% to platform revenue. Optional so an
+  // old caller that omits it still works (defaults to 0).
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  serviceFeeKobo?: number;
+
+  // Task 45: replaces the old per-item OrderItem.notes — a single note for
+  // the whole order, e.g. a delivery instruction for the runner or a
+  // customization request for the restaurant.
+  @IsOptional()
+  @IsString()
+  @MaxLength(280)
+  note?: string;
 
   // Task 9: identifies which Vendor row this order belongs to. Optional so
   // the already-shipped Flutter client (which doesn't send it) keeps

@@ -41,14 +41,23 @@ export default () => ({
   dashboardUrl: process.env.DASHBOARD_URL ?? 'http://localhost:3001',
 
   escrow: {
-    // 0-1, applied to the food subtotal only — never the delivery fee.
+    // 0-1, applied to the food subtotal (items + packaging) only — never
+    // the delivery fee or the service fee.
     restaurantCommissionRate: Number(process.env.RESTAURANT_COMMISSION_RATE ?? 0.15),
-    // 0-1, the runner's cut of the delivery fee; the platform keeps the
-    // remainder of the delivery fee (never the food subtotal).
-    runnerDeliveryFeeShare: Number(process.env.RUNNER_DELIVERY_FEE_SHARE ?? 0.85),
-    // Kobo. Flat for now — a clear extension point for future distance-based
-    // tiering, not built yet.
-    defaultDeliveryFeeKobo: Number(process.env.DEFAULT_DELIVERY_FEE ?? 35000),
+    // Kobo. Task 45: the delivery fee is now a single flat charge (no more
+    // zone tiers) and 100% platform revenue — the runner is paid a flat
+    // amount instead (see runnerDeliveryPayKobo below), funded from the
+    // restaurant's platform fee, not from this. Checkout should always send
+    // its own deliveryFeeKobo explicitly; this is only the fallback for a
+    // caller that omits it.
+    defaultDeliveryFeeKobo: Number(process.env.DEFAULT_DELIVERY_FEE ?? 50000),
+    // Kobo, flat. Task 45: a second, plainly-labeled deduction from the
+    // restaurant's payout, additive to the percentage commission above —
+    // not a replacement for it.
+    restaurantPlatformFeeKobo: Number(process.env.RESTAURANT_PLATFORM_FEE ?? 20000),
+    // Kobo, flat. Task 45: what the runner is credited on delivery,
+    // independent of the student's delivery fee.
+    runnerDeliveryPayKobo: Number(process.env.RUNNER_DELIVERY_PAY ?? 20000),
   },
 
   internalServiceApiKey: process.env.INTERNAL_SERVICE_API_KEY,

@@ -90,12 +90,9 @@ class BasketNotifier extends Notifier<Basket> {
     return AddToBasketResult.added;
   }
 
-  /// Sets a line's quantity and note together (Task 14's Item Options
-  /// sheet always knows both at once, on confirm) — a full replace of the
-  /// line rather than [BasketItem.copyWith], since `copyWith`'s
-  /// `note ?? this.note` can't express "the user cleared their note back
-  /// to nothing."
-  AddToBasketResult setLine(MenuItem item, {required int quantity, String? note}) {
+  /// Sets a line's quantity (Task 6's Item Options sheet, quantity-only
+  /// since Task 45 moved notes to a single order-level field).
+  AddToBasketResult setLine(MenuItem item, {required int quantity}) {
     if (state.eateryId != null && state.eateryId != item.eateryId) {
       return AddToBasketResult.needsReplacement;
     }
@@ -104,9 +101,9 @@ class BasketNotifier extends Notifier<Basket> {
     if (quantity <= 0) {
       if (index != -1) lines.removeAt(index);
     } else if (index == -1) {
-      lines.add(BasketItem(menuItemId: item.id, quantity: quantity, note: note));
+      lines.add(BasketItem(menuItemId: item.id, quantity: quantity));
     } else {
-      lines[index] = BasketItem(menuItemId: item.id, quantity: quantity, note: note);
+      lines[index] = BasketItem(menuItemId: item.id, quantity: quantity);
     }
     state = Basket(
       items: lines,
@@ -149,16 +146,22 @@ class CheckoutForm {
   const CheckoutForm({
     required this.location,
     this.paymentMethod = PaymentMethod.wallet,
+    this.note,
   });
 
   final DeliveryLocation location;
   final PaymentMethod paymentMethod;
+  // Task 45: one note for the whole order, replacing the old per-item
+  // notes — set on the Basket screen, read at checkout.
+  final String? note;
   CheckoutForm copyWith({
     DeliveryLocation? location,
     PaymentMethod? paymentMethod,
+    String? note,
   }) => CheckoutForm(
     location: location ?? this.location,
     paymentMethod: paymentMethod ?? this.paymentMethod,
+    note: note ?? this.note,
   );
 }
 
@@ -181,15 +184,17 @@ class CheckoutFormNotifier extends Notifier<CheckoutForm> {
         label: campusName == null
             ? 'Set your delivery point'
             : '$campusName · Drop-off point',
-        zone: DeliveryFeeZone.central,
       ),
     );
   }
 
   void setPayment(PaymentMethod value) =>
       state = state.copyWith(paymentMethod: value);
-  void setLocation(DeliveryLocation value) =>
-      state = state.copyWith(location: value);
+  // `copyWith`'s `note ?? this.note` can't express "the user cleared the
+  // note back to empty" — a full replace, same reasoning setLine used to
+  // apply to per-item notes before Task 45 moved this to one field.
+  void setNote(String? value) =>
+      state = CheckoutForm(location: state.location, paymentMethod: state.paymentMethod, note: value);
 }
 
 final checkoutFormProvider =

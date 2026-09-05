@@ -56,20 +56,17 @@ class RestaurantOrderItem {
     required this.name,
     required this.quantity,
     required this.priceKobo,
-    this.notes,
   });
   final String id;
   final String name;
   final int quantity;
   final int priceKobo;
-  final String? notes;
 
   factory RestaurantOrderItem.fromJson(Map<String, dynamic> json) => RestaurantOrderItem(
     id: json['id'] as String,
     name: json['nameSnapshot'] as String,
     quantity: json['quantity'] as int,
     priceKobo: json['priceSnapshot'] as int,
-    notes: json['notes'] as String?,
   );
 }
 
@@ -80,6 +77,7 @@ class RestaurantOrder {
     required this.pickupCode,
     required this.totalKobo,
     required this.deliveryLocationLabel,
+    this.note,
     required this.createdAt,
     required this.items,
   });
@@ -88,6 +86,9 @@ class RestaurantOrder {
   final String pickupCode;
   final int totalKobo;
   final String? deliveryLocationLabel;
+  // Task 45: replaces the old per-item RestaurantOrderItem.notes — one note
+  // for the whole order.
+  final String? note;
   final DateTime createdAt;
   final List<RestaurantOrderItem> items;
 
@@ -97,6 +98,7 @@ class RestaurantOrder {
     pickupCode: json['pickupCode'] as String,
     totalKobo: json['totalAmount'] as int,
     deliveryLocationLabel: json['deliveryLocationLabel'] as String?,
+    note: json['note'] as String?,
     createdAt: DateTime.parse(json['createdAt'] as String),
     items: (json['items'] as List)
         .map((e) => RestaurantOrderItem.fromJson(e as Map<String, dynamic>))

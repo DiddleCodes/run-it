@@ -15,11 +15,13 @@ const placedOrder: IncomingOrder = {
   pickupCode: "XK-7291",
   totalAmount: 75000,
   deliveryLocationLabel: "Hall 4, Room 212",
+  note: "Extra spicy please!",
   createdAt: "2026-08-30T14:14:00.000Z",
   items: [
-    { id: "item-1", nameSnapshot: "Jollof Rice Bowl", quantity: 2, priceSnapshot: 30000, notes: "Extra spicy please!" },
-    { id: "item-2", nameSnapshot: "Fried Plantains", quantity: 1, priceSnapshot: 15000, notes: null },
+    { id: "item-1", nameSnapshot: "Jollof Rice Bowl", quantity: 2, priceSnapshot: 30000 },
+    { id: "item-2", nameSnapshot: "Fried Plantains", quantity: 1, priceSnapshot: 15000 },
   ],
+  escrow: { foodSubtotal: 75000, restaurantCommission: 11250, restaurantPlatformFee: 20000, restaurantShare: 43750 },
 };
 
 const initialData: IncomingOrdersResponse = { items: [placedOrder], total: 1, page: 1, limit: 20 };
@@ -37,7 +39,7 @@ afterEach(() => {
 });
 
 describe("Orders status action", () => {
-  it("shows the item note inline on the row (not buried in a drawer)", () => {
+  it("shows the order note inline on the row (not buried in a drawer)", () => {
     render(<OrdersBoard initialData={initialData} />);
     expect(screen.getByText(/Extra spicy please!/)).toBeInTheDocument();
   });

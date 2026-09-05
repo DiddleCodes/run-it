@@ -216,9 +216,24 @@ export class VendorsService {
           pickupCode: true,
           totalAmount: true,
           deliveryLocationLabel: true,
+          note: true,
           createdAt: true,
           items: {
-            select: { id: true, nameSnapshot: true, quantity: true, priceSnapshot: true, notes: true },
+            select: { id: true, nameSnapshot: true, quantity: true, priceSnapshot: true },
+          },
+          // Task 45: the restaurant's own payout breakdown — a plainly
+          // labeled itemization (food subtotal, minus commission, minus the
+          // flat platform fee), never a disguised deduction. Only the
+          // restaurant's own three inputs/output are selected here, not
+          // platformFee/runnerShare — the platform's overall take isn't the
+          // restaurant's business.
+          escrow: {
+            select: {
+              foodSubtotal: true,
+              restaurantCommission: true,
+              restaurantPlatformFee: true,
+              restaurantShare: true,
+            },
           },
         },
       }),

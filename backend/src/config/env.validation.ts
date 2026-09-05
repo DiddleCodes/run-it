@@ -18,8 +18,9 @@ export const envValidationSchema = Joi.object({
   JWT_EXPIRES_IN: Joi.string().default('1d'),
 
   RESTAURANT_COMMISSION_RATE: Joi.number().min(0).max(1).default(0.15),
-  RUNNER_DELIVERY_FEE_SHARE: Joi.number().min(0).max(1).default(0.85),
-  DEFAULT_DELIVERY_FEE: Joi.number().integer().min(0).default(35000),
+  DEFAULT_DELIVERY_FEE: Joi.number().integer().min(0).default(50000),
+  RESTAURANT_PLATFORM_FEE: Joi.number().integer().min(0).default(20000),
+  RUNNER_DELIVERY_PAY: Joi.number().integer().min(0).default(20000),
 
   INTERNAL_SERVICE_API_KEY: Joi.string().min(8).required(),
 

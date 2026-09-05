@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/cupertino.dart'
-    show CupertinoActionSheet, CupertinoActionSheetAction, showCupertinoModalPopup;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -161,9 +159,6 @@ class _EateryMenuScreenState extends ConsumerState<EateryMenuScreen> {
                             final quantity = matching.isEmpty
                                 ? 0
                                 : matching.first.quantity;
-                            final note = matching.isEmpty
-                                ? null
-                                : matching.first.note;
                             return _MenuItemCard(
                               item: item,
                               isEateryOpen: place.isOpen,
@@ -173,8 +168,7 @@ class _EateryMenuScreenState extends ConsumerState<EateryMenuScreen> {
                                   .read(basketProvider.notifier)
                                   .setQuantity(item.id, quantity - 1),
                               onTap: item.isAvailable && place.isOpen
-                                  ? () =>
-                                        _openOptionsSheet(item, quantity, note)
+                                  ? () => _openOptionsSheet(item, quantity)
                                   : null,
                             );
                           },
@@ -198,7 +192,6 @@ class _EateryMenuScreenState extends ConsumerState<EateryMenuScreen> {
             final subtotal = PricingService.calculate(
               basket: basket,
               menuItems: items,
-              zone: DeliveryFeeZone.central,
             ).subtotal;
             return 'View Basket · $count item${count == 1 ? '' : 's'} · ${naira(subtotal)}';
           }(),
@@ -208,11 +201,7 @@ class _EateryMenuScreenState extends ConsumerState<EateryMenuScreen> {
     );
   }
 
-  void _openOptionsSheet(
-    MenuItem item,
-    int currentQuantity,
-    String? currentNote,
-  ) {
+  void _openOptionsSheet(MenuItem item, int currentQuantity) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -224,11 +213,10 @@ class _EateryMenuScreenState extends ConsumerState<EateryMenuScreen> {
       builder: (_) => _ItemOptionsSheet(
         item: item,
         initialQuantity: currentQuantity == 0 ? 1 : currentQuantity,
-        initialNote: currentNote,
-        onConfirm: (quantity, note) {
+        onConfirm: (quantity) {
           final result = ref
               .read(basketProvider.notifier)
-              .setLine(item, quantity: quantity, note: note);
+              .setLine(item, quantity: quantity);
           if (result == AddToBasketResult.needsReplacement) {
             Navigator.pop(context);
             _confirmReplace(item);
@@ -331,52 +319,33 @@ class _FloatingBasketBar extends StatelessWidget {
   }
 }
 
-class BasketScreen extends ConsumerWidget {
+class BasketScreen extends ConsumerStatefulWidget {
   const BasketScreen({super.key});
+  @override
+  ConsumerState<BasketScreen> createState() => _BasketScreenState();
+}
 
-  /// Reopens Task 6's Item Options sheet (the same one used from the Menu
-  /// screen) prefilled with this line's current quantity/note — an edit
-  /// affordance, not a second note-entry UI.
-  void _editNote(
-    BuildContext context,
-    WidgetRef ref,
-    BasketItem line,
-    MenuItem item,
-  ) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: AppColors.surfaceCard,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-      ),
-      builder: (_) => _ItemOptionsSheet(
-        item: item,
-        initialQuantity: line.quantity,
-        initialNote: line.note,
-        onConfirm: (quantity, note) {
-          ref
-              .read(basketProvider.notifier)
-              .setLine(item, quantity: quantity, note: note);
-          Navigator.pop(context);
-        },
-      ),
-    );
+class _BasketScreenState extends ConsumerState<BasketScreen> {
+  // Task 45: one note for the whole order — seeded from whatever's already
+  // in checkoutFormProvider (e.g. the student navigated away and back)
+  // rather than always starting blank.
+  late final _noteController = TextEditingController(
+    text: ref.read(checkoutFormProvider).note ?? '',
+  );
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final basket = ref.watch(basketProvider);
     final menu = ref.watch(menuProvider).valueOrNull ?? const <MenuItem>[];
     final eateryName =
         ref.watch(selectedEateryProvider).valueOrNull?.name ?? '';
-    final form = ref.watch(checkoutFormProvider);
-    final pricing = PricingService.calculate(
-      basket: basket,
-      menuItems: menu,
-      zone: form.location.zone,
-    );
+    final pricing = PricingService.calculate(basket: basket, menuItems: menu);
     if (basket.isEmpty) return const _EmptyBasket();
     final lines = <(BasketItem, MenuItem)>[];
     for (final line in basket.items) {
@@ -416,14 +385,12 @@ class BasketScreen extends ConsumerWidget {
               child: _BasketLine(
                 item: entry.$2,
                 quantity: entry.$1.quantity,
-                note: entry.$1.note,
                 onAdd: () => ref
                     .read(basketProvider.notifier)
                     .setQuantity(entry.$1.menuItemId, entry.$1.quantity + 1),
                 onRemove: () => ref
                     .read(basketProvider.notifier)
                     .setQuantity(entry.$1.menuItemId, entry.$1.quantity - 1),
-                onEditNote: () => _editNote(context, ref, entry.$1, entry.$2),
               ),
             ),
           ),
@@ -438,12 +405,20 @@ class BasketScreen extends ConsumerWidget {
             ),
           const SizedBox(height: 24),
           Text(
-            'A note for your runner',
+            'A note for your order',
             style: Theme.of(context).textTheme.labelLarge
                 ?.copyWith(color: OrderingColors.text(context)),
           ),
           const SizedBox(height: 8),
-          const AppTextField(hintText: 'Gate, landmark, or anything helpful'),
+          AppTextField(
+            controller: _noteController,
+            hintText: 'Gate, landmark, or anything helpful',
+            maxLength: _kNoteMaxLength,
+            maxLines: 3,
+            onChanged: (value) => ref
+                .read(checkoutFormProvider.notifier)
+                .setNote(value.trim().isEmpty ? null : value.trim()),
+          ),
           const SizedBox(height: 24),
           _Breakdown(pricing: pricing),
         ],
@@ -513,21 +488,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             studentUserId: session.user.id,
             restaurantUserId: restaurantUserId,
             deliveryLocationLabel: deliveryLocationLabel,
-            // Task 15: the backend now splits delivery fee out from the food
-            // subtotal (and gives the runner a real cut of it) rather than
-            // treating the whole order as one commissionable amount — so
-            // grossAmountKobo carries everything except delivery, and the
-            // real zone-based delivery fee (already shown in the checkout
-            // breakdown below) travels separately. This keeps the total
-            // charged identical to what the student was shown; only how the
-            // backend splits it internally changes.
-            grossAmountKobo:
-                (pricing.subtotal + pricing.packagingTotal + pricing.serviceFee) *
-                100,
+            // Task 15/45: the backend splits delivery fee and service fee
+            // out from the food subtotal rather than treating the whole
+            // order as one commissionable amount — grossAmountKobo carries
+            // only items + packaging; the flat delivery fee and service fee
+            // (both 100% platform revenue now, never commissioned) travel
+            // separately. This keeps the total charged identical to what
+            // the student was shown; only how the backend splits it
+            // internally changes.
+            grossAmountKobo: (pricing.subtotal + pricing.packagingTotal) * 100,
             deliveryFeeKobo: pricing.deliveryFee * 100,
+            serviceFeeKobo: pricing.serviceFee * 100,
             token: session.accessToken,
             vendorId: vendor?.id,
             items: escrowItems,
+            note: ref.read(checkoutFormProvider).note,
           );
       // Task 43: the exact moment payment succeeded — a real escrow hold
       // confirmed, not an optimistic guess. The matching visual beat plays
@@ -597,7 +572,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         priceKobo:
             menu.firstWhere((item) => item.id == line.menuItemId).price * 100,
         quantity: line.quantity,
-        notes: line.note,
       ),
   ];
 
@@ -609,11 +583,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         ref.watch(selectedEateryProvider).valueOrNull?.name ?? 'Vendor';
     final form = ref.watch(checkoutFormProvider);
     final wallet = ref.watch(walletBalanceProvider).valueOrNull ?? 0;
-    final pricing = PricingService.calculate(
-      basket: basket,
-      menuItems: menu,
-      zone: form.location.zone,
-    );
+    final pricing = PricingService.calculate(basket: basket, menuItems: menu);
     final insufficient = wallet < pricing.total;
     return Scaffold(
       appBar: AppBar(title: const Text('Checkout')),
@@ -621,10 +591,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 24),
         children: [
           const _SectionLabel(label: 'DELIVERY'),
-          _LocationCard(
-            location: form.location,
-            onEdit: () => _pickLocation(context, ref),
-          ),
+          _LocationCard(location: form.location),
           const SizedBox(height: 26),
           const _SectionLabel(label: 'PAYMENT'),
           _PaymentOption(
@@ -763,71 +730,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     );
   }
 
-  // Task 44: a short, fixed choice of 3 (DeliveryFeeZone.values) — the
-  // right shape for an iOS action sheet, unlike the campus/bank/category
-  // pickers elsewhere, which are longer, searchable form pickers where a
-  // bottom sheet is still the right widget on both platforms.
-  void _pickLocation(BuildContext context, WidgetRef ref) {
-    if (Theme.of(context).platform == TargetPlatform.iOS) {
-      _pickLocationCupertino(context, ref);
-      return;
-    }
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 12, AppSpacing.lg, 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Choose delivery point',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 12),
-            ...DeliveryFeeZone.values.map(
-              (zone) => ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(zone.label),
-                subtitle: Text('Delivery from ${naira(zone.fee)}'),
-                onTap: () => _setDeliveryZone(ref, sheetContext, zone),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _pickLocationCupertino(BuildContext context, WidgetRef ref) {
-    showCupertinoModalPopup<void>(
-      context: context,
-      builder: (sheetContext) => CupertinoActionSheet(
-        title: const Text('Choose delivery point'),
-        actions: [
-          for (final zone in DeliveryFeeZone.values)
-            CupertinoActionSheetAction(
-              onPressed: () => _setDeliveryZone(ref, sheetContext, zone),
-              child: Text('${zone.label} · Delivery from ${naira(zone.fee)}'),
-            ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          isDefaultAction: true,
-          onPressed: () => Navigator.pop(sheetContext),
-          child: const Text('Cancel'),
-        ),
-      ),
-    );
-  }
-
-  void _setDeliveryZone(WidgetRef ref, BuildContext sheetContext, DeliveryFeeZone zone) {
-    final currentLabel = ref.read(checkoutFormProvider).location.label;
-    ref
-        .read(checkoutFormProvider.notifier)
-        .setLocation(DeliveryLocation(label: currentLabel, zone: zone));
-    Navigator.pop(sheetContext);
-  }
 }
 
 class OrderTrackingScreen extends ConsumerStatefulWidget {
@@ -1827,19 +1729,20 @@ class _MenuItemCard extends StatelessWidget {
 /// this is quantity-only for now) bottom sheet opened by tapping a menu
 /// item's row. The inline "+"/stepper on the card itself stays for a quick
 /// one-tap add; this sheet is for a deliberate, reviewed add.
+// Task 45: the order-level note field (BasketScreen) now caps at this same
+// length — kept here since this file's ItemOptionsSheet-era note UI
+// (removed) established the convention first.
 const _kNoteMaxLength = 280;
 
 class _ItemOptionsSheet extends StatefulWidget {
   const _ItemOptionsSheet({
     required this.item,
     required this.initialQuantity,
-    this.initialNote,
     required this.onConfirm,
   });
   final MenuItem item;
   final int initialQuantity;
-  final String? initialNote;
-  final void Function(int quantity, String? note) onConfirm;
+  final void Function(int quantity) onConfirm;
 
   @override
   State<_ItemOptionsSheet> createState() => _ItemOptionsSheetState();
@@ -1847,15 +1750,6 @@ class _ItemOptionsSheet extends StatefulWidget {
 
 class _ItemOptionsSheetState extends State<_ItemOptionsSheet> {
   late int _quantity = widget.initialQuantity;
-  late final _noteController = TextEditingController(
-    text: widget.initialNote ?? '',
-  );
-
-  @override
-  void dispose() {
-    _noteController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1867,12 +1761,12 @@ class _ItemOptionsSheetState extends State<_ItemOptionsSheet> {
             AppSpacing.lg,
             MediaQuery.of(context).viewInsets.bottom + 24,
           ),
-          // The notes field (Task 14) pushed this sheet's content past a
-          // phone's available height at larger Dynamic Type scales — a
-          // fixed, non-scrolling Column had nowhere for the overflow to
-          // go. SingleChildScrollView lets the sheet's own max-height
-          // constraint (from showModalBottomSheet) scroll its content
-          // instead of overflowing it.
+          // At larger Dynamic Type scales this sheet's content can exceed a
+          // phone's available height — a fixed, non-scrolling Column would
+          // have nowhere for the overflow to go. SingleChildScrollView lets
+          // the sheet's own max-height constraint (from
+          // showModalBottomSheet) scroll its content instead of overflowing
+          // it.
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1935,20 +1829,6 @@ class _ItemOptionsSheetState extends State<_ItemOptionsSheet> {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                Text(
-                  'Add a note',
-                  style: Theme.of(context).textTheme.labelLarge
-                      ?.copyWith(color: OrderingColors.text(context)),
-                ),
-                const SizedBox(height: 8),
-                AppTextField(
-                  controller: _noteController,
-                  hintText: 'e.g. no onions, extra spicy',
-                  maxLength: _kNoteMaxLength,
-                  maxLines: 2,
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: 14),
                 AnimatedSwitcher(
                   duration: AppMotion.fast,
                   switchInCurve: AppMotion.emphasized,
@@ -1958,10 +1838,7 @@ class _ItemOptionsSheetState extends State<_ItemOptionsSheet> {
                   child: PrimaryButton(
                     key: ValueKey(total),
                     label: 'Add to Basket — ${naira(total)}',
-                    onPressed: () {
-                      final note = _noteController.text.trim();
-                      widget.onConfirm(_quantity, note.isEmpty ? null : note);
-                    },
+                    onPressed: () => widget.onConfirm(_quantity),
                   ),
                 ),
               ],
@@ -1983,20 +1860,15 @@ class _BasketLine extends StatelessWidget {
   const _BasketLine({
     required this.item,
     required this.quantity,
-    this.note,
     required this.onAdd,
     required this.onRemove,
-    required this.onEditNote,
   });
   final MenuItem item;
   final int quantity;
-  final String? note;
   final VoidCallback onAdd;
   final VoidCallback onRemove;
-  final VoidCallback onEditNote;
   @override
   Widget build(BuildContext context) {
-    final hasNote = note != null && note!.trim().isNotEmpty;
     return Container(
       padding: const EdgeInsets.all(11),
       decoration: BoxDecoration(
@@ -2054,43 +1926,6 @@ class _BasketLine extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          InkWell(
-            onTap: onEditNote,
-            borderRadius: BorderRadius.circular(10),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  Icon(
-                    hasNote
-                        ? Icons.edit_note_rounded
-                        : Icons.add_circle_outline_rounded,
-                    size: 16,
-                    color: hasNote
-                        ? AppColors.gold
-                        : OrderingColors.muted(context),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      hasNote ? '"${note!.trim()}"' : 'Add a note',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: hasNote
-                            ? AppColors.gold
-                            : OrderingColors.muted(context),
-                        fontStyle: hasNote
-                            ? FontStyle.italic
-                            : FontStyle.normal,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -2139,9 +1974,8 @@ class _SectionLabel extends StatelessWidget {
 }
 
 class _LocationCard extends StatelessWidget {
-  const _LocationCard({required this.location, required this.onEdit});
+  const _LocationCard({required this.location});
   final DeliveryLocation location;
-  final VoidCallback onEdit;
   @override
   Widget build(BuildContext context) => Container(
     margin: const EdgeInsets.only(top: 8),
@@ -2156,24 +1990,12 @@ class _LocationCard extends StatelessWidget {
         const Icon(Icons.location_on_outlined, color: AppColors.primaryMaroon),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                location.label,
-                style: Theme.of(context).textTheme.labelLarge
-                    ?.copyWith(color: OrderingColors.text(context)),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                location.zone.label,
-                style: Theme.of(context).textTheme.labelSmall
-                    ?.copyWith(color: OrderingColors.muted(context)),
-              ),
-            ],
+          child: Text(
+            location.label,
+            style: Theme.of(context).textTheme.labelLarge
+                ?.copyWith(color: OrderingColors.text(context)),
           ),
         ),
-        TextButton(onPressed: onEdit, child: const Text('Edit')),
       ],
     ),
   );

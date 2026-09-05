@@ -46,30 +46,36 @@ Money is always an integer (kobo). Nothing in this service touches a float.
 
 ## Commission split
 
-An order has two separate money lines — the **food subtotal** and the
-**delivery fee** — and they're never mixed: restaurant commission only ever
-touches the food subtotal, and the runner's cut only ever comes out of the
-delivery fee.
+An order has three separate money lines — the **food subtotal**, the
+**delivery fee**, and the **service fee** — and they're never mixed. The
+delivery fee and service fee are both 100% platform revenue now (flat, not
+commissionable); only the food subtotal is ever commissioned, and the
+runner's pay is a flat amount per delivery, unrelated to what the student
+paid for delivery.
 
 ```
 RESTAURANT_COMMISSION_RATE=0.15   # 0-1, applied to food_subtotal only
-RUNNER_DELIVERY_FEE_SHARE=0.85    # 0-1, runner's cut of delivery_fee
-DEFAULT_DELIVERY_FEE=35000        # kobo (₦350), flat fee, see below
+DEFAULT_DELIVERY_FEE=50000        # kobo (₦500), flat, 100% platform revenue
+RESTAURANT_PLATFORM_FEE=20000     # kobo (₦200), flat, deducted from the restaurant's payout
+RUNNER_DELIVERY_PAY=20000         # kobo (₦200), flat, credited to the runner on delivery
 ```
 
 These are real business decisions, not implementation details — expect them
 to be revisited as the business grows. Current defaults: the platform takes
-15% of every order's food subtotal, and keeps 15% of the flat ₦350 delivery
-fee (the runner keeps the other 85%, currently ₦297.50 → rounds to ₦298).
+15% of every order's food subtotal plus a flat ₦200 platform fee from the
+restaurant (labeled plainly on the restaurant's own order/payout view, never
+disguised as tax/VAT/packaging), the full ₦500 delivery fee, and the full
+service fee. The runner is paid a flat ₦200 per delivery regardless of the
+delivery fee charged.
 
 **The formula** (`src/order-escrow/commission.util.ts`):
 
 ```
-platform_fee     = (food_subtotal * RESTAURANT_COMMISSION_RATE)
-                    + (delivery_fee * (1 - RUNNER_DELIVERY_FEE_SHARE))
-restaurant_share = food_subtotal - (food_subtotal * RESTAURANT_COMMISSION_RATE)
-runner_share      = delivery_fee * RUNNER_DELIVERY_FEE_SHARE
-order_total       = food_subtotal + delivery_fee   # no separate service fee at launch
+restaurant_commission = food_subtotal * RESTAURANT_COMMISSION_RATE
+restaurant_share      = food_subtotal - restaurant_commission - RESTAURANT_PLATFORM_FEE
+runner_share          = RUNNER_DELIVERY_PAY
+order_total           = food_subtotal + delivery_fee + service_fee
+platform_fee          = order_total - restaurant_share - runner_share
 ```
 
 The commission on the food subtotal is rounded first, so `restaurant_share`
@@ -262,7 +268,7 @@ Env vars (`.env.example`):
 | `PAYSTACK_PUBLIC_KEY` | Returned to clients that need it for inline Paystack widgets |
 | `JWT_SECRET` | Must match whatever signs tokens from the app's real auth flow |
 | `INTERNAL_SERVICE_API_KEY` | Shared secret for the delivery-confirmation flow calling `/release` and `/refund` |
-| `RESTAURANT_COMMISSION_RATE` / `RUNNER_DELIVERY_FEE_SHARE` / `DEFAULT_DELIVERY_FEE` | Commission/delivery-fee split — see "Commission split" above |
+| `RESTAURANT_COMMISSION_RATE` / `DEFAULT_DELIVERY_FEE` / `RESTAURANT_PLATFORM_FEE` / `RUNNER_DELIVERY_PAY` | Commission/delivery-fee split — see "Commission split" above |
 | `AWS_REGION` / `S3_UPLOADS_BUCKET` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | S3 credentials/bucket for `POST /uploads/presign` |
 | `S3_PUBLIC_BASE_URL` | Optional CDN/custom domain fronting the bucket; falls back to the bucket's default virtual-hosted-style URL |
 

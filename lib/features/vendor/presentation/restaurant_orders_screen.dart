@@ -133,31 +133,27 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.name,
-                          style: Theme.of(
-                            context,
-                          ).textTheme.bodyMedium?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w600),
-                        ),
-                        // The one field a kitchen card most needs to not
-                        // forget — a student's customization request.
-                        if (item.notes != null && item.notes!.trim().isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 2),
-                            child: Text(
-                              '"${item.notes!.trim()}"',
-                              style: Theme.of(
-                                context,
-                              ).textTheme.labelMedium?.copyWith(color: AppColors.gold, fontStyle: FontStyle.italic),
-                            ),
-                          ),
-                      ],
+                    child: Text(
+                      item.name,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
+              ),
+            ),
+          // Task 45: one note for the whole order, replacing the old
+          // per-item notes — the field a kitchen card most needs to not
+          // forget.
+          if (order.note != null && order.note!.trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '"${order.note!.trim()}"',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelMedium?.copyWith(color: AppColors.gold, fontStyle: FontStyle.italic),
               ),
             ),
           const Divider(height: AppSpacing.lg, color: AppColors.borderSubtle),

@@ -98,6 +98,7 @@ class _ScaleTestVendorsRepository extends VendorsRepository {
       pickupCode: '4821',
       totalKobo: 1250000,
       deliveryLocationLabel: 'Hostel B',
+      note: 'No onions please, extra spicy, and can you pack the sauce separately',
       createdAt: DateTime(2026, 1, 1),
       items: const [
         RestaurantOrderItem(
@@ -105,7 +106,6 @@ class _ScaleTestVendorsRepository extends VendorsRepository {
           name: 'Special Jollof Rice with Grilled Chicken and Fried Plantain',
           quantity: 3,
           priceKobo: 350000,
-          notes: 'No onions please, extra spicy, and can you pack the sauce separately',
         ),
       ],
     );
@@ -327,14 +327,17 @@ void main() {
     }
   });
 
-  group('Item Options sheet (long name + note field) at Dynamic Type scale', () {
+  group('Item Options sheet (long name) at Dynamic Type scale', () {
     for (final scale in _scales) {
       testWidgets('renders with no overflow at ${scale}x text scale', (
         tester,
       ) async {
         // The sheet itself is a private widget of ordering_screens.dart —
         // reached the same way a real student reaches it: tapping an
-        // available menu item's row on the real EateryMenuScreen.
+        // available menu item's row on the real EateryMenuScreen. Task 45
+        // removed this sheet's per-item note field (notes are now a single
+        // order-level field on the Basket screen) — this only exercises
+        // the long-name/quantity-stepper layout now.
         await tester.pumpWidget(
           _atScale(
             scale,
@@ -357,13 +360,6 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(itemFinder);
         await tester.pumpAndSettle();
-        // Types a note long enough to have overflowed the old fixed-line
-        // layout before AppTextField grew a real maxLines/maxLength.
-        await tester.enterText(
-          find.byType(TextField).last,
-          'Please make it extra spicy, no onions at all, and pack the stew separately from the rice',
-        );
-        await tester.pump();
 
         expect(tester.takeException(), isNull);
       });

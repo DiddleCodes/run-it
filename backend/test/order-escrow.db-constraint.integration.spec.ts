@@ -93,6 +93,9 @@ describeIfDb('order_escrows.order_id — real DB unique constraint', () => {
           platformFee: 150,
           restaurantShare: 700,
           runnerShare: 150,
+          foodSubtotal: 1000,
+          restaurantCommission: 150,
+          restaurantPlatformFee: 150,
         },
       });
 

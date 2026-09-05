@@ -77,11 +77,10 @@ export function OrdersBoard({ initialData }: { initialData: IncomingOrdersRespon
       key: "notes",
       header: "Notes",
       render: (o) => {
-        const notes = o.items.filter((i) => i.notes).map((i) => i.notes);
-        if (!notes.length) return <span className="text-xs text-[var(--muted-foreground)]">—</span>;
+        if (!o.note) return <span className="text-xs text-[var(--muted-foreground)]">—</span>;
         return (
           <span className="text-xs px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-medium">
-            {notes.join("; ")}
+            {o.note}
           </span>
         );
       },
@@ -156,6 +155,13 @@ export function OrdersBoard({ initialData }: { initialData: IncomingOrdersRespon
               </div>
             )}
 
+            {selected.note && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] mb-1">Note</p>
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">{selected.note}</p>
+              </div>
+            )}
+
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] mb-2">Items</p>
               <div className="space-y-2">
@@ -167,9 +173,6 @@ export function OrdersBoard({ initialData }: { initialData: IncomingOrdersRespon
                       </span>
                       <span className="text-sm font-medium">{formatKobo(item.priceSnapshot * item.quantity)}</span>
                     </div>
-                    {item.notes && (
-                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-1">{item.notes}</p>
-                    )}
                   </div>
                 ))}
                 <div className="flex items-center justify-between pt-1">
@@ -178,6 +181,30 @@ export function OrdersBoard({ initialData }: { initialData: IncomingOrdersRespon
                 </div>
               </div>
             </div>
+
+            {selected.escrow && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] mb-2">Your payout</p>
+                <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] text-sm">
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-[var(--muted-foreground)]">Food subtotal</span>
+                    <span className="text-[var(--foreground)]">{formatKobo(selected.escrow.foodSubtotal)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-[var(--muted-foreground)]">Commission (15%)</span>
+                    <span className="text-[var(--foreground)]">−{formatKobo(selected.escrow.restaurantCommission)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-[var(--muted-foreground)]">Platform Service Fee</span>
+                    <span className="text-[var(--foreground)]">−{formatKobo(selected.escrow.restaurantPlatformFee)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2 bg-[var(--secondary)] rounded-b-xl">
+                    <span className="font-semibold text-[var(--foreground)]">Net payout</span>
+                    <span className="font-bold text-[var(--primary)]">{formatKobo(selected.escrow.restaurantShare)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {(selected.status === "ready_for_pickup" || selected.status === "picked_up") && (
               <div className="p-4 rounded-xl bg-[var(--secondary)] text-center">

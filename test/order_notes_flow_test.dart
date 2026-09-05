@@ -65,8 +65,8 @@ class _FakeVendorsRepository extends VendorsRepository {
 }
 
 /// Captures exactly what the checkout flow sends, so this test can assert
-/// on the real per-item payload (Task 14 Part C/A) rather than just on
-/// what the UI displays.
+/// on the real order-level payload (Task 45) rather than just on what the
+/// UI displays.
 class _RecordingEscrowRepository extends EscrowRepository {
   const _RecordingEscrowRepository();
   static final calls = <Map<String, dynamic>>[];
@@ -82,7 +82,9 @@ class _RecordingEscrowRepository extends EscrowRepository {
     String? vendorId,
     List<EscrowOrderItem>? items,
     int? deliveryFeeKobo,
+    int? serviceFeeKobo,
     String? deliveryLocationLabel,
+    String? note,
   }) async {
     calls.add({
       'restaurantUserId': restaurantUserId,
@@ -90,6 +92,8 @@ class _RecordingEscrowRepository extends EscrowRepository {
       'items': items,
       'grossAmountKobo': grossAmountKobo,
       'deliveryFeeKobo': deliveryFeeKobo,
+      'serviceFeeKobo': serviceFeeKobo,
+      'note': note,
     });
   }
 }
@@ -120,24 +124,27 @@ void main() {
   setUp(() => _RecordingEscrowRepository.calls.clear());
 
   testWidgets(
-    "a note added in Item Options survives through Basket and Checkout into the real escrow payload (Task 14 Part C)",
+    "a single order-level note typed on the Basket screen survives through Checkout into the real escrow payload (Task 45)",
     (tester) async {
       await tester.pumpWidget(_harness());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 1200));
 
-      // Item Options sheet — Task 6's sheet, extended with a notes field.
+      // Adding the item no longer opens a per-item note field — quantity
+      // only (Task 45 moved notes to a single order-level field).
       await tester.tap(find.text('Signature jollof'));
       await tester.pumpAndSettle();
-      expect(find.text('Add a note'), findsOneWidget);
-      await tester.enterText(find.byType(TextField).last, 'No onions please');
+      expect(find.text('Add a note'), findsNothing);
       await tester.tap(find.text('Add to Basket — ₦3100'));
       await tester.pumpAndSettle();
 
-      // Basket screen shows the note preview (Task 14 Part C2).
       await tester.tap(find.textContaining('View Basket'));
       await tester.pumpAndSettle();
-      expect(find.text('"No onions please"'), findsOneWidget);
+
+      // The one note field lives on the Basket screen, for the whole order.
+      expect(find.text('A note for your order'), findsOneWidget);
+      await tester.enterText(find.byType(TextField).last, 'No onions please');
+      await tester.pump();
 
       await tester.tap(find.textContaining('Proceed to checkout'));
       await tester.pumpAndSettle();
@@ -151,22 +158,19 @@ void main() {
       // it's known (Task 14).
       expect(call['restaurantUserId'], 'vendor-owner-1');
       expect(call['vendorId'], 'vendor-tantalizers');
+      expect(call['note'], 'No onions please');
+
       final items = call['items'] as List<EscrowOrderItem>;
       expect(items, hasLength(1));
       expect(items.single.name, 'Signature jollof');
-      expect(items.single.notes, 'No onions please');
 
-      // Task 15: delivery fee now travels separately from the food
-      // subtotal, so the backend can split it (and the runner's cut of it)
-      // correctly instead of treating the whole order as one commissionable
-      // amount. grossAmountKobo here is just the ₦3100 jollof plus the
-      // ₦150 service fee (no packaging cost on this fixture) — the zone's
-      // delivery fee must not be folded into it.
-      expect(call['grossAmountKobo'], 325000);
-      expect(
-        call['deliveryFeeKobo'],
-        anyOf(45000, 35000, 50000), // one of DeliveryFeeZone's *100 fees
-      );
+      // Task 45: grossAmountKobo is items + packaging only (no packaging on
+      // this fixture) — the service fee and delivery fee both travel as
+      // their own separate fields now, never folded into it.
+      expect(call['grossAmountKobo'], 310000);
+      expect(call['serviceFeeKobo'], 15000);
+      // Task 45: a single flat ₦500 delivery fee, not a zone pick.
+      expect(call['deliveryFeeKobo'], 50000);
     },
   );
 }

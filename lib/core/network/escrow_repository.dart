@@ -21,29 +21,25 @@ enum EscrowReleaseOutcome { released, partiallyFailed }
 enum ClaimResult { claimed, alreadyClaimed }
 
 /// Mirrors the backend's `OrderItemInputDto` (Task 9/14) — one basket line
-/// as sent at hold time, [notes] included so a student's per-item
-/// customization request actually lands on `OrderItem.notes` for the
-/// restaurant to see, instead of being computed client-side and thrown away.
+/// as sent at hold time. Task 45: no longer carries a per-item note (that
+/// moved to `EscrowRepository.hold`'s single order-level `note` param).
 class EscrowOrderItem {
   const EscrowOrderItem({
     this.menuItemId,
     required this.name,
     required this.priceKobo,
     required this.quantity,
-    this.notes,
   });
   final String? menuItemId;
   final String name;
   final int priceKobo;
   final int quantity;
-  final String? notes;
 
   Map<String, dynamic> toJson() => {
     'menuItemId': ?menuItemId,
     'name': name,
     'priceKobo': priceKobo,
     'quantity': quantity,
-    'notes': ?notes,
   };
 }
 
@@ -82,15 +78,21 @@ class EscrowRepository {
     // Task 15: a separate line item from grossAmountKobo (now the food
     // subtotal only), never subject to restaurant commission. Optional so
     // an old caller that omits it still works — the backend falls back to
-    // its own configured default — but every real checkout should send the
-    // zone-based fee it already displays, so the app is never charged more
-    // than what the checkout screen showed.
+    // its own configured default. Task 45: now a single flat fee (no more
+    // zone tiers) — every real checkout sends it explicitly.
     int? deliveryFeeKobo,
+    // Task 45: also a separate line item from grossAmountKobo, same
+    // reasoning as deliveryFeeKobo above — never commissionable, flows
+    // entirely to platform revenue.
+    int? serviceFeeKobo,
     // Task 21b: forwarded to `Order.deliveryLocationLabel` — was collected
     // at checkout but never actually sent, so every real order's dropoff
     // was silently null. Optional so an old caller that omits it still
     // works exactly as before.
     String? deliveryLocationLabel,
+    // Task 45: replaces the old per-item notes — one note for the whole
+    // order.
+    String? note,
   }) async {
     await client.post(
       '/orders/$orderId/escrow/hold',
@@ -103,7 +105,9 @@ class EscrowRepository {
         'vendorId': ?vendorId,
         'items': ?items?.map((item) => item.toJson()).toList(),
         'deliveryFeeKobo': ?deliveryFeeKobo,
+        'serviceFeeKobo': ?serviceFeeKobo,
         'deliveryLocationLabel': ?deliveryLocationLabel,
+        'note': ?note,
       },
     );
   }

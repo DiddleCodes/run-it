@@ -72,7 +72,17 @@ export interface OrderItemSummary {
   nameSnapshot: string;
   quantity: number;
   priceSnapshot: number;
-  notes: string | null;
+}
+
+// Task 45: the restaurant's own payout breakdown for this order — a
+// plainly-labeled itemization, never a disguised deduction. Frozen at the
+// time the order was placed, so it stays accurate even if commission/fee
+// config changes later.
+export interface OrderEscrowBreakdown {
+  foodSubtotal: number;
+  restaurantCommission: number;
+  restaurantPlatformFee: number;
+  restaurantShare: number;
 }
 
 export interface IncomingOrder {
@@ -81,8 +91,12 @@ export interface IncomingOrder {
   pickupCode: string;
   totalAmount: number;
   deliveryLocationLabel: string | null;
+  // Task 45: replaces the old per-item notes — a single note for the whole
+  // order.
+  note: string | null;
   createdAt: string;
   items: OrderItemSummary[];
+  escrow: OrderEscrowBreakdown | null;
 }
 
 export interface IncomingOrdersResponse {

@@ -32,16 +32,17 @@ AuthSession _restaurantSession() => AuthSession(
 RestaurantOrder _order({
   required String id,
   required RestaurantOrderStatus status,
-  String? notes,
+  String? note,
 }) => RestaurantOrder(
   id: id,
   status: status,
   pickupCode: '4821',
   totalKobo: 350000,
   deliveryLocationLabel: 'Hostel B',
+  note: note,
   createdAt: DateTime(2026, 1, 1),
   items: [
-    RestaurantOrderItem(id: '$id-item-1', name: 'Jollof Rice', quantity: 2, priceKobo: 150000, notes: notes),
+    RestaurantOrderItem(id: '$id-item-1', name: 'Jollof Rice', quantity: 2, priceKobo: 150000),
   ],
 );
 
@@ -81,6 +82,7 @@ class _FakeVendorsRepository extends VendorsRepository {
       pickupCode: current.pickupCode,
       totalKobo: current.totalKobo,
       deliveryLocationLabel: current.deliveryLocationLabel,
+      note: current.note,
       createdAt: current.createdAt,
       items: current.items,
     );
@@ -105,7 +107,7 @@ void main() {
     tester,
   ) async {
     final repo = _FakeVendorsRepository([
-      _order(id: 'order-1', status: RestaurantOrderStatus.placed, notes: 'No onions please'),
+      _order(id: 'order-1', status: RestaurantOrderStatus.placed, note: 'No onions please'),
     ]);
     await tester.pumpWidget(_harness(repo));
     await tester.pump();

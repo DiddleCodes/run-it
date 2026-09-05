@@ -86,7 +86,9 @@ class _SucceedingEscrowRepository extends EscrowRepository {
     String? vendorId,
     List<EscrowOrderItem>? items,
     int? deliveryFeeKobo,
+    int? serviceFeeKobo,
     String? deliveryLocationLabel,
+    String? note,
   }) async {}
 }
 
@@ -106,7 +108,9 @@ class _InsufficientBalanceEscrowRepository extends EscrowRepository {
     String? vendorId,
     List<EscrowOrderItem>? items,
     int? deliveryFeeKobo,
+    int? serviceFeeKobo,
     String? deliveryLocationLabel,
+    String? note,
   }) async {
     throw const ApiException(402, 'Insufficient wallet balance');
   }

@@ -29,7 +29,7 @@ const _menuItems = <MenuItem>[
 
 void main() {
   group('PricingService', () {
-    test('calculates all order costs in one place', () {
+    test('calculates all order costs in one place, with a single flat delivery fee', () {
       const basket = Basket(
         eateryId: 'tantalizers',
         items: [
@@ -38,25 +38,18 @@ void main() {
         ],
       );
 
-      final result = PricingService.calculate(
-        basket: basket,
-        menuItems: _menuItems,
-        zone: DeliveryFeeZone.central,
-      );
+      final result = PricingService.calculate(basket: basket, menuItems: _menuItems);
 
       expect(result.subtotal, 6900);
       expect(result.packagingTotal, 200);
-      expect(result.deliveryFee, 350);
+      // Task 45: a single flat ₦500 fee — no more campus zones.
+      expect(result.deliveryFee, 500);
       expect(result.serviceFee, 150);
-      expect(result.total, 7600);
+      expect(result.total, 7750);
     });
 
     test('does not apply fees to an empty basket', () {
-      final result = PricingService.calculate(
-        basket: const Basket(),
-        menuItems: _menuItems,
-        zone: DeliveryFeeZone.north,
-      );
+      final result = PricingService.calculate(basket: const Basket(), menuItems: _menuItems);
 
       expect(result.total, 0);
       expect(result.deliveryFee, 0);

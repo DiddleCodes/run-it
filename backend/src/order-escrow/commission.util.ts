@@ -1,8 +1,15 @@
 export interface CommissionRates {
-  // 0-1, applied to the food subtotal only — never the delivery fee.
+  // 0-1, applied to the food subtotal (items + packaging) only — never the
+  // delivery fee or the service fee.
   restaurantCommissionRate: number;
-  // 0-1, the runner's share of the delivery fee — never the food subtotal.
-  runnerDeliveryFeeShare: number;
+  // Kobo, flat. Task 45: a second, additive deduction from the
+  // restaurant's payout — on top of, not instead of, the percentage
+  // commission above.
+  restaurantPlatformFeeKobo: number;
+  // Kobo, flat. Task 45: the runner's pay is now a fixed amount per
+  // delivery, independent of the delivery fee the student paid — the
+  // delivery fee is 100% platform revenue now.
+  runnerDeliveryPayKobo: number;
 }
 
 export interface CommissionShares {
@@ -10,30 +17,46 @@ export interface CommissionShares {
   restaurantShare: number;
   runnerShare: number;
   totalAmount: number;
+  // Task 45: the raw inputs behind restaurantShare, surfaced so callers can
+  // persist an auditable breakdown rather than just the net figure.
+  foodSubtotal: number;
+  restaurantCommission: number;
+  restaurantPlatformFee: number;
 }
 
 /**
- * Splits a food subtotal and a delivery fee (both integer kobo) into
- * platform/restaurant/runner shares.
+ * Splits a food subtotal, a delivery fee, and a service fee (all integer
+ * kobo) into platform/restaurant/runner shares.
  *
- * Commission applies only to the food subtotal; the runner's share applies
- * only to the delivery fee — the two never cross. The commission is rounded
- * first, so the restaurant share (subtotal minus commission) is exact and
- * never touched by rounding. The runner share is rounded from the delivery
- * fee; the platform absorbs whatever remainder that rounding leaves, so all
- * three shares always sum to exactly foodSubtotalKobo + deliveryFeeKobo (no
- * kobo lost or invented).
+ * Task 45's flat-fee model: the delivery fee and the service fee are both
+ * 100% platform revenue — neither is commissionable, and neither funds the
+ * runner's pay directly any more. The restaurant's payout is the food
+ * subtotal minus a percentage commission minus a flat platform fee; the
+ * runner's pay is a flat amount per delivery. The platform's cut is
+ * whatever's left once those two payouts are subtracted from the total
+ * charged — computed as a remainder, not summed from its own parts, so the
+ * three shares always sum to exactly totalAmount (no kobo lost or
+ * invented), mirroring this function's pre-Task-45 invariant.
  */
 export function computeCommissionShares(
   foodSubtotalKobo: number,
   deliveryFeeKobo: number,
+  serviceFeeKobo: number,
   rates: CommissionRates,
 ): CommissionShares {
-  const commission = Math.round(foodSubtotalKobo * rates.restaurantCommissionRate);
-  const runnerShare = Math.round(deliveryFeeKobo * rates.runnerDeliveryFeeShare);
-  const restaurantShare = foodSubtotalKobo - commission;
-  const platformFee = commission + (deliveryFeeKobo - runnerShare);
-  const totalAmount = foodSubtotalKobo + deliveryFeeKobo;
+  const restaurantCommission = Math.round(foodSubtotalKobo * rates.restaurantCommissionRate);
+  const restaurantShare = foodSubtotalKobo - restaurantCommission - rates.restaurantPlatformFeeKobo;
+  const runnerShare = rates.runnerDeliveryPayKobo;
+  const totalAmount = foodSubtotalKobo + deliveryFeeKobo + serviceFeeKobo;
+  const platformFee = totalAmount - restaurantShare - runnerShare;
 
-  return { platformFee, restaurantShare, runnerShare, totalAmount };
+  return {
+    platformFee,
+    restaurantShare,
+    runnerShare,
+    totalAmount,
+    foodSubtotal: foodSubtotalKobo,
+    restaurantCommission,
+    restaurantPlatformFee: rates.restaurantPlatformFeeKobo,
+  };
 }
