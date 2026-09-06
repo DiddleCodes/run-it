@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +16,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/carousel_dots.dart';
 import '../../../core/widgets/route_line.dart';
 import '../../../core/widgets/skeleton.dart';
 import '../../auth/application/auth_controller.dart';
@@ -151,6 +153,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       const SizedBox(width: 10),
                       _Category(
                         label: option.label,
+                        icon: _categoryIcon(option.slug),
                         selected: category == option.label,
                         onTap: () => ref.read(vendorCategoryFilterProvider.notifier).state = option.label,
                       ),
@@ -162,7 +165,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 14, AppSpacing.lg, 0),
               sliver: SliverToBoxAdapter(
-                child: _CampusPickCard(onOrderNow: _orderNow),
+                child: _PromoCarousel(onOrderNow: _orderNow),
               ),
             ),
             SliverPadding(
@@ -433,6 +436,24 @@ class _Search extends StatelessWidget {
   );
 }
 
+// Task 54: a real icon per category, keyed on the backend's stable slug
+// (not the display label, which is free-text-ish and could change wording
+// without the underlying category changing) — see `vendor_categories` for
+// the controlled vocabulary this maps every entry of. Falls back to a
+// plain fork-and-knife glyph for any future category added on the backend
+// before this map is updated, rather than showing no icon at all.
+IconData _categoryIcon(String slug) => switch (slug) {
+  'bakery-pastries' => Icons.bakery_dining_rounded,
+  'continental' => Icons.restaurant_menu_rounded,
+  'desserts' => Icons.icecream_rounded,
+  'drinks-smoothies' => Icons.local_drink_rounded,
+  'fast-food' => Icons.fastfood_rounded,
+  'nigerian' => Icons.rice_bowl_rounded,
+  'snacks' => Icons.tapas_rounded,
+  'west-african' => Icons.soup_kitchen_rounded,
+  _ => Icons.restaurant_rounded,
+};
+
 class _Category extends StatefulWidget {
   const _Category({
     required this.label,
@@ -441,9 +462,9 @@ class _Category extends StatefulWidget {
     required this.onTap,
   });
   final String label;
-  // Only "All" gets a decorative icon — vendor categories are an
-  // open-ended, backend-managed vocabulary (Task 15), so there's no
-  // reliable icon to map an arbitrary one to without guessing.
+  // "All" gets its own fixed grid icon; every real category gets one from
+  // [_categoryIcon] (Task 54). Nullable only because [_Category] is a
+  // general-purpose chip — every real call site always supplies one.
   final IconData? icon;
   final bool selected;
   final VoidCallback onTap;
@@ -518,145 +539,232 @@ class _CategoryState extends State<_Category> {
 /// `Column` sizes to its own content (plain `SizedBox` gaps, no `Spacer`),
 /// so the card simply grows to fit whatever's inside it, including the
 /// CTA button and background illustration this task adds.
-class _CampusPickCard extends StatelessWidget {
-  const _CampusPickCard({required this.onOrderNow});
+class _PromoData {
+  const _PromoData({
+    required this.badge,
+    required this.headline,
+    required this.subtitle,
+    required this.imageUrl,
+  });
+  final String badge;
+  final String headline;
+  final String subtitle;
+  // Task 54: generic promotional imagery, not a specific vendor's specific
+  // dish — real, licensed food photography (Unsplash) is the right call
+  // here per the image-sourcing rule; an actual menu item's photo must
+  // stay either that restaurant's own upload or MenuImagePlaceholder,
+  // never a stand-in generic shot like this.
+  final String imageUrl;
+}
+
+const _promos = [
+  _PromoData(
+    badge: 'CAMPUS PICK',
+    headline: 'Your lunch break, upgraded.',
+    subtitle: 'Fast drops from the spots you already love.',
+    imageUrl: 'https://images.unsplash.com/photo-1664993101841-036f189719b6?w=1200&q=80&auto=format&fit=crop',
+  ),
+  _PromoData(
+    badge: 'TRENDING NOW',
+    headline: 'Cravings, handled.',
+    subtitle: 'Burgers, fries, and everything in between.',
+    imageUrl: 'https://images.unsplash.com/photo-1561758033-d89a9ad46330?w=1200&q=80&auto=format&fit=crop',
+  ),
+];
+
+/// Task 54: replaces the old single static banner (a flat vector icon on
+/// a maroon field — no real imagery at all) with a real, swipeable
+/// multi-card rotation. [CarouselDots] only renders once there's more
+/// than one card to page between — a single promo would just show a lone,
+/// meaningless dot.
+class _PromoCarousel extends StatefulWidget {
+  const _PromoCarousel({required this.onOrderNow});
   final VoidCallback onOrderNow;
+
   @override
-  Widget build(BuildContext context) =>
-      Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: AppColors.primaryMaroonDeep,
-              borderRadius: BorderRadius.circular(26),
-              boxShadow: const [
-                BoxShadow(
-                  color: AppColors.maroonShadow,
-                  blurRadius: 24,
-                  offset: Offset(0, 12),
-                ),
-              ],
+  State<_PromoCarousel> createState() => _PromoCarouselState();
+}
+
+class _PromoCarouselState extends State<_PromoCarousel> {
+  final _controller = PageController();
+  double _page = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() {
+      setState(() => _page = _controller.page ?? 0);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 248,
+          child: PageView.builder(
+            controller: _controller,
+            itemCount: _promos.length,
+            itemBuilder: (context, index) =>
+                _PromoCard(data: _promos[index], onOrderNow: widget.onOrderNow),
+          ),
+        ),
+        if (_promos.length > 1) ...[
+          const SizedBox(height: 12),
+          Center(
+            child: CarouselDots(
+              pageCount: _promos.length,
+              page: _page,
+              activeColor: AppColors.primaryMaroon,
+              inactiveColor: AppColors.borderSubtle,
             ),
-            child: Stack(
-              children: [
-                // A faint campus-landmark motif in the background — no
-                // illustration asset for this exists yet, so this is a
-                // deliberately simple vector placeholder, not a fake photo.
-                Positioned(
-                  right: -24,
-                  top: -10,
-                  bottom: -10,
-                  width: 190,
-                  child: Opacity(
-                    opacity: .14,
-                    child: Icon(
-                      Icons.account_balance_rounded,
-                      size: 210,
-                      color: AppColors.accentRose,
-                    ),
+          ),
+        ],
+      ],
+    ).animate().fadeIn(duration: 500.ms).moveY(begin: 10, end: 0, duration: 500.ms);
+  }
+}
+
+class _PromoCard extends StatelessWidget {
+  const _PromoCard({required this.data, required this.onOrderNow});
+  final _PromoData data;
+  final VoidCallback onOrderNow;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    clipBehavior: Clip.antiAlias,
+    decoration: BoxDecoration(
+      color: AppColors.primaryMaroonDeep,
+      borderRadius: BorderRadius.circular(26),
+      boxShadow: const [
+        BoxShadow(
+          color: AppColors.maroonShadow,
+          blurRadius: 24,
+          offset: Offset(0, 12),
+        ),
+      ],
+    ),
+    child: Stack(
+      children: [
+        // Real food photography (Task 54) — a plain solid-color fallback
+        // on load/error, never a broken-image glyph, since this is decor
+        // behind real copy rather than content someone is waiting on.
+        Positioned.fill(
+          child: CachedNetworkImage(
+            imageUrl: data.imageUrl,
+            fit: BoxFit.cover,
+            memCacheWidth: (400 * MediaQuery.devicePixelRatioOf(context)).round(),
+            placeholder: (context, url) => const ColoredBox(color: AppColors.primaryMaroonDeep),
+            errorWidget: (context, url, error) => const ColoredBox(color: AppColors.primaryMaroonDeep),
+          ),
+        ),
+        Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.primaryMaroonDeep,
+                  AppColors.primaryMaroonDeep.withValues(alpha: .88),
+                  Colors.transparent,
+                ],
+                stops: const [0, .50, 1],
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, AppSpacing.ml, AppSpacing.ml, AppSpacing.ml),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 9,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryMaroon,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  data.badge,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1,
+                    color: AppColors.onMaroon,
                   ),
                 ),
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          AppColors.primaryMaroonDeep,
-                          AppColors.primaryMaroonDeep.withValues(alpha: .88),
-                          Colors.transparent,
-                        ],
-                        stops: const [0, .50, 1],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: 200,
+                child: Text(
+                  data.headline,
+                  style: Theme.of(context).textTheme.headlineMedium
+                      ?.copyWith(color: Colors.white, fontSize: 22),
+                ),
+              ),
+              const SizedBox(height: 6),
+              SizedBox(
+                width: 220,
+                child: Text(
+                  data.subtitle,
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(
+                        color: Colors.white.withValues(alpha: .72),
                       ),
-                    ),
-                  ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, AppSpacing.ml, AppSpacing.ml, AppSpacing.ml),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: onOrderNow,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.ml,
+                    vertical: 11,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.gold,
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  ),
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 9,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryMaroon,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          'CAMPUS PICK',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1,
-                            color: AppColors.onMaroon,
-                          ),
-                        ),
+                      Text(
+                        'Order Now',
+                        style: Theme.of(context).textTheme.labelLarge
+                            ?.copyWith(
+                              color: AppColors.primaryMaroonDeep,
+                              fontWeight: FontWeight.w700,
+                            ),
                       ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: 200,
-                        child: Text(
-                          'Your lunch break, upgraded.',
-                          style: Theme.of(context).textTheme.headlineMedium
-                              ?.copyWith(color: Colors.white, fontSize: 22),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      SizedBox(
-                        width: 220,
-                        child: Text(
-                          'Fast drops from the spots you already love.',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: Colors.white.withValues(alpha: .72),
-                              ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      InkWell(
-                        onTap: onOrderNow,
-                        borderRadius: BorderRadius.circular(AppRadius.pill),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.ml,
-                            vertical: 11,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.gold,
-                            borderRadius: BorderRadius.circular(AppRadius.pill),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Order Now',
-                                style: Theme.of(context).textTheme.labelLarge
-                                    ?.copyWith(
-                                      color: AppColors.primaryMaroonDeep,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                              ),
-                              const SizedBox(width: 6),
-                              const Icon(
-                                CupertinoIcons.arrow_right,
-                                size: 16,
-                                color: AppColors.primaryMaroonDeep,
-                              ),
-                            ],
-                          ),
-                        ),
+                      const SizedBox(width: 6),
+                      const Icon(
+                        CupertinoIcons.arrow_right,
+                        size: 16,
+                        color: AppColors.primaryMaroonDeep,
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
-          )
-          .animate()
-          .fadeIn(duration: 500.ms)
-          .moveY(begin: 10, end: 0, duration: 500.ms);
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 /// A vertical card sized for the horizontal "Popular around campus"

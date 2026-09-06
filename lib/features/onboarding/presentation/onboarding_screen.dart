@@ -4,11 +4,11 @@ import 'package:go_router/go_router.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/carousel_dots.dart';
 import '../../../core/widgets/primary_button.dart';
 import 'widgets/campus_collage_visual.dart';
 import 'widgets/delivery_hero_visual.dart';
 import 'widgets/dual_mode_visual.dart';
-import 'widgets/onboarding_progress_track.dart';
 
 class _OnboardingPage {
   const _OnboardingPage({
@@ -353,7 +353,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            OnboardingProgressTrack(
+                            CarouselDots(
                               pageCount: _pages.length,
                               page: _page,
                             ),
