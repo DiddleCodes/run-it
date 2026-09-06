@@ -13,7 +13,7 @@ export class CampusService {
   constructor(private readonly prisma: PrismaService) {}
 
   list(): Promise<Campus[]> {
-    return this.prisma.campus.findMany({ orderBy: { name: 'asc' } });
+    return this.prisma.campus.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } });
   }
 
   async requireById(id: string): Promise<Campus> {
@@ -43,7 +43,7 @@ export class CampusService {
       throw new UnprocessableEntityException('That email address doesn\'t look valid.');
     }
 
-    const campuses = await this.prisma.campus.findMany();
+    const campuses = await this.prisma.campus.findMany({ where: { isActive: true } });
     const match = campuses.find((campus) =>
       campus.allowedEmailDomains.some((allowed) => allowed.toLowerCase() === domain),
     );

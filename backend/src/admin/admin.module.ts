@@ -5,6 +5,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { OrderEscrowModule } from '../order-escrow/order-escrow.module';
 import { PayoutAccountsModule } from '../payout-accounts/payout-accounts.module';
 import { AdminAuditLogService } from './admin-audit-log.service';
+import { AdminCampusController } from './campus/admin-campus.controller';
+import { AdminCampusService } from './campus/admin-campus.service';
 import { AdminDisputesController } from './disputes/admin-disputes.controller';
 import { AdminDisputesService } from './disputes/admin-disputes.service';
 import { AdminPlatformMetricsController } from './platform-metrics/admin-platform-metrics.controller';
@@ -24,6 +26,7 @@ import { AdminVendorReviewService } from './vendor-review/admin-vendor-review.se
     AdminPlatformMetricsController,
     AdminUsersController,
     AdminRunnerKycController,
+    AdminCampusController,
   ],
   providers: [
     AdminAuditLogService,
@@ -32,6 +35,7 @@ import { AdminVendorReviewService } from './vendor-review/admin-vendor-review.se
     AdminPlatformMetricsService,
     AdminUsersService,
     AdminRunnerKycService,
+    AdminCampusService,
   ],
   exports: [AdminAuditLogService],
 })

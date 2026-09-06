@@ -48,3 +48,28 @@ describe('CampusService.checkEmail', () => {
     expect(result.valid).toBe(false);
   });
 });
+
+// Task 51: deactivating a campus must stop it from matching new signups —
+// resolveByEmail/list are the two real enforcement points, so both need to
+// filter on isActive at the query level, not just trust every row returned.
+describe('CampusService — isActive filtering (Task 51)', () => {
+  it('list() only queries active campuses', async () => {
+    const prisma = { campus: { findMany: jest.fn().mockResolvedValue([]) } };
+    const service = new CampusService(prisma as any);
+
+    await service.list();
+
+    expect(prisma.campus.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { isActive: true } }),
+    );
+  });
+
+  it('resolveByEmail() only queries active campuses', async () => {
+    const prisma = { campus: { findMany: jest.fn().mockResolvedValue([]) } };
+    const service = new CampusService(prisma as any);
+
+    await service.resolveByEmail('ada@student.ui.edu.ng').catch(() => {});
+
+    expect(prisma.campus.findMany).toHaveBeenCalledWith({ where: { isActive: true } });
+  });
+});

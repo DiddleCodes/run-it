@@ -156,6 +156,12 @@ model Campus {
   allowedEmailDomains String[] @map("allowed_email_domains")
   createdAt           DateTime @default(now()) @map("created_at")
 
+  // Task 51: soft delist. A deactivated campus stops matching new signups
+  // (CampusService.resolveByEmail filters on this) but every existing
+  // user/vendor already tied to it via campusId/requestedCampusId is
+  // untouched — those FKs don't reference isActive at all.
+  isActive Boolean @default(true) @map("is_active")
+
   users              User[]
   requestedByVendors Vendor[] @relation("VendorRequestedCampus")
 

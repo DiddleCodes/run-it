@@ -8,6 +8,13 @@ export function createPrismaMock() {
       update: jest.fn(),
       count: jest.fn().mockResolvedValue(0),
     },
+    campus: {
+      findUnique: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    },
     passwordResetToken: {
       findUnique: jest.fn(),
       create: jest.fn(),

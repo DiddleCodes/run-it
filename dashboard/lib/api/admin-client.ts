@@ -48,6 +48,23 @@ export interface AdminCampus {
   name: string;
 }
 
+// Task 51: the admin-management shape — richer than the public/picker
+// AdminCampus above (which stays deliberately minimal, see
+// CampusController's own doc comment on never leaking allowedEmailDomains
+// to a non-admin caller). vendorCount counts real, active, approved
+// vendors actually assigned here (Vendor.user.campusId), not the
+// separate, earlier "applicant's own stated preference" concept
+// (Vendor.requestedCampusId) that AdminVendorSummary.requestedCampus uses.
+export interface AdminCampusDetail {
+  id: string;
+  name: string;
+  allowedEmailDomains: string[];
+  isActive: boolean;
+  createdAt: string;
+  studentCount: number;
+  vendorCount: number;
+}
+
 export interface AdminVendorSummary {
   id: string;
   userId: string;
@@ -266,6 +283,19 @@ export const adminClient = {
   // Public backend route, proxied like everything else so the dashboard
   // never talks to BACKEND_URL directly (see route.ts's own doc comment).
   listCampuses: () => proxyFetch<AdminCampus[]>("campuses"),
+
+  // Task 51: the real admin CRUD surface — distinct from listCampuses
+  // above, which stays the minimal public/picker route.
+  listAdminCampuses: () => proxyFetch<AdminCampusDetail[]>("admin/campuses"),
+  createCampus: (name: string, allowedEmailDomains: string[]) =>
+    proxyFetch<AdminCampusDetail>("admin/campuses", { method: "POST", body: { name, allowedEmailDomains } }),
+  updateCampus: (id: string, data: { name?: string; allowedEmailDomains?: string[] }) =>
+    proxyFetch<AdminCampusDetail>(`admin/campuses/${id}`, { method: "PATCH", body: data }),
+  deactivateCampus: (id: string) =>
+    proxyFetch<AdminCampusDetail>(`admin/campuses/${id}/deactivate`, { method: "PATCH" }),
+  reactivateCampus: (id: string) =>
+    proxyFetch<AdminCampusDetail>(`admin/campuses/${id}/reactivate`, { method: "PATCH" }),
+  deleteCampus: (id: string) => proxyFetch<{ id: string; deleted: boolean }>(`admin/campuses/${id}`, { method: "DELETE" }),
 
   listDisputes: (status?: DisputeStatus) =>
     proxyFetch<AdminDisputeSummary[]>(`admin/disputes${status ? `?status=${status}` : ""}`),

@@ -134,4 +134,15 @@ export const adminNav: NavItem[] = [
       </svg>
     ),
   },
+  {
+    label: "Campuses",
+    href: "/admin/campuses",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M8 1.5L14.5 5 8 8.5 1.5 5 8 1.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M4 6.8V11c0 1 1.79 2 4 2s4-1 4-2V6.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <path d="M14.5 5v4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    ),
+  },
 ];

@@ -23,6 +23,7 @@ const config: Record<string, { label: string; className: string }> = {
   resolved: { label: "Resolved", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   refunded: { label: "Refunded", className: "bg-purple-50 text-purple-700 border-purple-200" },
   active: { label: "Active", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  inactive: { label: "Inactive", className: "bg-gray-100 text-gray-500 border-gray-200" },
   suspended: { label: "Suspended", className: "bg-red-50 text-red-600 border-red-200" },
   draft: { label: "Draft", className: "bg-gray-100 text-gray-500 border-gray-200" },
   processing: { label: "Processing", className: "bg-blue-50 text-blue-700 border-blue-200" },
