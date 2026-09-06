@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +12,7 @@ import '../../../core/network/vendors_repository.dart';
 import '../../../core/routing/app_router.dart';
 import '../../vendor/domain/vendor_dashboard_models.dart' show VendorCategoryOption;
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
 import '../../../core/widgets/route_line.dart';
@@ -129,7 +131,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               // fixed cross-axis extent on a horizontal scroller of chips
               // with real text has nowhere to grow at larger text scale.
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 16, AppSpacing.lg, 8),
+                // Bottom padding wide enough for AppElevation.card's own
+                // shadow spread (Task 52) so it isn't clipped by the
+                // scroller's bounds.
+                padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 16, AppSpacing.lg, 16),
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
@@ -428,7 +433,7 @@ class _Search extends StatelessWidget {
   );
 }
 
-class _Category extends StatelessWidget {
+class _Category extends StatefulWidget {
   const _Category({
     required this.label,
     this.icon,
@@ -442,38 +447,65 @@ class _Category extends StatelessWidget {
   final IconData? icon;
   final bool selected;
   final VoidCallback onTap;
+
+  @override
+  State<_Category> createState() => _CategoryState();
+}
+
+class _CategoryState extends State<_Category> {
+  bool _pressed = false;
+  void _setPressed(bool value) => setState(() => _pressed = value);
+
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: AnimatedContainer(
-      duration: 220.ms,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: selected ? AppColors.primaryMaroon : AppColors.surfaceCard,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(
-          color: selected ? AppColors.primaryMaroon : AppColors.borderSubtle,
-        ),
-      ),
-      child: Row(
-        children: [
-          if (icon != null) ...[
-            Icon(
-              icon,
-              size: 18,
-              color: selected ? AppColors.onMaroon : AppColors.mutedText,
-            ),
-            const SizedBox(width: 8),
-          ],
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: selected ? AppColors.onMaroon : AppColors.inkText,
-            ),
+    onTapDown: (_) => _setPressed(true),
+    onTapUp: (_) => _setPressed(false),
+    onTapCancel: () => _setPressed(false),
+    onTap: () {
+      HapticFeedback.selectionClick();
+      widget.onTap();
+    },
+    child: AnimatedScale(
+      scale: _pressed ? 0.95 : 1,
+      duration: AppMotion.fast,
+      curve: Curves.easeOut,
+      child: AnimatedContainer(
+        duration: 220.ms,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: widget.selected ? AppColors.primaryMaroon : AppColors.surfaceCard,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(
+            width: widget.selected ? 1 : 1.2,
+            color: widget.selected ? AppColors.primaryMaroon : AppColors.borderSubtle,
           ),
-        ],
+          // Task 52: an inactive chip is a real tappable control, not a
+          // static label — give it the same "raised, flattens on press"
+          // elevation language every other tappable surface uses. The
+          // selected chip's own strong maroon fill already reads fine
+          // unaided, so it stays shadow-free exactly as before.
+          boxShadow: (widget.selected || _pressed) ? const [] : AppElevation.card(false),
+        ),
+        child: Row(
+          children: [
+            if (widget.icon != null) ...[
+              Icon(
+                widget.icon,
+                size: 18,
+                color: widget.selected ? AppColors.onMaroon : AppColors.mutedText,
+              ),
+              const SizedBox(width: 8),
+            ],
+            Text(
+              widget.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: widget.selected ? AppColors.onMaroon : AppColors.inkText,
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );

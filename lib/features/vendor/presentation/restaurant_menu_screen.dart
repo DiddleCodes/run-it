@@ -1,7 +1,6 @@
-import 'dart:typed_data';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -9,6 +8,7 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/network/uploads_repository.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
 import '../../../core/widgets/photo_capture_screen.dart';
@@ -626,29 +626,56 @@ class _PhotoPicker extends StatelessWidget {
   }
 }
 
-class _MenuCategoryChip extends StatelessWidget {
+class _MenuCategoryChip extends StatefulWidget {
   const _MenuCategoryChip({required this.label, required this.selected, required this.onTap});
   final String label;
   final bool selected;
   final VoidCallback onTap;
 
   @override
+  State<_MenuCategoryChip> createState() => _MenuCategoryChipState();
+}
+
+class _MenuCategoryChipState extends State<_MenuCategoryChip> {
+  bool _pressed = false;
+  void _setPressed(bool value) => setState(() => _pressed = value);
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.accentForest : AppColors.surfaceCard,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: selected ? AppColors.accentForest : AppColors.borderSubtle),
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: selected ? Colors.white : AppColors.inkText,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+      onTapDown: (_) => _setPressed(true),
+      onTapUp: (_) => _setPressed(false),
+      onTapCancel: () => _setPressed(false),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        widget.onTap();
+      },
+      child: AnimatedScale(
+        scale: _pressed ? 0.95 : 1,
+        duration: AppMotion.fast,
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: widget.selected ? AppColors.accentForest : AppColors.surfaceCard,
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: Border.all(
+              width: widget.selected ? 1 : 1.2,
+              color: widget.selected ? AppColors.accentForest : AppColors.borderSubtle,
+            ),
+            // Task 52: same "raised until pressed" treatment as the
+            // student-facing category chips — this one just happens to sit
+            // in a Wrap instead of a horizontal scroller, so no extra
+            // padding is needed to keep the shadow from being clipped.
+            boxShadow: (widget.selected || _pressed) ? const [] : AppElevation.card(false),
+          ),
+          child: Text(
+            widget.label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: widget.selected ? Colors.white : AppColors.inkText,
+              fontWeight: widget.selected ? FontWeight.w700 : FontWeight.w500,
+            ),
           ),
         ),
       ),

@@ -184,8 +184,13 @@ class _FailingWithdrawalRepository extends WalletRepository {
 class _FakeVendorsRepository extends VendorsRepository {
   const _FakeVendorsRepository();
   @override
-  Future<VendorsPage> listVendors({String? category, String? search, int page = 1, int limit = 20}) async =>
-      VendorsPage(items: const [], total: 0, page: page, limit: limit);
+  Future<VendorsPage> listVendors({
+    String? category,
+    String? search,
+    int page = 1,
+    int limit = 20,
+    String? token,
+  }) async => VendorsPage(items: const [], total: 0, page: page, limit: limit);
 }
 
 class _FakeAuthController extends AuthController {

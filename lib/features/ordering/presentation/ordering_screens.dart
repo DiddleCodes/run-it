@@ -129,9 +129,14 @@ class _EateryMenuScreenState extends ConsumerState<EateryMenuScreen> {
                       ),
                       SliverToBoxAdapter(
                         child: SizedBox(
-                          height: 72,
+                          // Task 52: a touch taller than the chips
+                          // themselves need, so CategoryChip's new
+                          // AppElevation.card shadow has room below it
+                          // instead of being hard-clipped by this
+                          // ListView's own viewport bounds.
+                          height: 80,
                           child: ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.ml, AppSpacing.lg, 10),
+                            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.ml, AppSpacing.lg, 14),
                             scrollDirection: Axis.horizontal,
                             itemCount: categories.length,
                             separatorBuilder: (_, _) =>

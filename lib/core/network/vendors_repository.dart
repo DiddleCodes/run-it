@@ -69,10 +69,20 @@ class VendorsRepository {
     return json.map((e) => VendorCategoryOption.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  /// Public — a student browsing campus vendors (Task 14): "Popular around
-  /// campus", category chips, and the search bar all page through this. No
-  /// [category]/[search] means every active vendor, page 1.
-  Future<VendorsPage> listVendors({String? category, String? search, int page = 1, int limit = 20}) async {
+  /// A student browsing campus vendors (Task 14): "Popular around campus",
+  /// category chips, and the search bar all page through this. No
+  /// [category]/[search] means every active vendor, page 1. Requires
+  /// [token] — `GET /vendors` has needed a real JWT since Task 26 (it
+  /// resolves the caller's own campus server-side), so a missing token here
+  /// means every call fails with 401 and Home shows "Couldn't load vendors"
+  /// unconditionally, never a real empty-campus state.
+  Future<VendorsPage> listVendors({
+    String? category,
+    String? search,
+    int page = 1,
+    int limit = 20,
+    required String token,
+  }) async {
     final query = {
       'page': '$page',
       'limit': '$limit',
@@ -80,7 +90,7 @@ class VendorsRepository {
       if (search != null && search.isNotEmpty) 'search': search,
     };
     final path = Uri(path: '/vendors', queryParameters: query).toString();
-    final json = await client.get(path) as Map<String, dynamic>;
+    final json = await client.get(path, token: token) as Map<String, dynamic>;
     return VendorsPage.fromJson(json);
   }
 

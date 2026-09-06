@@ -26,9 +26,12 @@ final vendorSearchQueryProvider = StateProvider<String>((ref) => '');
 final campusEateriesProvider = FutureProvider<List<Eatery>>((ref) async {
   final category = ref.watch(vendorCategoryFilterProvider);
   final search = ref.watch(vendorSearchQueryProvider).trim();
+  final token = ref.watch(authControllerProvider)?.accessToken;
+  if (token == null) return const [];
   final page = await ref.watch(vendorsRepositoryProvider).listVendors(
     category: category,
     search: search.isEmpty ? null : search,
+    token: token,
   );
   return page.items.map((vendor) => vendor.toEatery()).toList();
 });

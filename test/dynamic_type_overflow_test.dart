@@ -138,7 +138,13 @@ class _ScaleTestVendorsRepository extends VendorsRepository {
   );
 
   @override
-  Future<VendorsPage> listVendors({String? category, String? search, int page = 1, int limit = 20}) async {
+  Future<VendorsPage> listVendors({
+    String? category,
+    String? search,
+    int page = 1,
+    int limit = 20,
+    String? token,
+  }) async {
     return const VendorsPage(
       items: [
         _longVendor,

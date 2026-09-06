@@ -19,7 +19,7 @@ class OrderingColors {
   static Color border(BuildContext context) => AppColors.borderSubtle;
 }
 
-class CategoryChip extends StatelessWidget {
+class CategoryChip extends StatefulWidget {
   const CategoryChip({
     super.key,
     required this.label,
@@ -29,27 +29,52 @@ class CategoryChip extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
+
+  @override
+  State<CategoryChip> createState() => _CategoryChipState();
+}
+
+class _CategoryChipState extends State<CategoryChip> {
+  bool _pressed = false;
+  void _setPressed(bool value) => setState(() => _pressed = value);
+
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: AnimatedContainer(
+    onTapDown: (_) => _setPressed(true),
+    onTapUp: (_) => _setPressed(false),
+    onTapCancel: () => _setPressed(false),
+    onTap: () {
+      HapticFeedback.selectionClick();
+      widget.onTap();
+    },
+    child: AnimatedScale(
+      scale: _pressed ? 0.95 : 1,
       duration: AppMotion.fast,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: selected
-            ? AppColors.primaryMaroon
-            : OrderingColors.surface(context),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: selected
+      curve: Curves.easeOut,
+      child: AnimatedContainer(
+        duration: AppMotion.fast,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: widget.selected
               ? AppColors.primaryMaroon
-              : OrderingColors.border(context),
+              : OrderingColors.surface(context),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            width: widget.selected ? 1 : 1.2,
+            color: widget.selected
+                ? AppColors.primaryMaroon
+                : OrderingColors.border(context),
+          ),
+          // Task 52: same "raised until pressed" elevation the Home
+          // screen's own category chips now get — an inactive chip here is
+          // just as tappable and shouldn't read as a flat label either.
+          boxShadow: (widget.selected || _pressed) ? const [] : AppElevation.card(false),
         ),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: selected ? AppColors.onMaroon : OrderingColors.text(context),
+        child: Text(
+          widget.label,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            color: widget.selected ? AppColors.onMaroon : OrderingColors.text(context),
+          ),
         ),
       ),
     ),
