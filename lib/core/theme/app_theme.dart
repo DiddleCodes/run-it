@@ -39,7 +39,7 @@ abstract class AppTheme {
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: scaffoldBg,
-      fontFamily: GoogleFonts.inter().fontFamily,
+      fontFamily: GoogleFonts.manrope().fontFamily,
       textTheme: textTheme,
       splashFactory: NoSplash.splashFactory,
       highlightColor: Colors.transparent,
