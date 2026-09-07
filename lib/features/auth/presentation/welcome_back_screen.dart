@@ -12,6 +12,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
 import '../../../core/widgets/app_spinner.dart';
+import '../../../core/widgets/maroon_wave_backdrop.dart';
 import '../application/auth_controller.dart';
 import 'otp_screen.dart';
 import 'widgets/passcode_pad.dart';
@@ -124,7 +125,9 @@ class _WelcomeBackScreenState extends ConsumerState<WelcomeBackScreen>
     setState(() => _submitting = true);
     bool ok;
     try {
-      ok = await ref.read(authControllerProvider.notifier).loginWithPasscode(_digits);
+      ok = await ref
+          .read(authControllerProvider.notifier)
+          .loginWithPasscode(_digits);
     } on SessionRecoveryRequiredException {
       if (!mounted) return;
       setState(() => _submitting = false);
@@ -135,7 +138,9 @@ class _WelcomeBackScreenState extends ConsumerState<WelcomeBackScreen>
       setState(() => _submitting = false);
       ref
           .read(appNotificationProvider.notifier)
-          .error("Couldn't reach the server. Check your connection and try again.");
+          .error(
+            "Couldn't reach the server. Check your connection and try again.",
+          );
       return;
     }
     if (!mounted) return;
@@ -172,7 +177,9 @@ class _WelcomeBackScreenState extends ConsumerState<WelcomeBackScreen>
       setState(() => _biometricAuthenticating = false);
       ref
           .read(appNotificationProvider.notifier)
-          .error("Couldn't reach the server. Check your connection and try again.");
+          .error(
+            "Couldn't reach the server. Check your connection and try again.",
+          );
       return;
     }
     if (!mounted) return;
@@ -230,124 +237,228 @@ class _WelcomeBackScreenState extends ConsumerState<WelcomeBackScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,
-      body: Stack(
-        children: [
-          const Positioned.fill(child: _BottomBrandShape()),
-          SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                // This screen packs in a lot for one phone viewport — brand
-                // header, welcome copy, dots, a full keypad, a divider, a
-                // dedicated biometric button, and two footer links. Even at
-                // "normal" heights there's no room for generous spacing, so
-                // the rhythm here stays tight everywhere; `compact` only
-                // shaves a little further for the very smallest phones.
-                // `SingleChildScrollView` is the real overflow guard — for
-                // large Dynamic Type scales or a genuinely tiny device.
-                final compact = constraints.maxHeight < 640;
-                final keySize = compact ? 56.0 : 60.0;
-                return SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: AppSpacing.lg,
-                    vertical: AppSpacing.sm,
-                  ),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 440),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const _BrandHeader(),
-                          SizedBox(height: compact ? AppSpacing.md : AppSpacing.lg),
-                          Center(
-                            child: _WelcomeBlock(
-                              filled: _digits.length,
-                              error: _error,
-                              lockedOut: _lockedOut,
-                              lockoutRemaining: _lockoutRemaining,
-                              shake: _shake,
+      // Task 57: normal Column/Expanded flow, not an absolutely-positioned
+      // Stack overlay (Task 56's bug: a Stack layer with a manually
+      // guessed pixel offset could overlap real content — the keypad's
+      // bottom row, the footer links — and still not reliably reach the
+      // real bottom edge). The primary content below lays out at its own
+      // natural size first; MaroonWaveSection, as the Column's Expanded
+      // child, then structurally gets exactly whatever space is actually
+      // left on this device — it cannot overlap the content above it,
+      // and it always fills to the true bottom.
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // This screen packs in a lot for one phone viewport — brand
+            // header, welcome copy, dots, a full keypad, a divider, and a
+            // dedicated biometric button. Even at "normal" heights there's
+            // no room for generous spacing, so the rhythm here stays tight
+            // everywhere; `compact` only shaves a little further for the
+            // very smallest phones.
+            final compact = constraints.maxHeight < 640;
+            final keySize = compact ? 56.0 : 60.0;
+            // Task 57: CustomScrollView + SliverFillRemaining(hasScrollBody:
+            // false) — the purpose-built Flutter pattern for "fill exactly
+            // whatever's left after the content above, but let the whole
+            // thing scroll instead of overflowing if it doesn't fit."
+            // Deliberately not IntrinsicHeight + Expanded: IntrinsicHeight
+            // forces its *entire* subtree (including the primary content
+            // above, not just the footer) into a tightly computed height,
+            // and that computation can legitimately mismatch the content's
+            // real layout size by a few dozen pixels — an inherent Flutter
+            // imprecision with nested Text/Row/Column, not something
+            // tunable away. Slivers avoid that dual-pass measurement
+            // entirely.
+            return CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: AppSpacing.lg,
+                      vertical: AppSpacing.sm,
+                    ),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 440),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const _BrandHeader(),
+                            SizedBox(
+                              height: compact ? AppSpacing.md : AppSpacing.lg,
                             ),
-                          ),
-                          SizedBox(height: compact ? AppSpacing.sm : AppSpacing.md),
-                          Center(
-                            child: PasscodeKeypad(
-                              onDigit: _onDigit,
-                              onBackspace: _onBackspace,
-                              enabled: !_submitting && !_lockedOut,
-                              keySize: keySize,
-                              biometricKey: _biometricEnrolled
-                                  ? PasscodeBiometricKey(
-                                      icon: _isFaceId
-                                          ? Icons.face_retouching_natural_rounded
-                                          : Icons.fingerprint_rounded,
-                                      semanticLabel:
-                                          'Sign in using device biometrics',
-                                      onTap: _useBiometric,
-                                    )
-                                  : null,
-                            ),
-                          ),
-                          if (_biometricEnrolled) ...[
-                            SizedBox(height: compact ? AppSpacing.xs : AppSpacing.sm),
-                            const _OrDivider(),
-                            SizedBox(height: compact ? AppSpacing.xs : AppSpacing.sm),
-                            _BiometricButton(
-                              isFaceId: _isFaceId,
-                              authenticating: _biometricAuthenticating,
-                              enabled: !_submitting && !_lockedOut,
-                              onTap: _useBiometric,
-                            ),
-                          ],
-                          SizedBox(height: compact ? AppSpacing.xs : AppSpacing.sm),
-                          Center(
-                            child: GestureDetector(
-                              onTap: _onForgotPasscode,
-                              child: Text(
-                                'Forgot passcode?',
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(
-                                      color: AppColors.inkText,
-                                      decoration: TextDecoration.underline,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                            Center(
+                              child: _WelcomeBlock(
+                                filled: _digits.length,
+                                error: _error,
+                                lockedOut: _lockedOut,
+                                lockoutRemaining: _lockoutRemaining,
+                                shake: _shake,
                               ),
                             ),
-                          ),
-                          SizedBox(height: AppSpacing.xs),
-                          Center(
-                            child: Wrap(
-                              alignment: WrapAlignment.center,
-                              children: [
-                                Text(
-                                  'New here? ',
-                                  style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(color: AppColors.mutedText),
-                                ),
-                                GestureDetector(
-                                  onTap: () => context.go(AppRoutes.accountType),
-                                  child: Text(
-                                    'Create an account',
-                                    style: Theme.of(context).textTheme.bodyMedium
-                                        ?.copyWith(
-                                          color: AppColors.gold,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                  ),
-                                ),
-                              ],
+                            SizedBox(
+                              height: compact ? AppSpacing.sm : AppSpacing.md,
                             ),
-                          ),
-                          SizedBox(height: compact ? AppSpacing.xs : AppSpacing.sm),
-                        ],
+                            Center(
+                              child: PasscodeKeypad(
+                                onDigit: _onDigit,
+                                onBackspace: _onBackspace,
+                                enabled: !_submitting && !_lockedOut,
+                                keySize: keySize,
+                                biometricKey: _biometricEnrolled
+                                    ? PasscodeBiometricKey(
+                                        icon: _isFaceId
+                                            ? Icons
+                                                  .face_retouching_natural_rounded
+                                            : Icons.fingerprint_rounded,
+                                        semanticLabel:
+                                            'Sign in using device biometrics',
+                                        onTap: _useBiometric,
+                                      )
+                                    : null,
+                              ),
+                            ),
+                            if (_biometricEnrolled) ...[
+                              SizedBox(
+                                height: compact ? AppSpacing.xs : AppSpacing.sm,
+                              ),
+                              const _OrDivider(),
+                              SizedBox(
+                                height: compact ? AppSpacing.xs : AppSpacing.sm,
+                              ),
+                              _BiometricButton(
+                                isFaceId: _isFaceId,
+                                authenticating: _biometricAuthenticating,
+                                enabled: !_submitting && !_lockedOut,
+                                onTap: _useBiometric,
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                );
-              },
+                ),
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  // Stack + Align, not Column + Expanded: if content is so
+                  // tall this sliver ever has to grow past the remaining
+                  // viewport (extreme Dynamic Type on a tiny device),
+                  // Expanded would receive unbounded height and assert.
+                  // Align just bottom-anchors the footer within whatever
+                  // this section actually resolves to; MaroonWaveSection
+                  // (Positioned.fill) always matches that, common case or
+                  // not.
+                  child: Stack(
+                    children: [
+                      const Positioned.fill(child: MaroonWaveSection()),
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: MaroonFooterBar(
+                          child: _FooterLinks(
+                            onForgotPasscode: _onForgotPasscode,
+                            onCreateAccount: () =>
+                                context.go(AppRoutes.accountType),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// "Forgot passcode?" (flanked by short dividers) and "New here? Create an
+/// account →" — rendered inside [MaroonWaveSection]'s maroon area in
+/// white/gold, rather than on cream above it.
+class _FooterLinks extends StatelessWidget {
+  const _FooterLinks({
+    required this.onForgotPasscode,
+    required this.onCreateAccount,
+  });
+
+  final VoidCallback onForgotPasscode;
+  final VoidCallback onCreateAccount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: onForgotPasscode,
+          // FittedBox (not Wrap) scales down instead of overflowing (or
+          // reflowing to a second line, which Wrap's own intrinsic-height
+          // computation notoriously under-reports — throwing off the
+          // ConstrainedBox+IntrinsicHeight "sticky footer" every call site
+          // uses) at large Dynamic Type scales or on narrow screens.
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 20,
+                  height: 1,
+                  color: AppColors.onMaroon.withValues(alpha: 0.35),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Forgot passcode?',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.onMaroon,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Container(
+                  width: 20,
+                  height: 1,
+                  color: AppColors.onMaroon.withValues(alpha: 0.35),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        GestureDetector(
+          onTap: onCreateAccount,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'New here? ',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.onMaroon.withValues(alpha: 0.75),
+                  ),
+                ),
+                Text(
+                  'Create an account',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.gold,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 16,
+                  color: AppColors.gold,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -389,9 +500,8 @@ class _BrandHeader extends StatelessWidget {
           children: [
             Text(
               'run-it.',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(color: AppColors.inkText),
+              style: Theme.of(context).textTheme.titleLarge
+                  ?.copyWith(color: AppColors.inkText),
             ),
             Text(
               'Food your way',
@@ -432,14 +542,16 @@ class _WelcomeBlock extends StatelessWidget {
 
     return Column(
       children: [
-        const Text('👋', style: TextStyle(fontSize: 30)),
-        const SizedBox(height: 6),
+        // Task 56: the app's existing abstract accent-mark motif (the
+        // same auto_awesome_rounded glyph used elsewhere, see
+        // SparkleAccent's doc comment) in place of the 👋 emoji.
+        const Icon(Icons.auto_awesome_rounded, size: 28, color: AppColors.gold),
+        const SizedBox(height: 8),
         Text(
           'Welcome back!',
           textAlign: TextAlign.center,
-          style: Theme.of(
-            context,
-          ).textTheme.headlineLarge?.copyWith(color: AppColors.inkText),
+          style: Theme.of(context).textTheme.headlineLarge
+              ?.copyWith(color: AppColors.inkText),
         ).animate().fadeIn(duration: 300.ms).moveY(begin: 8, end: 0),
         const SizedBox(height: 6),
         AnimatedSwitcher(
@@ -481,9 +593,8 @@ class _OrDivider extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Text(
             'OR',
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: AppColors.mutedText),
           ),
         ),
         const Expanded(child: Divider(color: AppColors.borderSubtle)),
@@ -606,52 +717,4 @@ class _BiometricButtonState extends State<_BiometricButton> {
       ),
     );
   }
-}
-
-/// Decorative bottom brand shape, purely visual — [IgnorePointer] keeps it
-/// from ever intercepting a tap meant for the controls above it. Sized off
-/// [MediaQuery]'s height fraction (not fixed pixel dimensions) so it scales
-/// and repositions sensibly from the smallest to the largest iPhone.
-class _BottomBrandShape extends StatelessWidget {
-  const _BottomBrandShape();
-
-  @override
-  Widget build(BuildContext context) {
-    final height = MediaQuery.sizeOf(context).height * 0.16;
-    return IgnorePointer(
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: ClipPath(
-          clipper: _BrandShapeClipper(),
-          child: Container(
-            height: height,
-            width: double.infinity,
-            color: AppColors.primaryMaroon,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BrandShapeClipper extends CustomClipper<Path> {
-  const _BrandShapeClipper();
-
-  @override
-  Path getClip(Size size) {
-    return Path()
-      ..moveTo(0, size.height * 0.6)
-      ..quadraticBezierTo(
-        size.width * 0.5,
-        -size.height * 0.5,
-        size.width,
-        size.height * 0.6,
-      )
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-  }
-
-  @override
-  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }

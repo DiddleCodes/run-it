@@ -127,13 +127,13 @@ class PasscodeKeypad extends StatelessWidget {
       children: [
         for (final row in _layout)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 for (final key in row)
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: key.isNotEmpty
                         ? _KeypadKey(
                             label: key,
@@ -192,7 +192,8 @@ class _KeypadKeyState extends State<_KeypadKey> {
   @override
   Widget build(BuildContext context) {
     final isBackspace = widget.label == '⌫';
-    final glyphIcon = widget.icon ?? (isBackspace ? Icons.backspace_outlined : null);
+    final glyphIcon =
+        widget.icon ?? (isBackspace ? Icons.backspace_outlined : null);
     final label =
         widget.semanticLabel ?? (isBackspace ? 'Delete' : widget.label);
     final iconColor = widget.icon != null
@@ -233,13 +234,12 @@ class _KeypadKeyState extends State<_KeypadKey> {
                 ? Icon(glyphIcon, size: 22, color: iconColor)
                 : Text(
                     widget.label!,
-                    style: Theme.of(context).textTheme.headlineMedium
-                        ?.copyWith(
-                          color: widget.enabled
-                              ? AppColors.inkText
-                              : AppColors.mutedText,
-                          fontSize: 24,
-                        ),
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      color: widget.enabled
+                          ? AppColors.inkText
+                          : AppColors.mutedText,
+                      fontSize: 24,
+                    ),
                   ),
           ),
         ),

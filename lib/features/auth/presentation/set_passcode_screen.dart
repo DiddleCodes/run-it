@@ -8,6 +8,7 @@ import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/maroon_wave_backdrop.dart';
 import '../application/auth_controller.dart';
 import 'widgets/passcode_pad.dart';
 
@@ -150,70 +151,114 @@ class _SetPasscodeScreenState extends ConsumerState<SetPasscodeScreen>
 
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,
+      // Task 57: normal Column flow, not an absolutely-positioned Stack
+      // overlay, and content top-anchored in normal flow (not the two
+      // Spacers this screen used to center it) — see
+      // welcome_back_screen.dart's identical comment for why this
+      // structurally can't overlap the content above it. Task 59:
+      // CustomScrollView + SliverFillRemaining(hasScrollBody: false), not
+      // the plain scroll view Task 58 left this on — a small fixed-size
+      // accent trailing the content in normal flow still leaves dead
+      // cream space below it on a tall screen/short content; this pins
+      // it to the actual bottom of whatever space remains instead.
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: AppSpacing.sm),
-              _CircleIconButton(icon: Icons.arrow_back_rounded, onTap: _onBack),
-              const Spacer(),
-              Center(
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              sliver: SliverToBoxAdapter(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 220),
-                      transitionBuilder: (child, animation) =>
-                          FadeTransition(opacity: animation, child: child),
-                      child: Text(
-                        headline,
-                        key: ValueKey(_phase),
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineLarge
-                            ?.copyWith(color: AppColors.inkText),
+                    const SizedBox(height: AppSpacing.sm),
+                    _CircleIconButton(
+                      icon: Icons.arrow_back_rounded,
+                      onTap: _onBack,
+                    ),
+                    const SizedBox(height: AppSpacing.xxl),
+                    Center(
+                      child: Column(
+                        children: [
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 220),
+                            transitionBuilder: (child, animation) =>
+                                FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                ),
+                            child: Text(
+                              headline,
+                              key: ValueKey(_phase),
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.headlineLarge
+                                  ?.copyWith(color: AppColors.inkText),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 220),
+                            transitionBuilder: (child, animation) =>
+                                FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                ),
+                            child: Text(
+                              subtitle,
+                              key: ValueKey('$_phase-$_error'),
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    color: _error
+                                        ? AppColors.error
+                                        : AppColors.mutedText,
+                                  ),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.xl),
+                          AnimatedBuilder(
+                            animation: _shake,
+                            builder: (context, child) => Transform.translate(
+                              offset: Offset(_shake.value, 0),
+                              child: child,
+                            ),
+                            child: PasscodeDots(
+                              filled: _digits.length,
+                              hasError: _error,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.xs),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 220),
-                      transitionBuilder: (child, animation) =>
-                          FadeTransition(opacity: animation, child: child),
-                      child: Text(
-                        subtitle,
-                        key: ValueKey('$_phase-$_error'),
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: _error ? AppColors.error : AppColors.mutedText,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xl),
-                    AnimatedBuilder(
-                      animation: _shake,
-                      builder: (context, child) => Transform.translate(
-                        offset: Offset(_shake.value, 0),
-                        child: child,
-                      ),
-                      child: PasscodeDots(
-                        filled: _digits.length,
-                        hasError: _error,
+                    const SizedBox(height: AppSpacing.xxl),
+                    Center(
+                      child: PasscodeKeypad(
+                        onDigit: _onDigit,
+                        onBackspace: _onBackspace,
+                        enabled: !_submitting,
                       ),
                     ),
                   ],
                 ),
               ),
-              const Spacer(),
-              Center(
-                child: PasscodeKeypad(
-                  onDigit: _onDigit,
-                  onBackspace: _onBackspace,
-                  enabled: !_submitting,
+            ),
+            // Task 58: a small, fixed-size accent, not a space-filling
+            // block — this is a task-focused keypad screen with no
+            // secondary content to justify claiming the rest of the
+            // screen; the passcode dots/keypad should stay dominant.
+            // Task 59: pinned to the actual bottom of the remaining space
+            // via Align instead of just trailing the content.
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.xl),
+                  child: const MaroonAccentStrip(),
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

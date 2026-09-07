@@ -56,6 +56,19 @@ class AppNotificationController extends Notifier<List<AppNotificationData>> {
     required String message,
     bool? persistent,
   }) {
+    // Task 59: error toasts persist until dismissed (see [shouldPersist]
+    // below), so a retried action that fails the same way again — a
+    // legitimate manual retry after a network error, not just a stray
+    // double-tap — would otherwise stack a second, visually identical
+    // banner on top of the first still-live one. Reusing the existing
+    // live notification instead of adding a duplicate is the real fix:
+    // it prevents the redundant state from ever existing, rather than
+    // just capping how many of it get rendered.
+    for (final n in state) {
+      if (n.type == type && n.message == message && !n.dismissing) {
+        return n.id;
+      }
+    }
     final id = 'notif-${_nextId++}';
     state = [...state, AppNotificationData(id: id, type: type, message: message)];
     final shouldPersist = persistent ?? type == AppNotificationType.error;

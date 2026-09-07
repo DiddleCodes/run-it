@@ -13,6 +13,7 @@ import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/app_notification.dart';
+import '../../../core/widgets/maroon_wave_backdrop.dart';
 import '../application/auth_controller.dart';
 import '../domain/auth_models.dart';
 import 'set_passcode_screen.dart';
@@ -60,6 +61,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   bool _verifying = false;
   bool _verified = false;
   bool _autoSubmitted = false;
+  bool _resending = false;
 
   @override
   void initState() {
@@ -160,7 +162,9 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       setState(() => _verifying = false);
       ref
           .read(appNotificationProvider.notifier)
-          .error("Couldn't reach the server. Check your connection and try again.");
+          .error(
+            "Couldn't reach the server. Check your connection and try again.",
+          );
       _controller.clear();
       _autoSubmitted = false;
       return;
@@ -192,10 +196,22 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   }
 
   Future<void> _resend() async {
-    if (_remaining > Duration.zero) return;
-    await ref
-        .read(authControllerProvider.notifier)
-        .sendOtp(widget.contact, accountType: widget.accountType);
+    // Task 59: unlike _submit (only reachable through _onCodeChanged's
+    // own synchronous _autoSubmitted guard), this is wired straight to
+    // a TextButton, and _remaining doesn't change until this call
+    // finishes — so a rapid double-tap while resend is available could
+    // fire sendOtp twice before either request resolves. _resending is
+    // read synchronously here, same fix as verify_email_screen's
+    // _sendCode.
+    if (_remaining > Duration.zero || _resending) return;
+    setState(() => _resending = true);
+    try {
+      await ref
+          .read(authControllerProvider.notifier)
+          .sendOtp(widget.contact, accountType: widget.accountType);
+    } finally {
+      if (mounted) setState(() => _resending = false);
+    }
     if (!mounted) return;
     ref.read(appNotificationProvider.notifier).info('New code sent.');
     _startResendTimer();
@@ -205,129 +221,179 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   Widget build(BuildContext context) {
     const onBg = AppColors.inkText;
     const secondary = AppColors.mutedText;
-    final canResend = _remaining == Duration.zero;
+    final canResend = _remaining == Duration.zero && !_resending;
 
     return Scaffold(
+      backgroundColor: AppColors.backgroundCream,
+      // Task 57: normal Column flow, not an absolutely-positioned Stack
+      // overlay — see welcome_back_screen.dart's identical comment for why
+      // this structurally can't overlap the content above it. Task 59:
+      // CustomScrollView + SliverFillRemaining(hasScrollBody: false), not
+      // a plain scroll view — Task 58 made the accent a small fixed size
+      // but left it in normal flow right after the content, so on a tall
+      // screen/short content it floated with dead cream space below it
+      // instead of sitting at the actual bottom edge. SliverFillRemaining
+      // reserves exactly whatever space is left after the content, and
+      // Align(bottomCenter) pins the (still small, fixed-size) strip to
+      // the bottom of that space — same "safe against unbounded height on
+      // overflow" reasoning as welcome_back_screen.dart's footer.
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              IconButton(
-                // Pushed via a plain Navigator route (not go_router's own
-                // stack) in recovery mode — `context.pop()` would pop
-                // go_router's stack instead of this pushed route, same
-                // reasoning as SetPasscodeScreen's `isChangingExisting` back
-                // button.
-                onPressed: widget.isRecovery
-                    ? () => Navigator.of(context).pop()
-                    : () => context.pop(),
-                icon: const Icon(Icons.arrow_back_rounded),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Enter the code',
-                style: Theme.of(context).textTheme.headlineMedium
-                    ?.copyWith(color: onBg),
-              ).animate().fadeIn(duration: 300.ms).moveY(begin: 8, end: 0),
-              const SizedBox(height: 6),
-              Text(
-                'Sent to ${widget.contact}',
-                style: Theme.of(context).textTheme.bodyMedium
-                    ?.copyWith(color: secondary),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              GestureDetector(
-                onTap: () => _focusNode.requestFocus(),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    _OtpBoxes(
-                      value: _controller.text,
-                      hasFocus: _focusNode.hasFocus,
-                      loading: _verifying,
-                    ),
-                    if (_verified)
-                      const _SuccessCheck()
-                          .animate()
-                          .fadeIn(duration: 160.ms)
-                          .scale(
-                            begin: const Offset(0.6, 0.6),
-                            curve: Curves.easeOutBack,
-                          ),
-                    Positioned.fill(
-                      child: Opacity(
-                        opacity: 0,
-                        child: TextField(
-                          controller: _controller,
-                          focusNode: _focusNode,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          autofocus: true,
-                          showCursor: false,
-                          enableInteractiveSelection: true,
-                          decoration: const InputDecoration(
-                            border: InputBorder.none,
-                            counterText: '',
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              Center(
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              sliver: SliverToBoxAdapter(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: TweenAnimationBuilder<double>(
-                        tween: Tween(
-                          begin: 1,
-                          end:
-                              1 -
-                              _remaining.inMilliseconds /
-                                  _resendWindow.inMilliseconds,
-                        ),
-                        duration: const Duration(milliseconds: 950),
-                        curve: Curves.linear,
-                        builder: (context, value, _) => SizedBox(
-                          width: 120,
-                          child: LinearProgressIndicator(
-                            value: canResend ? 1 : value,
-                            minHeight: 3,
-                            color: AppColors.primaryMaroon,
-                            backgroundColor: AppColors.borderSubtle,
+                    IconButton(
+                      // Pushed via a plain Navigator route (not go_router's own
+                      // stack) in recovery mode — `context.pop()` would pop
+                      // go_router's stack instead of this pushed route, same
+                      // reasoning as SetPasscodeScreen's `isChangingExisting` back
+                      // button.
+                      onPressed: widget.isRecovery
+                          ? () => Navigator.of(context).pop()
+                          : () => context.pop(),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                          'Enter the code',
+                          style: Theme.of(context).textTheme.headlineMedium
+                              ?.copyWith(color: onBg),
+                        )
+                        .animate()
+                        .fadeIn(duration: 300.ms)
+                        .moveY(begin: 8, end: 0),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Sent to ${widget.contact}',
+                      style: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(color: secondary),
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+                    GestureDetector(
+                      onTap: () => _focusNode.requestFocus(),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          _OtpBoxes(
+                            value: _controller.text,
+                            hasFocus: _focusNode.hasFocus,
+                            loading: _verifying,
                           ),
-                        ),
+                          if (_verified)
+                            const _SuccessCheck()
+                                .animate()
+                                .fadeIn(duration: 160.ms)
+                                .scale(
+                                  begin: const Offset(0.6, 0.6),
+                                  curve: Curves.easeOutBack,
+                                ),
+                          Positioned.fill(
+                            child: Opacity(
+                              opacity: 0,
+                              child: TextField(
+                                controller: _controller,
+                                focusNode: _focusNode,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                autofocus: true,
+                                showCursor: false,
+                                enableInteractiveSelection: true,
+                                decoration: const InputDecoration(
+                                  border: InputBorder.none,
+                                  counterText: '',
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    TextButton(
-                      onPressed: canResend ? _resend : null,
-                      child: AnimatedSwitcher(
-                        duration: AppMotion.fast,
-                        transitionBuilder: (child, animation) =>
-                            FadeTransition(opacity: animation, child: child),
-                        child: Text(
-                          canResend
-                              ? 'Resend code'
-                              : 'Resend in 0:${_remaining.inSeconds.toString().padLeft(2, '0')}',
-                          key: ValueKey(
-                            canResend ? 'ready' : _remaining.inSeconds,
+                    const SizedBox(height: AppSpacing.xl),
+                    Center(
+                      child: Column(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: TweenAnimationBuilder<double>(
+                              tween: Tween(
+                                begin: 1,
+                                end:
+                                    1 -
+                                    _remaining.inMilliseconds /
+                                        _resendWindow.inMilliseconds,
+                              ),
+                              duration: const Duration(milliseconds: 950),
+                              curve: Curves.linear,
+                              builder: (context, value, _) => SizedBox(
+                                width: 120,
+                                child: LinearProgressIndicator(
+                                  value: canResend ? 1 : value,
+                                  minHeight: 3,
+                                  color: AppColors.primaryMaroon,
+                                  backgroundColor: AppColors.borderSubtle,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 10),
+                          TextButton(
+                            onPressed: canResend ? _resend : null,
+                            child: AnimatedSwitcher(
+                              duration: AppMotion.fast,
+                              transitionBuilder: (child, animation) =>
+                                  FadeTransition(
+                                    opacity: animation,
+                                    child: child,
+                                  ),
+                              child: Text(
+                                // Text tracks _remaining alone (not _resending)
+                                // so it reads "Resend code" for the in-flight
+                                // request instead of flashing "0:00" — the
+                                // TextButton itself is still correctly disabled
+                                // via canResend.
+                                _remaining == Duration.zero
+                                    ? 'Resend code'
+                                    : 'Resend in 0:${_remaining.inSeconds.toString().padLeft(2, '0')}',
+                                key: ValueKey(
+                                  _remaining == Duration.zero
+                                      ? 'ready'
+                                      : _remaining.inSeconds,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
+            ),
+            // Task 58: a small, fixed-size accent, not a space-filling
+            // block — this screen is a task-focused code entry with no
+            // secondary content to justify claiming the rest of the
+            // screen, and the space below it is mostly covered by the
+            // system keyboard anyway once it's showing. Task 59: pinned
+            // to the actual bottom of the remaining space via Align
+            // instead of just trailing the content in normal flow.
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.xl),
+                  child: const MaroonAccentStrip(),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
