@@ -19,7 +19,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "prisma:seed-demo-restaurants": "ts-node -O '{\"module\":\"commonjs\"}' prisma/seed-demo-restaurants.ts"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"commonjs\"} prisma/seed.ts"
