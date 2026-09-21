@@ -414,6 +414,223 @@ describe('OrderEscrowService.hold — Task 47 Pay on Delivery', () => {
   });
 });
 
+describe('OrderEscrowService.hold — Task 66 Group Ordering', () => {
+  function mainMealItem(id: string, quantity: number) {
+    return { menuItemId: id, name: `Main ${id}`, priceKobo: 150_000, quantity };
+  }
+  function sideItem(id: string, quantity: number) {
+    return { menuItemId: id, name: `Side ${id}`, priceKobo: 50_000, quantity };
+  }
+
+  it('rejects a standard order with 3 main meals', async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue(null);
+    prisma.menuItem.findMany.mockResolvedValue([{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }]);
+
+    await expect(
+      service.hold('order-1', {
+        studentUserId: 's1',
+        restaurantUserId: 'r1',
+        grossAmountKobo: 300_000,
+        items: [mainMealItem('m1', 1), mainMealItem('m2', 1), mainMealItem('m3', 1)],
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.order.upsert).not.toHaveBeenCalled();
+    // Fails before touching the wallet — a rejected basket never debits.
+    expect(prisma.wallet.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('rejects a standard order whose main-meal quantities sum past the cap, even across distinct items', async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue(null);
+    prisma.menuItem.findMany.mockResolvedValue([{ id: 'm1' }]);
+
+    await expect(
+      service.hold('order-1', {
+        studentUserId: 's1',
+        restaurantUserId: 'r1',
+        grossAmountKobo: 300_000,
+        // One main-meal menu item at quantity 3 — same real cap violation
+        // as three distinct main-meal lines.
+        items: [mainMealItem('m1', 3)],
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('allows a standard order with exactly 2 main meals (cap unchanged)', async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue(null);
+    prisma.wallet.findUnique.mockResolvedValue({ id: 'w1', userId: 's1', balance: 1_000_000 });
+    prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
+    prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
+    prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null });
+    prisma.menuItem.findMany.mockResolvedValue([{ id: 'm1' }, { id: 'm2' }]);
+    prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
+
+    const result = await service.hold('order-1', {
+      studentUserId: 's1',
+      restaurantUserId: 'r1',
+      grossAmountKobo: 300_000,
+      items: [mainMealItem('m1', 1), mainMealItem('m2', 1)],
+    });
+
+    expect(result).toBeDefined();
+    expect(prisma.order.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: expect.objectContaining({ orderType: 'standard' }) }),
+    );
+  });
+
+  it('rejects a group order with 5 main meals', async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue(null);
+    prisma.menuItem.findMany.mockResolvedValue([{ id: 'm1' }]);
+
+    await expect(
+      service.hold('order-1', {
+        studentUserId: 's1',
+        restaurantUserId: 'r1',
+        grossAmountKobo: 500_000,
+        orderType: 'group',
+        items: [mainMealItem('m1', 5)],
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.order.upsert).not.toHaveBeenCalled();
+  });
+
+  it('allows a group order with exactly 4 main meals and charges the ₦150 (15,000 kobo) surcharge on top of the flat delivery fee', async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue(null);
+    prisma.wallet.findUnique.mockResolvedValue({ id: 'w1', userId: 's1', balance: 1_000_000 });
+    prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
+    prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
+    prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null });
+    prisma.menuItem.findMany.mockResolvedValue([{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }, { id: 'm4' }]);
+    prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
+
+    const result = await service.hold('order-1', {
+      studentUserId: 's1',
+      restaurantUserId: 'r1',
+      grossAmountKobo: 400_000,
+      // Flutter always sends the BASE flat fee (₦500) — the group
+      // surcharge is applied server-side regardless, per hold()'s own doc
+      // comment.
+      deliveryFeeKobo: 50_000,
+      orderType: 'group',
+      items: [mainMealItem('m1', 1), mainMealItem('m2', 1), mainMealItem('m3', 1), mainMealItem('m4', 1)],
+    });
+
+    // Total charged = food subtotal (400,000) + delivery fee (50,000 base
+    // + 15,000 group surcharge = 65,000) = 465,000.
+    expect(prisma.wallet.updateMany).toHaveBeenCalledWith({
+      where: { id: 'w1', balance: { gte: 465_000 } },
+      data: { balance: { decrement: 465_000 } },
+    });
+    expect(result.grossAmount).toBe(465_000);
+    expect(prisma.order.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: expect.objectContaining({ orderType: 'group' }) }),
+    );
+  });
+
+  it('applies the group surcharge even when the caller omits deliveryFeeKobo (defaults to the configured base fee)', async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue(null);
+    prisma.wallet.findUnique.mockResolvedValue({ id: 'w1', userId: 's1', balance: 1_000_000 });
+    prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
+    prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
+    prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null });
+    prisma.menuItem.findMany.mockResolvedValue([{ id: 'm1' }]);
+    prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
+
+    const result = await service.hold('order-1', {
+      studentUserId: 's1',
+      restaurantUserId: 'r1',
+      grossAmountKobo: 100_000,
+      orderType: 'group',
+      items: [mainMealItem('m1', 1)],
+    });
+
+    // Base default (50,000) + group surcharge (15,000) = 65,000.
+    expect(result.grossAmount).toBe(100_000 + 65_000);
+  });
+
+  it('a standard order is completely unaffected: unchanged ₦500 (50,000 kobo) delivery fee, no surcharge', async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue(null);
+    prisma.wallet.findUnique.mockResolvedValue({ id: 'w1', userId: 's1', balance: 1_000_000 });
+    prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
+    prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
+    prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null });
+    prisma.menuItem.findMany.mockResolvedValue([{ id: 'm1' }]);
+    prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
+
+    const result = await service.hold('order-1', {
+      studentUserId: 's1',
+      restaurantUserId: 'r1',
+      grossAmountKobo: 100_000,
+      items: [mainMealItem('m1', 1)],
+    });
+
+    expect(result.grossAmount).toBe(100_000 + 50_000);
+  });
+
+  it('does not count side/drink/dessert items toward the main-meal cap', async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue(null);
+    prisma.wallet.findUnique.mockResolvedValue({ id: 'w1', userId: 's1', balance: 1_000_000 });
+    prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
+    prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
+    prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null });
+    // Only m1/m2 are real main meals; s1/s2/s3 resolve to isMainMeal:
+    // false and so are excluded from this findMany's `isMainMeal: true`
+    // filter entirely.
+    prisma.menuItem.findMany.mockResolvedValue([{ id: 'm1' }, { id: 'm2' }]);
+    prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
+
+    const result = await service.hold('order-1', {
+      studentUserId: 's1',
+      restaurantUserId: 'r1',
+      grossAmountKobo: 700_000,
+      items: [
+        mainMealItem('m1', 1),
+        mainMealItem('m2', 1),
+        sideItem('s1', 5),
+        sideItem('s2', 3),
+        sideItem('s3', 2),
+      ],
+    });
+
+    expect(result).toBeDefined();
+  });
+
+  it('ignores a client-supplied isMainMeal-like claim on an unresolvable item (no real menuItemId can never count)', async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue(null);
+
+    // Three items with no menuItemId at all — nothing to look up, so none
+    // of them can be verified as main meals no matter what their `name`
+    // implies (e.g. "Jollof Rice x3"). A direct API call can't smuggle
+    // main meals past the cap this way; it just orders three unverifiable
+    // line items, none of which count against the cap.
+    prisma.wallet.findUnique.mockResolvedValue({ id: 'w1', userId: 's1', balance: 1_000_000 });
+    prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
+    prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
+    prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null });
+    prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
+
+    const result = await service.hold('order-1', {
+      studentUserId: 's1',
+      restaurantUserId: 'r1',
+      grossAmountKobo: 450_000,
+      items: [
+        { name: 'Jollof Rice', priceKobo: 150_000, quantity: 3 },
+      ] as any,
+    });
+
+    expect(result).toBeDefined();
+    expect(prisma.menuItem.findMany).not.toHaveBeenCalled();
+  });
+});
+
 describe('OrderEscrowService.claim', () => {
   const unclaimedEscrow = { id: 'esc1', orderId: 'order-1', runnerUserId: null };
   const runner = { sub: 'runner-1', accountType: 'runner' as const, role: 'user' as const };

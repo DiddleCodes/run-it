@@ -39,5 +39,6 @@ extension VendorMenuItemToMenuItem on VendorMenuItem {
     category: category,
     imageUrl: photoUrl ?? '',
     isAvailable: isAvailable,
+    isMainMeal: isMainMeal,
   );
 }

@@ -57,7 +57,14 @@ class _FakeVendorsRepository extends VendorsRepository {
     userId: 'vendor-owner-1',
   );
   static const _items = [
-    VendorMenuItem(id: 'jollof', name: 'Signature jollof', priceKobo: 310000, category: 'Mains', isAvailable: true),
+    VendorMenuItem(
+      id: 'jollof',
+      name: 'Signature jollof',
+      priceKobo: 310000,
+      category: 'Mains',
+      isAvailable: true,
+      isMainMeal: true,
+    ),
   ];
 
   @override
@@ -86,6 +93,7 @@ class _RecordingEscrowRepository extends EscrowRepository {
     String? deliveryLocationLabel,
     String? note,
     String? paymentMethod,
+    String? orderType,
   }) async {
     calls.add({
       'restaurantUserId': restaurantUserId,
@@ -95,6 +103,7 @@ class _RecordingEscrowRepository extends EscrowRepository {
       'deliveryFeeKobo': deliveryFeeKobo,
       'serviceFeeKobo': serviceFeeKobo,
       'note': note,
+      'orderType': orderType,
     });
   }
 }

@@ -14,6 +14,10 @@ import {
 export const ORDER_PAYMENT_METHODS = ['wallet', 'pay_on_delivery'] as const;
 export type OrderPaymentMethodInput = (typeof ORDER_PAYMENT_METHODS)[number];
 
+// Task 66: single device/payer/restaurant "Group Order" mode.
+export const ORDER_TYPES = ['standard', 'group'] as const;
+export type OrderTypeInput = (typeof ORDER_TYPES)[number];
+
 export class OrderItemInputDto {
   // Nullable on the created row too — the menu item this pointed at may
   // since have been edited or deleted; name/price are snapshotted below
@@ -95,6 +99,18 @@ export class HoldEscrowDto {
   @IsOptional()
   @IsIn(ORDER_PAYMENT_METHODS)
   paymentMethod?: OrderPaymentMethodInput;
+
+  // Task 66: 'group' raises the per-order main-meal cap (2 -> 4) and adds
+  // a flat surcharge to the delivery fee. Optional, defaulting to
+  // 'standard' — an old caller that omits it keeps today's exact behavior.
+  // Choosing 'group' itself is never the abuse vector (it costs more and
+  // caps out at 4 either way) — the real enforcement is that hold()
+  // re-derives every item's isMainMeal from the database by menuItemId,
+  // never from this payload's item name/price, so a direct API call can't
+  // stay 'standard' while smuggling a 3rd/4th main meal past the cap.
+  @IsOptional()
+  @IsIn(ORDER_TYPES)
+  orderType?: OrderTypeInput;
 
   // Task 9: identifies which Vendor row this order belongs to. Optional so
   // the already-shipped Flutter client (which doesn't send it) keeps

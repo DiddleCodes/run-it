@@ -55,6 +55,7 @@ class MenuItem {
     required this.category,
     required this.imageUrl,
     required this.isAvailable,
+    required this.isMainMeal,
   });
 
   final String id;
@@ -66,6 +67,10 @@ class MenuItem {
   final String category;
   final String imageUrl;
   final bool isAvailable;
+  // Task 66: restaurant-set at menu-creation time — the real signal Group
+  // Ordering's per-order main-meal cap counts against, rather than
+  // guessing from `category`'s free-form, uncontrolled string.
+  final bool isMainMeal;
 }
 
 class BasketItem {

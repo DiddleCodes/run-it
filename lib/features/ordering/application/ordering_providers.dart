@@ -150,6 +150,7 @@ class CheckoutForm {
     required this.location,
     this.paymentMethod = PaymentMethod.wallet,
     this.note,
+    this.isGroupOrder = false,
   });
 
   final DeliveryLocation location;
@@ -157,14 +158,22 @@ class CheckoutForm {
   // Task 45: one note for the whole order, replacing the old per-item
   // notes — set on the Basket screen, read at checkout.
   final String? note;
+  // Task 66: set on the Basket screen (where the main-meal cap it raises
+  // actually bites) and read again at Checkout (where the delivery-fee
+  // surcharge it adds must show before payment) — single device/payer/
+  // restaurant, so this is plain session state, not a multi-user
+  // invite/join flow.
+  final bool isGroupOrder;
   CheckoutForm copyWith({
     DeliveryLocation? location,
     PaymentMethod? paymentMethod,
     String? note,
+    bool? isGroupOrder,
   }) => CheckoutForm(
     location: location ?? this.location,
     paymentMethod: paymentMethod ?? this.paymentMethod,
     note: note ?? this.note,
+    isGroupOrder: isGroupOrder ?? this.isGroupOrder,
   );
 }
 
@@ -196,8 +205,17 @@ class CheckoutFormNotifier extends Notifier<CheckoutForm> {
   // `copyWith`'s `note ?? this.note` can't express "the user cleared the
   // note back to empty" — a full replace, same reasoning setLine used to
   // apply to per-item notes before Task 45 moved this to one field.
-  void setNote(String? value) =>
-      state = CheckoutForm(location: state.location, paymentMethod: state.paymentMethod, note: value);
+  void setNote(String? value) => state = CheckoutForm(
+    location: state.location,
+    paymentMethod: state.paymentMethod,
+    note: value,
+    isGroupOrder: state.isGroupOrder,
+  );
+  // Task 66: the Basket screen's Group Order toggle — read again at
+  // Checkout for the delivery-fee surcharge and sent as `orderType` on
+  // the real hold() call, never trusted on its own (see
+  // OrderEscrowService.hold's own doc comment backend-side).
+  void setGroupOrder(bool value) => state = state.copyWith(isGroupOrder: value);
 }
 
 final checkoutFormProvider =

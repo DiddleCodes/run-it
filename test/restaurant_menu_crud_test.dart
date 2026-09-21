@@ -57,6 +57,7 @@ class _FakeVendorsRepository extends VendorsRepository {
     required int priceKobo,
     String? photoUrl,
     required String category,
+    bool isMainMeal = false,
     required String token,
   }) async {
     final item = VendorMenuItem(
@@ -67,6 +68,7 @@ class _FakeVendorsRepository extends VendorsRepository {
       photoUrl: photoUrl,
       category: category,
       isAvailable: true,
+      isMainMeal: isMainMeal,
     );
     items.add(item);
     return item;
@@ -80,6 +82,7 @@ class _FakeVendorsRepository extends VendorsRepository {
     required int priceKobo,
     String? photoUrl,
     required String category,
+    bool isMainMeal = false,
     required String token,
   }) async {
     final index = items.indexWhere((i) => i.id == itemId);
@@ -91,6 +94,7 @@ class _FakeVendorsRepository extends VendorsRepository {
       photoUrl: photoUrl,
       category: category,
       isAvailable: items[index].isAvailable,
+      isMainMeal: isMainMeal,
     );
     items[index] = updated;
     return updated;
@@ -112,6 +116,7 @@ class _FakeVendorsRepository extends VendorsRepository {
       photoUrl: current.photoUrl,
       category: current.category,
       isAvailable: isAvailable,
+      isMainMeal: current.isMainMeal,
     );
   }
 
@@ -185,13 +190,88 @@ void main() {
     expect(repo.items.single.name, 'Suya Platter');
     expect(repo.items.single.priceKobo, 350000);
     expect(repo.items.single.category, 'Mains');
+    // Task 66: left untouched, so defaults to false — a side/drink/
+    // dessert never accidentally counts toward the main-meal cap.
+    expect(repo.items.single.isMainMeal, isFalse);
     expect(find.text('Suya Platter'), findsOneWidget);
+  });
+
+  // Task 66: the real, restaurant-set signal Group Ordering's per-order
+  // main-meal cap counts against.
+  testWidgets('toggling "This is a main meal" on add sends isMainMeal:true to the backend', (tester) async {
+    final repo = _FakeVendorsRepository();
+    await tester.pumpWidget(_harness(repo));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.tap(find.byIcon(Icons.add_circle_outline_rounded));
+    await tester.pumpAndSettle();
+
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'Signature Jollof Rice');
+    await tester.enterText(fields.at(1), '2500');
+    await tester.tap(find.text('+ New'));
+    await tester.pump();
+    await tester.enterText(find.byType(TextField).at(2), 'Rice Dishes');
+    final confirmCategoryButton = find.widgetWithIcon(IconButton, Icons.check_circle_rounded);
+    await tester.ensureVisible(confirmCategoryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(confirmCategoryButton);
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('This is a main meal'));
+    expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isFalse);
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isTrue);
+
+    await tester.ensureVisible(find.text('Add to Menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add to Menu'));
+    await tester.pumpAndSettle();
+
+    expect(repo.items.single.isMainMeal, isTrue);
+    // The list view surfaces it back, so a restaurant can tell at a glance.
+    expect(find.text('Main'), findsOneWidget);
+  });
+
+  testWidgets('editing an item prefills the main-meal toggle from its existing value', (tester) async {
+    final repo = _FakeVendorsRepository();
+    repo.items.add(
+      const VendorMenuItem(
+        id: 'item-1',
+        name: 'Jollof Rice',
+        priceKobo: 300000,
+        category: 'Mains',
+        isAvailable: true,
+        isMainMeal: true,
+      ),
+    );
+    await tester.pumpWidget(_harness(repo));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // The list already shows the "Main" badge before opening the editor.
+    expect(find.text('Main'), findsOneWidget);
+
+    await tester.tap(find.text('Jollof Rice'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('This is a main meal'));
+    expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isTrue);
+
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.ensureVisible(find.text('Save Changes'));
+    await tester.tap(find.text('Save Changes'));
+    await tester.pumpAndSettle();
+
+    expect(repo.items.single.isMainMeal, isFalse);
   });
 
   testWidgets('editing an existing item prefills the form and updates it on save', (tester) async {
     final repo = _FakeVendorsRepository();
     repo.items.add(
-      const VendorMenuItem(id: 'item-1', name: 'Jollof Rice', priceKobo: 300000, category: 'Mains', isAvailable: true),
+      const VendorMenuItem(id: 'item-1', name: 'Jollof Rice', priceKobo: 300000, category: 'Mains', isAvailable: true, isMainMeal: false),
     );
     await tester.pumpWidget(_harness(repo));
     await tester.pump();
@@ -220,7 +300,7 @@ void main() {
   ) async {
     final repo = _FakeVendorsRepository();
     repo.items.add(
-      const VendorMenuItem(id: 'item-1', name: 'Jollof Rice', priceKobo: 300000, category: 'Mains', isAvailable: true),
+      const VendorMenuItem(id: 'item-1', name: 'Jollof Rice', priceKobo: 300000, category: 'Mains', isAvailable: true, isMainMeal: false),
     );
     await tester.pumpWidget(_harness(repo));
     await tester.pump();
@@ -239,7 +319,7 @@ void main() {
   testWidgets('deleting a menu item asks for confirmation, then removes it for good', (tester) async {
     final repo = _FakeVendorsRepository();
     repo.items.add(
-      const VendorMenuItem(id: 'item-1', name: 'Jollof Rice', priceKobo: 300000, category: 'Mains', isAvailable: true),
+      const VendorMenuItem(id: 'item-1', name: 'Jollof Rice', priceKobo: 300000, category: 'Mains', isAvailable: true, isMainMeal: false),
     );
     await tester.pumpWidget(_harness(repo));
     await tester.pump();

@@ -110,6 +110,8 @@ class VendorsRepository {
     required int priceKobo,
     String? photoUrl,
     required String category,
+    // Task 66: restaurant-set at menu-creation time.
+    bool isMainMeal = false,
     required String token,
   }) async {
     final json =
@@ -122,6 +124,7 @@ class VendorsRepository {
                 'price': priceKobo,
                 'photoUrl': ?photoUrl,
                 'category': category,
+                'isMainMeal': isMainMeal,
               },
             )
             as Map<String, dynamic>;
@@ -135,6 +138,7 @@ class VendorsRepository {
     required int priceKobo,
     String? photoUrl,
     required String category,
+    bool isMainMeal = false,
     required String token,
   }) async {
     final json =
@@ -147,6 +151,7 @@ class VendorsRepository {
                 'price': priceKobo,
                 'photoUrl': ?photoUrl,
                 'category': category,
+                'isMainMeal': isMainMeal,
               },
             )
             as Map<String, dynamic>;

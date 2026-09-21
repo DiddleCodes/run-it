@@ -43,12 +43,13 @@ AuthSession _studentSession() => AuthSession(
 /// Seeds the basket with one line so a test can jump straight to Basket /
 /// Checkout without depending on the async menu load resolving first.
 class _SeededBasket extends BasketNotifier {
-  _SeededBasket(this.itemId);
+  _SeededBasket(this.itemId, {this.quantity = 1});
   final String itemId;
+  final int quantity;
   @override
   Basket build() => Basket(
     eateryId: 'tantalizers',
-    items: [BasketItem(menuItemId: itemId, quantity: 1)],
+    items: [BasketItem(menuItemId: itemId, quantity: quantity)],
   );
 }
 
@@ -90,6 +91,7 @@ class _SucceedingEscrowRepository extends EscrowRepository {
     String? deliveryLocationLabel,
     String? note,
     String? paymentMethod,
+    String? orderType,
   }) async {}
 }
 
@@ -113,6 +115,7 @@ class _InsufficientBalanceEscrowRepository extends EscrowRepository {
     String? deliveryLocationLabel,
     String? note,
     String? paymentMethod,
+    String? orderType,
   }) async {
     throw const ApiException(402, 'Insufficient wallet balance');
   }
@@ -142,6 +145,7 @@ class _FakeVendorsRepository extends VendorsRepository {
       priceKobo: 310000,
       category: 'Mains',
       isAvailable: true,
+      isMainMeal: true,
     ),
   ];
 
@@ -171,6 +175,7 @@ void main() {
         category: 'Mains',
         imageUrl: '',
         isAvailable: true,
+        isMainMeal: true,
       );
       const shawarma = MenuItem(
         id: 'wrap',
@@ -182,6 +187,7 @@ void main() {
         category: 'Quick bites',
         imageUrl: '',
         isAvailable: true,
+        isMainMeal: false,
       );
       const otherEateryItem = MenuItem(
         id: 'burger',
@@ -193,6 +199,7 @@ void main() {
         category: 'Mains',
         imageUrl: '',
         isAvailable: true,
+        isMainMeal: false,
       );
 
       expect(notifier.add(jollof), AddToBasketResult.added);
@@ -491,5 +498,122 @@ void main() {
         );
       },
     );
+  });
+
+  group('Group Ordering (Task 66)', () {
+    Widget harness(Widget child, {required int mainMealQuantity}) {
+      final router = GoRouter(
+        initialLocation: AppRoutes.basket,
+        routes: [GoRoute(path: AppRoutes.basket, builder: (_, _) => child)],
+      );
+      return ProviderScope(
+        overrides: [
+          authControllerProvider.overrideWith(() => _FakeAuthController(_studentSession())),
+          basketProvider.overrideWith(() => _SeededBasket('jollof', quantity: mainMealQuantity)),
+          walletBalanceProvider.overrideWith(() => _SufficientBalanceWallet()),
+          ..._vendorOverrides,
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      );
+    }
+
+    testWidgets(
+      'a standard basket over the 2 main-meal cap shows a clear message suggesting Group Order, and blocks checkout',
+      (tester) async {
+        await tester.pumpWidget(harness(const BasketScreen(), mainMealQuantity: 3));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 1200));
+
+        expect(find.textContaining('Standard orders allow up to 2'), findsOneWidget);
+        expect(find.text('Switch'), findsOneWidget);
+        expect(find.text('Remove main meals to continue'), findsOneWidget);
+        final button = tester.widget<PrimaryButton>(find.byType(PrimaryButton));
+        expect(button.onPressed, isNull);
+        // Still the plain ₦500 fee shown — the basket hasn't switched to
+        // Group Order yet, it's just over the standard cap. The breakdown
+        // sits below the fold, so scroll it into view first.
+        await tester.scrollUntilVisible(find.text('Items'), 200, scrollable: find.byType(Scrollable).first);
+        expect(find.textContaining('₦500'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'tapping Switch on the cap notice enables Group Order, raises the cap, unblocks checkout, and shows the ₦650 fee',
+      (tester) async {
+        await tester.pumpWidget(harness(const BasketScreen(), mainMealQuantity: 3));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 1200));
+
+        await tester.tap(find.text('Switch'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+
+        // The over-cap notice for 3 main meals is gone (3 <= the new cap
+        // of 4), and the toggle itself now reads on.
+        expect(find.textContaining('Standard orders allow up to 2'), findsNothing);
+        expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+        final button = tester.widget<PrimaryButton>(find.byType(PrimaryButton));
+        expect(button.onPressed, isNotNull);
+        expect(find.textContaining('Proceed to checkout'), findsOneWidget);
+        // Delivery now reads ₦650 (₦500 flat + ₦150 Group Order surcharge)
+        // — the surcharge is visible before the student ever reaches the
+        // final "Place order" tap. The breakdown sits below the fold, so
+        // scroll it into view first.
+        await tester.scrollUntilVisible(find.text('Items'), 200, scrollable: find.byType(Scrollable).first);
+        expect(find.textContaining('₦650'), findsWidgets);
+        expect(find.textContaining('incl. ₦150 Group Order'), findsOneWidget);
+      },
+    );
+
+    testWidgets('a group basket over the 4 main-meal cap shows the group-specific message and stays blocked', (
+      tester,
+    ) async {
+      await tester.pumpWidget(harness(const BasketScreen(), mainMealQuantity: 5));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1200));
+
+      await tester.tap(find.text('Group Order'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.textContaining('Group Order allows up to 4'), findsOneWidget);
+      // No "Switch" action this time — enabling Group Order further
+      // wouldn't help; the only fix is removing items.
+      expect(find.text('Switch'), findsNothing);
+      final button = tester.widget<PrimaryButton>(find.byType(PrimaryButton));
+      expect(button.onPressed, isNull);
+    });
+
+    testWidgets('a standard basket at exactly 2 main meals is completely unaffected: ₦500 fee, checkout enabled', (
+      tester,
+    ) async {
+      await tester.pumpWidget(harness(const BasketScreen(), mainMealQuantity: 2));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1200));
+
+      expect(find.textContaining('Standard orders allow up to'), findsNothing);
+      final button = tester.widget<PrimaryButton>(find.byType(PrimaryButton));
+      expect(button.onPressed, isNotNull);
+      await tester.scrollUntilVisible(find.text('Items'), 200, scrollable: find.byType(Scrollable).first);
+      expect(find.textContaining('₦500'), findsWidgets);
+      expect(find.textContaining('₦650'), findsNothing);
+    });
+
+    testWidgets('removing a line item from an over-cap basket works exactly as it already did', (tester) async {
+      await tester.pumpWidget(harness(const BasketScreen(), mainMealQuantity: 3));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1200));
+
+      expect(find.text('Remove main meals to continue'), findsOneWidget);
+
+      // The same +/- stepper the basket line has always used — reducing
+      // quantity below the cap needs no Group Order special-casing.
+      await tester.tap(find.byIcon(Icons.remove_rounded));
+      await tester.pump();
+
+      expect(find.textContaining('Proceed to checkout'), findsOneWidget);
+      final button = tester.widget<PrimaryButton>(find.byType(PrimaryButton));
+      expect(button.onPressed, isNotNull);
+    });
   });
 }

@@ -109,6 +109,15 @@ enum OrderPaymentMethod {
   pay_on_delivery
 }
 
+// Task 66: `group` raises the per-order main-meal cap (2 -> 4, see
+// OrderEscrowService's own STANDARD_MAIN_MEAL_CAP/GROUP_MAIN_MEAL_CAP) and
+// adds a flat surcharge to the delivery fee (GROUP_ORDER_SURCHARGE_KOBO) —
+// still single device/payer/restaurant, no multi-user invite/join flow.
+enum OrderType {
+  standard
+  group
+}
+
 // Task 47: whether a runner's reported cash collection for a Pay on
 // Delivery order has been squared with the platform. `disputed` means the
 // runner reported collecting something other than the order total — see
@@ -390,6 +399,12 @@ model MenuItem {
   price       Int
   photoUrl    String?  @map("photo_url")
   category    String
+  // Task 66: restaurant-set at menu-creation time — the real signal
+  // Group Ordering's per-order cap enforcement counts against, rather than
+  // guessing from `category`'s free-form string (that vocabulary isn't
+  // controlled — see VendorCategory, which is the vendor's own business
+  // type, not a per-item food category).
+  isMainMeal  Boolean  @default(false) @map("is_main_meal")
   isAvailable Boolean  @default(true) @map("is_available")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -425,6 +440,12 @@ model Order {
   // an OrderEscrow.studentWalletTransactionId, so it stays meaningful even
   // if that FK's own nullability ever changes for an unrelated reason.
   paymentMethod         OrderPaymentMethod @default(wallet) @map("payment_method")
+  // Task 66: single device/payer/restaurant "Group Order" mode — raises
+  // the per-order main-meal cap and adds a flat delivery-fee surcharge
+  // (both enforced server-side in OrderEscrowService.hold, never trusted
+  // from the client alone). Set once, at hold() time, same as
+  // paymentMethod above.
+  orderType             OrderType          @default(standard) @map("order_type")
   // Integer kobo. Never a float.
   totalAmount           Int                @map("total_amount")
   deliveryLocationLabel String?            @map("delivery_location_label")

@@ -89,6 +89,7 @@ class _RecordingEscrowRepository extends EscrowRepository {
     String? deliveryLocationLabel,
     String? note,
     String? paymentMethod,
+    String? orderType,
   }) async {
     calls.add({'grossAmountKobo': grossAmountKobo, 'paymentMethod': paymentMethod});
   }
@@ -109,6 +110,7 @@ class _FakeVendorsRepository extends VendorsRepository {
       priceKobo: 310000,
       category: 'Mains',
       isAvailable: true,
+      isMainMeal: true,
     ),
   ];
 

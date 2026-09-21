@@ -36,6 +36,16 @@ const CLAIMABLE_STATUSES: OrderStatus[] = ['preparing', 'ready_for_pickup'];
 // another `escrow.*` config value.
 export const PAY_ON_DELIVERY_MAX_TOTAL_KOBO = 1_000_000;
 
+// Task 66: Group Ordering — same "flat, hard business rule" reasoning as
+// PAY_ON_DELIVERY_MAX_TOTAL_KOBO above, not a per-vendor/per-environment
+// knob. STANDARD_MAIN_MEAL_CAP is the existing per-order limit; 'group'
+// raises it to GROUP_MAIN_MEAL_CAP in exchange for a flat delivery-fee
+// surcharge, additive to whatever flat delivery fee (Task 45) already
+// applies.
+export const STANDARD_MAIN_MEAL_CAP = 2;
+export const GROUP_MAIN_MEAL_CAP = 4;
+export const GROUP_ORDER_SURCHARGE_KOBO = 15_000;
+
 @Injectable()
 export class OrderEscrowService {
   private readonly logger = new Logger(OrderEscrowService.name);
@@ -54,12 +64,54 @@ export class OrderEscrowService {
     if (existing) throw new ConflictException(`Escrow already exists for order ${orderId} (status: ${existing.status})`);
 
     const paymentMethod = dto.paymentMethod ?? 'wallet';
+    const orderType = dto.orderType ?? 'standard';
 
     const foodSubtotalKobo = dto.grossAmountKobo;
-    const deliveryFeeKobo =
+    // Task 66: the flat delivery fee (Task 45) plus, for a group order, a
+    // flat additive surcharge — never a replacement for the base fee.
+    // dto.deliveryFeeKobo (or the configured default, same fallback as
+    // before this task) is always the BASE fee; the Flutter client never
+    // needs to compute the group-inflated total itself, and a direct API
+    // call can't under-pay a group order's surcharge by only adjusting
+    // deliveryFeeKobo — the surcharge is applied here regardless of what
+    // was sent.
+    const baseDeliveryFeeKobo =
       dto.deliveryFeeKobo ?? (this.config.get<number>('escrow.defaultDeliveryFeeKobo') as number);
+    const deliveryFeeKobo = orderType === 'group' ? baseDeliveryFeeKobo + GROUP_ORDER_SURCHARGE_KOBO : baseDeliveryFeeKobo;
     const serviceFeeKobo = dto.serviceFeeKobo ?? 0;
     const totalAmountKobo = foodSubtotalKobo + deliveryFeeKobo + serviceFeeKobo;
+
+    // Task 66: the real, server-side anti-abuse enforcement — the checkout
+    // UI's higher/lower cap is honest UX on top of this, never a
+    // substitute for it. Every item's isMainMeal is re-derived here from
+    // the database by menuItemId, never trusted from the client's own
+    // item name/price/quantity payload, so a direct API call can't stay
+    // 'standard' (or claim 'group') while smuggling more main meals past
+    // the real cap than its menu items actually justify. An item with no
+    // menuItemId (or one that no longer resolves to a real MenuItem row)
+    // can't be verified as a main meal, so it doesn't count — the real
+    // Flutter checkout always sends menuItemId for anything in the live
+    // menu it rendered.
+    const cap = orderType === 'group' ? GROUP_MAIN_MEAL_CAP : STANDARD_MAIN_MEAL_CAP;
+    const requestedMenuItemIds = [...new Set((dto.items ?? []).map((item) => item.menuItemId).filter((id): id is string => !!id))];
+    const mainMealMenuItems = requestedMenuItemIds.length
+      ? await this.prisma.menuItem.findMany({
+          where: { id: { in: requestedMenuItemIds }, isMainMeal: true },
+          select: { id: true },
+        })
+      : [];
+    const mainMealIds = new Set(mainMealMenuItems.map((item) => item.id));
+    const mainMealCount = (dto.items ?? []).reduce(
+      (sum, item) => sum + (item.menuItemId && mainMealIds.has(item.menuItemId) ? item.quantity : 0),
+      0,
+    );
+    if (mainMealCount > cap) {
+      throw new BadRequestException(
+        orderType === 'group'
+          ? `Group orders can include at most ${GROUP_MAIN_MEAL_CAP} main meals (this basket has ${mainMealCount}).`
+          : `Standard orders can include at most ${STANDARD_MAIN_MEAL_CAP} main meals (this basket has ${mainMealCount}). Switch to Group Order to add more.`,
+      );
+    }
 
     // Task 47: a Pay on Delivery order never touches the student's wallet
     // at all — no lookup, no debit. A wallet order keeps the exact
@@ -151,6 +203,7 @@ export class OrderEscrowService {
           runnerUserId: dto.runnerUserId ?? null,
           status: 'placed',
           paymentMethod,
+          orderType,
           totalAmount: totalAmountKobo,
           deliveryLocationLabel: dto.deliveryLocationLabel,
           note: dto.note,

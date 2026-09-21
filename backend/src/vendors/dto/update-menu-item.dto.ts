@@ -29,4 +29,9 @@ export class UpdateMenuItemDto {
   @IsOptional()
   @IsBoolean()
   isAvailable?: boolean;
+
+  // Task 66: see CreateMenuItemDto's own doc comment.
+  @IsOptional()
+  @IsBoolean()
+  isMainMeal?: boolean;
 }

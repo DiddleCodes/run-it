@@ -350,7 +350,12 @@ class _BasketScreenState extends ConsumerState<BasketScreen> {
     final menu = ref.watch(menuProvider).valueOrNull ?? const <MenuItem>[];
     final eateryName =
         ref.watch(selectedEateryProvider).valueOrNull?.name ?? '';
-    final pricing = PricingService.calculate(basket: basket, menuItems: menu);
+    final form = ref.watch(checkoutFormProvider);
+    final pricing = PricingService.calculate(
+      basket: basket,
+      menuItems: menu,
+      isGroupOrder: form.isGroupOrder,
+    );
     if (basket.isEmpty) return const _EmptyBasket();
     final lines = <(BasketItem, MenuItem)>[];
     for (final line in basket.items) {
@@ -358,6 +363,18 @@ class _BasketScreenState extends ConsumerState<BasketScreen> {
       if (match.isNotEmpty) lines.add((line, match.first));
     }
     final hasUnavailable = lines.any((entry) => !entry.$2.isAvailable);
+
+    // Task 66: honest UX on top of the real, server-side cap
+    // (OrderEscrowService.hold) — this only decides what the "Proceed to
+    // checkout" button lets through and what message shows; a direct API
+    // call is still stopped by the backend regardless of what this
+    // computes.
+    final mainMealCount = PricingService.mainMealCount(basket: basket, menuItems: menu);
+    final mainMealCap = form.isGroupOrder
+        ? PricingService.groupMainMealCap
+        : PricingService.standardMainMealCap;
+    final overMainMealCap = mainMealCount > mainMealCap;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Your basket')),
       body: ListView(
@@ -409,6 +426,24 @@ class _BasketScreenState extends ConsumerState<BasketScreen> {
               ),
             ),
           const SizedBox(height: 24),
+          const _SectionLabel(label: 'GROUP ORDER'),
+          const SizedBox(height: 8),
+          _GroupOrderToggle(
+            value: form.isGroupOrder,
+            onChanged: (value) => ref.read(checkoutFormProvider.notifier).setGroupOrder(value),
+          ),
+          if (overMainMealCap)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: _MainMealCapNotice(
+                isGroupOrder: form.isGroupOrder,
+                mainMealCount: mainMealCount,
+                cap: mainMealCap,
+                onEnableGroupOrder: () =>
+                    ref.read(checkoutFormProvider.notifier).setGroupOrder(true),
+              ),
+            ),
+          const SizedBox(height: 24),
           Text(
             'A note for your order',
             style: Theme.of(context).textTheme.labelLarge
@@ -425,7 +460,7 @@ class _BasketScreenState extends ConsumerState<BasketScreen> {
                 .setNote(value.trim().isEmpty ? null : value.trim()),
           ),
           const SizedBox(height: 24),
-          _Breakdown(pricing: pricing),
+          _Breakdown(pricing: pricing, isGroupOrder: form.isGroupOrder),
         ],
       ),
       bottomNavigationBar: SafeArea(
@@ -435,8 +470,10 @@ class _BasketScreenState extends ConsumerState<BasketScreen> {
           child: PrimaryButton(
             label: hasUnavailable
                 ? 'Remove unavailable items to continue'
+                : overMainMealCap
+                ? 'Remove main meals to continue'
                 : 'Proceed to checkout · ${naira(pricing.total)}',
-            onPressed: hasUnavailable
+            onPressed: hasUnavailable || overMainMealCap
                 ? null
                 : () => context.push(AppRoutes.checkout),
           ),
@@ -503,7 +540,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             // the student was shown; only how the backend splits it
             // internally changes.
             grossAmountKobo: (pricing.subtotal + pricing.packagingTotal) * 100,
-            deliveryFeeKobo: pricing.deliveryFee * 100,
+            // Task 66: always the BASE flat fee, even for a Group Order —
+            // `pricing.deliveryFee` (shown in _Breakdown) already includes
+            // the +₦150 surcharge for display, but hold() applies that
+            // surcharge itself from orderType below; sending the already-
+            // inflated total here would double it.
+            deliveryFeeKobo: PricingService.flatDeliveryFee * 100,
             serviceFeeKobo: pricing.serviceFee * 100,
             token: session.accessToken,
             vendorId: vendor?.id,
@@ -516,6 +558,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             paymentMethod: form.paymentMethod == PaymentMethod.payOnDelivery
                 ? 'pay_on_delivery'
                 : 'wallet',
+            // Task 66: the real cap/surcharge enforcement is
+            // OrderEscrowService.hold's own server-side check — this is
+            // just what the student chose; the Basket screen already kept
+            // them from reaching here with a basket the backend would
+            // reject anyway.
+            orderType: form.isGroupOrder ? 'group' : 'standard',
           );
       // Task 43: the exact moment payment succeeded — a real escrow hold
       // confirmed, not an optimistic guess. The matching visual beat plays
@@ -596,7 +644,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         ref.watch(selectedEateryProvider).valueOrNull?.name ?? 'Vendor';
     final form = ref.watch(checkoutFormProvider);
     final wallet = ref.watch(walletBalanceProvider).valueOrNull ?? 0;
-    final pricing = PricingService.calculate(basket: basket, menuItems: menu);
+    final pricing = PricingService.calculate(
+      basket: basket,
+      menuItems: menu,
+      isGroupOrder: form.isGroupOrder,
+    );
     final walletInsufficient = wallet < pricing.total;
     // Task 47: only actually blocks placing the order when Wallet is the
     // chosen method — a low wallet balance is irrelevant once Pay on
@@ -628,6 +680,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         children: [
           const _SectionLabel(label: 'DELIVERY'),
           _LocationCard(location: form.location),
+          if (form.isGroupOrder) ...[
+            const SizedBox(height: 10),
+            _GroupOrderBadge(surcharge: PricingService.groupOrderSurcharge),
+          ],
           const SizedBox(height: 26),
           const _SectionLabel(label: 'PAYMENT'),
           _PaymentOption(
@@ -745,7 +801,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           const SizedBox(height: 8),
           const AppTextField(hintText: 'Add a code (optional)'),
           const SizedBox(height: 26),
-          _Breakdown(pricing: pricing),
+          _Breakdown(pricing: pricing, isGroupOrder: form.isGroupOrder),
         ],
       ),
       bottomNavigationBar: SafeArea(
@@ -2030,8 +2086,12 @@ class _BasketLine extends StatelessWidget {
 }
 
 class _Breakdown extends StatelessWidget {
-  const _Breakdown({required this.pricing});
+  const _Breakdown({required this.pricing, this.isGroupOrder = false});
   final PriceBreakdown pricing;
+  // Task 66: labels the Delivery row so the ₦150 group surcharge already
+  // folded into `pricing.deliveryFee` is never a silent number — it reads
+  // out plainly here, on both Basket and Checkout, before payment.
+  final bool isGroupOrder;
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(AppSpacing.ml),
@@ -2044,7 +2104,12 @@ class _Breakdown extends StatelessWidget {
       children: [
         PriceRow(label: 'Items', amount: pricing.subtotal),
         PriceRow(label: 'Packaging', amount: pricing.packagingTotal),
-        PriceRow(label: 'Delivery', amount: pricing.deliveryFee),
+        PriceRow(
+          label: isGroupOrder
+              ? 'Delivery (incl. ₦${PricingService.groupOrderSurcharge} Group Order)'
+              : 'Delivery',
+          amount: pricing.deliveryFee,
+        ),
         PriceRow(label: 'Service fee', amount: pricing.serviceFee),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 9),
@@ -2054,6 +2119,142 @@ class _Breakdown extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// Task 66: the checkout-mode toggle — enabling it raises the basket's
+/// main-meal cap (2 -> 4) and adds the flat surcharge to what
+/// [_Breakdown] shows for Delivery, both before the student ever reaches
+/// the final "Place order" tap. Single device/payer/restaurant; there's no
+/// invite/join step, so a plain switch (not a separate flow) is the whole
+/// feature's UI surface.
+class _GroupOrderToggle extends StatelessWidget {
+  const _GroupOrderToggle({required this.value, required this.onChanged});
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color: OrderingColors.surface(context),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      border: Border.all(color: OrderingColors.border(context)),
+    ),
+    // A ListTile paints its own ink/background on the nearest Material
+    // ancestor — without this, the surrounding Container's own background
+    // color hides both.
+    child: Material(
+      type: MaterialType.transparency,
+      child: SwitchListTile.adaptive(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+        value: value,
+        activeThumbColor: AppColors.primaryMaroon,
+        onChanged: (next) {
+          HapticFeedback.selectionClick();
+          onChanged(next);
+        },
+        title: Text(
+          'Group Order',
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(color: OrderingColors.text(context)),
+        ),
+        subtitle: Text(
+          'Ordering for more people? Fit up to ${PricingService.groupMainMealCap} main meals '
+          '(instead of ${PricingService.standardMainMealCap}) for a flat +₦${PricingService.groupOrderSurcharge} delivery.',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: OrderingColors.muted(context), height: 1.3),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Task 66: a read-only reminder on the final Checkout step — the toggle
+/// itself lives on the Basket screen (where the cap it raises actually
+/// matters); this just confirms, at the last step before payment, that
+/// Group Order is active and why the delivery fee below is higher.
+class _GroupOrderBadge extends StatelessWidget {
+  const _GroupOrderBadge({required this.surcharge});
+  final int surcharge;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    decoration: BoxDecoration(
+      color: AppColors.accentForest.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(AppRadius.md),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.groups_rounded, size: 18, color: AppColors.accentForestDeep),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            'Group Order is on — up to ${PricingService.groupMainMealCap} main meals, +₦$surcharge delivery.',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.inkText, height: 1.3),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Task 66: shown only once the basket's actually over whichever cap
+/// currently applies — a clear next step (enable Group Order, or trim the
+/// basket), never a bare rejection. The real enforcement is
+/// OrderEscrowService.hold's server-side check; this is what steers a
+/// student toward a basket that will actually be accepted.
+class _MainMealCapNotice extends StatelessWidget {
+  const _MainMealCapNotice({
+    required this.isGroupOrder,
+    required this.mainMealCount,
+    required this.cap,
+    required this.onEnableGroupOrder,
+  });
+  final bool isGroupOrder;
+  final int mainMealCount;
+  final int cap;
+  final VoidCallback onEnableGroupOrder;
+
+  @override
+  Widget build(BuildContext context) {
+    final message = isGroupOrder
+        ? "That's $mainMealCount main meals — Group Order allows up to $cap. Remove some to continue."
+        : "That's $mainMealCount main meals — Standard orders allow up to $cap. Switch to Group Order to fit more.";
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.accentRose,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.error_outline_rounded, size: 18, color: AppColors.error),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.inkText, height: 1.3),
+            ),
+          ),
+          if (!isGroupOrder) ...[
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                onEnableGroupOrder();
+              },
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              child: Text(
+                'Switch',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelSmall?.copyWith(color: AppColors.primaryMaroon, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ],
+      ),
+    ).animate().fadeIn(duration: AppMotion.base).scaleXY(begin: 0.97, end: 1, duration: AppMotion.base, curve: AppMotion.emphasized);
+  }
 }
 
 class _SectionLabel extends StatelessWidget {

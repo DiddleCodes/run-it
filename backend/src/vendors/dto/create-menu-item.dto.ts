@@ -26,4 +26,13 @@ export class CreateMenuItemDto {
   @IsOptional()
   @IsBoolean()
   isAvailable?: boolean;
+
+  // Task 66: restaurant-set at menu-creation time — whether this item
+  // counts toward Group Ordering's per-order main-meal cap. Optional,
+  // defaulting to false (Prisma's column default) so an item a vendor
+  // never explicitly marks (e.g. a drink, side, or dessert) never
+  // accidentally counts.
+  @IsOptional()
+  @IsBoolean()
+  isMainMeal?: boolean;
 }

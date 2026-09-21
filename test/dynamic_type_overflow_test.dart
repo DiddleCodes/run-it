@@ -168,6 +168,7 @@ class _ScaleTestVendorsRepository extends VendorsRepository {
           priceKobo: 450000,
           category: 'Combo Meals',
           isAvailable: true,
+          isMainMeal: true,
         ),
         VendorMenuItem(
           id: 'item-soldout',
@@ -175,6 +176,7 @@ class _ScaleTestVendorsRepository extends VendorsRepository {
           priceKobo: 500000,
           category: 'Soups',
           isAvailable: false,
+          isMainMeal: false,
         ),
       ],
     );

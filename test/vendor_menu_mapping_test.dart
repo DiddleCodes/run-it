@@ -61,6 +61,7 @@ void main() {
         photoUrl: 'https://cdn.example.com/jollof.png',
         category: 'Mains',
         isAvailable: false,
+        isMainMeal: true,
       );
 
       final menuItem = item.toMenuItem('vendor-1');
@@ -71,12 +72,22 @@ void main() {
       expect(menuItem.isAvailable, isFalse);
       // No packaging-fee field on the backend's MenuItem yet.
       expect(menuItem.packagingCost, 0);
+      // Task 66: carried straight through, same as isAvailable above.
+      expect(menuItem.isMainMeal, isTrue);
     });
 
     test('defaults a null description to an empty string rather than crashing', () {
-      const item = VendorMenuItem(id: 'item-2', name: 'Malt', priceKobo: 70000, category: 'Drinks', isAvailable: true);
+      const item = VendorMenuItem(
+        id: 'item-2',
+        name: 'Malt',
+        priceKobo: 70000,
+        category: 'Drinks',
+        isAvailable: true,
+        isMainMeal: false,
+      );
 
       expect(item.toMenuItem('vendor-1').description, '');
+      expect(item.toMenuItem('vendor-1').isMainMeal, isFalse);
     });
   });
 }

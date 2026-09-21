@@ -97,6 +97,12 @@ class EscrowRepository {
     // 'wallet' backend-side, so this stays optional rather than forcing
     // every existing caller to pass it explicitly.
     String? paymentMethod,
+    // Task 66: 'standard' or 'group' — omitted entirely defaults to
+    // 'standard' backend-side. [deliveryFeeKobo] above should always be
+    // the BASE flat fee regardless of this — hold() applies the group
+    // surcharge on top of it itself, so a caller never computes the
+    // group-inflated total to send here (only to display it beforehand).
+    String? orderType,
   }) async {
     await client.post(
       '/orders/$orderId/escrow/hold',
@@ -113,6 +119,7 @@ class EscrowRepository {
         'deliveryLocationLabel': ?deliveryLocationLabel,
         'note': ?note,
         'paymentMethod': ?paymentMethod,
+        'orderType': ?orderType,
       },
     );
   }

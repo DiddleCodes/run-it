@@ -193,9 +193,30 @@ class _MenuItemRowState extends ConsumerState<_MenuItemRow> {
                     ).textTheme.bodyLarge?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 3),
-                  Text(
-                    naira(item.priceKobo ~/ 100),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
+                  Row(
+                    children: [
+                      Text(
+                        naira(item.priceKobo ~/ 100),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
+                      ),
+                      if (item.isMainMeal) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentForest.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(AppRadius.pill),
+                          ),
+                          child: Text(
+                            'Main',
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: AppColors.accentForestDeep,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
@@ -321,6 +342,9 @@ class _RestaurantMenuEditScreenState extends ConsumerState<RestaurantMenuEditScr
   bool _addingNewCategory = false;
   final _newCategoryController = TextEditingController();
   Uint8List? _newPhotoBytes;
+  // Task 66: restaurant-set at menu-creation time — whether this item
+  // counts toward Group Ordering's per-order main-meal cap.
+  late bool _isMainMeal = widget.item?.isMainMeal ?? false;
   bool _saving = false;
 
   bool get _isEditing => widget.item != null;
@@ -398,6 +422,7 @@ class _RestaurantMenuEditScreenState extends ConsumerState<RestaurantMenuEditScr
           priceKobo: priceKobo,
           photoUrl: photoUrl,
           category: category.trim(),
+          isMainMeal: _isMainMeal,
         );
       } else {
         await controller.createItem(
@@ -406,6 +431,7 @@ class _RestaurantMenuEditScreenState extends ConsumerState<RestaurantMenuEditScr
           priceKobo: priceKobo,
           photoUrl: photoUrl,
           category: category.trim(),
+          isMainMeal: _isMainMeal,
         );
       }
       if (!mounted) return;
@@ -575,6 +601,31 @@ class _RestaurantMenuEditScreenState extends ConsumerState<RestaurantMenuEditScr
                   controller: _descriptionController,
                   hintText: "What's in it?",
                   validator: (_) => null,
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceCard,
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    border: Border.all(color: AppColors.borderSubtle),
+                  ),
+                  // A ListTile paints its own ink/background on the nearest
+                  // Material ancestor — without this, the surrounding
+                  // Container's own background color hides both.
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: SwitchListTile.adaptive(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+                      value: _isMainMeal,
+                      activeThumbColor: AppColors.accentForest,
+                      onChanged: (value) => setState(() => _isMainMeal = value),
+                      title: Text('This is a main meal', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: onBg)),
+                      subtitle: Text(
+                        'Counts toward the per-order main-meal limit (2 standard, 4 on Group Order) — leave off for sides, drinks, and desserts.',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
+                      ),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 PrimaryButton(

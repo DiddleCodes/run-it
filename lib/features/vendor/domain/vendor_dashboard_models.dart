@@ -248,6 +248,7 @@ class VendorMenuItem {
     this.photoUrl,
     required this.category,
     required this.isAvailable,
+    required this.isMainMeal,
   });
   final String id;
   final String name;
@@ -256,6 +257,9 @@ class VendorMenuItem {
   final String? photoUrl;
   final String category;
   final bool isAvailable;
+  // Task 66: restaurant-set at menu-creation time — what Group Ordering's
+  // per-order main-meal cap counts against.
+  final bool isMainMeal;
 
   factory VendorMenuItem.fromJson(Map<String, dynamic> json) => VendorMenuItem(
     id: json['id'] as String,
@@ -265,6 +269,7 @@ class VendorMenuItem {
     photoUrl: json['photoUrl'] as String?,
     category: json['category'] as String,
     isAvailable: json['isAvailable'] as bool,
+    isMainMeal: json['isMainMeal'] as bool? ?? false,
   );
 }
 

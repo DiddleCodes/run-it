@@ -37,6 +37,7 @@ class RestaurantMenuController extends AsyncNotifier<List<VendorMenuItem>> {
     required int priceKobo,
     String? photoUrl,
     required String category,
+    bool isMainMeal = false,
   }) async {
     await ref
         .read(vendorsRepositoryProvider)
@@ -46,6 +47,7 @@ class RestaurantMenuController extends AsyncNotifier<List<VendorMenuItem>> {
           priceKobo: priceKobo,
           photoUrl: photoUrl,
           category: category,
+          isMainMeal: isMainMeal,
           token: _requireToken(),
         );
     await refresh();
@@ -58,6 +60,7 @@ class RestaurantMenuController extends AsyncNotifier<List<VendorMenuItem>> {
     required int priceKobo,
     String? photoUrl,
     required String category,
+    bool isMainMeal = false,
   }) async {
     await ref
         .read(vendorsRepositoryProvider)
@@ -68,6 +71,7 @@ class RestaurantMenuController extends AsyncNotifier<List<VendorMenuItem>> {
           priceKobo: priceKobo,
           photoUrl: photoUrl,
           category: category,
+          isMainMeal: isMainMeal,
           token: _requireToken(),
         );
     await refresh();
