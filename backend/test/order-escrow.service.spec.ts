@@ -25,10 +25,10 @@ const ESCROW_CONFIG = {
   'escrow.runnerDeliveryPayKobo': 20_000,
 };
 
-function makeService() {
+function makeService(extraConfig: Record<string, unknown> = {}) {
   const prisma = createPrismaMock();
   const paystack = createPaystackMock();
-  const config = createConfigMock(ESCROW_CONFIG);
+  const config = createConfigMock({ ...ESCROW_CONFIG, ...extraConfig });
   const notifications = createNotificationsEmitterMock();
   const matching = createMatchingServiceMock();
   const alerts = createAlertsMock();
@@ -351,9 +351,54 @@ describe('OrderEscrowService.hold', () => {
   });
 });
 
-describe('OrderEscrowService.hold — Task 47 Pay on Delivery', () => {
-  it('never touches the wallet at all for a Pay on Delivery order', async () => {
+describe('OrderEscrowService.hold — Task 67 Pay on Delivery launch switch (off by default)', () => {
+  it('rejects a Pay on Delivery attempt while POD is switched off, even for an opted-in restaurant', async () => {
     const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue(null);
+    prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null, payAtDeliveryEnabled: true });
+
+    await expect(
+      service.hold('order-1', {
+        studentUserId: 's1',
+        restaurantUserId: 'r1',
+        grossAmountKobo: 100_000,
+        paymentMethod: 'pay_on_delivery',
+      }),
+    ).rejects.toThrow(new ForbiddenException("Pay on Delivery isn't available yet"));
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.order.upsert).not.toHaveBeenCalled();
+    expect(prisma.orderEscrow.create).not.toHaveBeenCalled();
+  });
+
+  it('leaves wallet orders completely unaffected while POD is switched off', async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue(null);
+    prisma.wallet.findUnique.mockResolvedValue({ id: 'w1', userId: 's1', balance: 1_000_000 });
+    prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
+    prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
+    prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null, payAtDeliveryEnabled: false });
+    prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
+
+    const result = await service.hold('order-1', {
+      studentUserId: 's1',
+      restaurantUserId: 'r1',
+      grossAmountKobo: 100_000,
+    });
+
+    expect(result.studentWalletTransactionId).toBe('wt1');
+    expect(prisma.order.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: expect.objectContaining({ paymentMethod: 'wallet' }) }),
+    );
+  });
+});
+
+// Task 67: POD ships switched off (features.podEnabled) — these prove the
+// feature itself still works exactly as Task 47 built it once switched on.
+describe('OrderEscrowService.hold — Task 47 Pay on Delivery (switched on)', () => {
+  const POD_ON = { 'features.podEnabled': true };
+
+  it('never touches the wallet at all for a Pay on Delivery order', async () => {
+    const { service, prisma } = makeService(POD_ON);
     prisma.orderEscrow.findUnique.mockResolvedValue(null);
     prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null, payAtDeliveryEnabled: true });
     prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
@@ -381,7 +426,7 @@ describe('OrderEscrowService.hold — Task 47 Pay on Delivery', () => {
   });
 
   it("rejects a Pay on Delivery attempt when the restaurant hasn't opted in", async () => {
-    const { service, prisma } = makeService();
+    const { service, prisma } = makeService(POD_ON);
     prisma.orderEscrow.findUnique.mockResolvedValue(null);
     prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null, payAtDeliveryEnabled: false });
 
@@ -397,7 +442,7 @@ describe('OrderEscrowService.hold — Task 47 Pay on Delivery', () => {
   });
 
   it('rejects a Pay on Delivery attempt over the order-value cap even for an opted-in restaurant', async () => {
-    const { service, prisma } = makeService();
+    const { service, prisma } = makeService(POD_ON);
     prisma.orderEscrow.findUnique.mockResolvedValue(null);
     prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null, payAtDeliveryEnabled: true });
 

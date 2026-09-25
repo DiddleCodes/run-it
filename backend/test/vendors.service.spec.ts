@@ -1,8 +1,8 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { VendorsService } from '../src/vendors/vendors.service';
-import { createMatchingServiceMock, createNotificationsEmitterMock, createPrismaMock } from './support/mocks';
+import { createConfigMock, createMatchingServiceMock, createNotificationsEmitterMock, createPrismaMock } from './support/mocks';
 
-function makeService() {
+function makeService(configValues: Record<string, unknown> = {}) {
   const prisma = createPrismaMock();
   const notifications = createNotificationsEmitterMock();
   const matching = createMatchingServiceMock();
@@ -10,7 +10,10 @@ function makeService() {
   // tests make, so a permissive default (never rejects) keeps them
   // unaffected — the dedicated behavior gets its own tests below.
   const campus = { requireById: jest.fn().mockResolvedValue({ id: 'campus-1', name: 'Test Campus' }) };
-  const service = new VendorsService(prisma as any, notifications as any, matching as any, campus as any);
+  // Task 67: empty by default — i.e. Pay on Delivery switched off, the
+  // real launch default.
+  const config = createConfigMock(configValues);
+  const service = new VendorsService(prisma as any, notifications as any, matching as any, campus as any, config as any);
   return { service, prisma, notifications, matching, campus };
 }
 
@@ -111,6 +114,44 @@ describe('VendorsService.upsertMyVendor', () => {
 
     expect(prisma.vendor.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ create: expect.objectContaining({ category: 'Fast Food' }) }),
+    );
+  });
+});
+
+describe('VendorsService.upsertMyVendor — Task 67 Pay on Delivery opt-in vs launch switch', () => {
+  const categories = [{ slug: 'nigerian', label: 'Nigerian' }];
+
+  it('rejects opting in to Pay on Delivery while it is switched off platform-wide', async () => {
+    const { service, prisma } = makeService();
+    prisma.vendorCategory.findMany.mockResolvedValue(categories);
+
+    await expect(
+      service.upsertMyVendor('user-A', { businessName: 'Naija Bites', category: 'Nigerian', payAtDeliveryEnabled: true }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.vendor.upsert).not.toHaveBeenCalled();
+  });
+
+  it('still allows opting out while switched off', async () => {
+    const { service, prisma } = makeService();
+    prisma.vendorCategory.findMany.mockResolvedValue(categories);
+    prisma.vendor.upsert.mockResolvedValue({ id: 'vendor-1' });
+
+    await service.upsertMyVendor('user-A', { businessName: 'Naija Bites', category: 'Nigerian', payAtDeliveryEnabled: false });
+
+    expect(prisma.vendor.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ update: expect.objectContaining({ payAtDeliveryEnabled: false }) }),
+    );
+  });
+
+  it('allows opting in once switched on', async () => {
+    const { service, prisma } = makeService({ 'features.podEnabled': true });
+    prisma.vendorCategory.findMany.mockResolvedValue(categories);
+    prisma.vendor.upsert.mockResolvedValue({ id: 'vendor-1' });
+
+    await service.upsertMyVendor('user-A', { businessName: 'Naija Bites', category: 'Nigerian', payAtDeliveryEnabled: true });
+
+    expect(prisma.vendor.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ update: expect.objectContaining({ payAtDeliveryEnabled: true }) }),
     );
   });
 });

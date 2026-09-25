@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/features_repository.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
@@ -106,7 +107,10 @@ class _RestaurantProfileScreenState extends ConsumerState<RestaurantProfileScree
               SettingsGroup(
                 children: [
                   const PayoutsRow(accentColor: AppColors.accentForest),
-                  _PayAtDeliveryRow(enabled: vendor.payAtDeliveryEnabled),
+                  // Task 67: absent entirely while Pay on Delivery is
+                  // switched off platform-wide — nothing to opt in to.
+                  if (ref.watch(podEnabledProvider))
+                    _PayAtDeliveryRow(enabled: vendor.payAtDeliveryEnabled),
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),

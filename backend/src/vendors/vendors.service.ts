@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { MenuItem, OrderStatus } from '@prisma/client';
 import { CampusService } from '../campus/campus.service';
 import { MatchingService } from '../matching/matching.service';
@@ -38,6 +39,7 @@ export class VendorsService {
     private readonly notifications: NotificationsEmitterService,
     private readonly matching: MatchingService,
     private readonly campus: CampusService,
+    private readonly config: ConfigService,
   ) {}
 
   // Task 13c: replaces the Task 12 auto-approve stopgap this comment used
@@ -48,6 +50,12 @@ export class VendorsService {
   // `rejected` vendor resubmitting: that's the only way back into the
   // queue, so it flips to `pending` and clears the prior rejectionReason.
   async upsertMyVendor(userId: string, dto: UpsertVendorDto) {
+    // Task 67: no restaurant can opt in to Pay on Delivery while it's
+    // switched off platform-wide (the app hides the toggle too). Opting
+    // OUT is always allowed.
+    if (dto.payAtDeliveryEnabled === true && this.config.get<boolean>('features.podEnabled') !== true) {
+      throw new ForbiddenException("Pay on Delivery isn't available yet");
+    }
     const category = await this.resolveCategoryLabel(dto.category);
     if (dto.requestedCampusId) await this.campus.requireById(dto.requestedCampusId);
     const data = { ...dto, category };

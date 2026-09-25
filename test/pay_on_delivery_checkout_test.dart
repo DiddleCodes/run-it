@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:run_it/core/network/demo_identity_service.dart';
 import 'package:run_it/core/network/escrow_repository.dart';
+import 'package:run_it/core/network/features_repository.dart';
 import 'package:run_it/core/network/vendors_repository.dart';
 import 'package:run_it/core/routing/app_router.dart';
 import 'package:run_it/core/widgets/app_notification.dart';
@@ -127,9 +128,13 @@ class _FakeVendorsRepository extends VendorsRepository {
   );
 }
 
-List<Override> _vendorOverrides({required bool payAtDeliveryEnabled}) => [
+/// Task 67: [podEnabled] is the platform-wide launch switch (the backend's
+/// `GET /features`), off for launch — the Task 47 tests below switch it on
+/// to prove the feature itself still works once re-enabled.
+List<Override> _vendorOverrides({required bool payAtDeliveryEnabled, bool podEnabled = true}) => [
   vendorsRepositoryProvider.overrideWithValue(_FakeVendorsRepository(payAtDeliveryEnabled: payAtDeliveryEnabled)),
   selectedVendorIdProvider.overrideWith((ref) => 'tantalizers'),
+  podEnabledProvider.overrideWithValue(podEnabled),
 ];
 
 Widget _checkoutHarness({required List<Override> overrides}) {
@@ -150,8 +155,92 @@ Widget _checkoutHarness({required List<Override> overrides}) {
   );
 }
 
+/// Task 67: the real, un-overridden flag source — a stubbed
+/// `GET /features` response rather than `podEnabledProvider` directly.
+class _FakeFeaturesRepository extends FeaturesRepository {
+  const _FakeFeaturesRepository({this.podEnabled, this.fail = false});
+  final bool? podEnabled;
+  final bool fail;
+  @override
+  Future<PlatformFeatures> fetch() async {
+    if (fail) throw Exception('offline');
+    return PlatformFeatures(podEnabled: podEnabled ?? false);
+  }
+}
+
 void main() {
-  group('Task 47: Pay on Delivery at checkout', () {
+  group('Task 67: Pay on Delivery switched off platform-wide (launch default)', () {
+    List<Override> baseOverrides(EscrowRepository escrow) => [
+      authControllerProvider.overrideWith(() => _FakeAuthController(_studentSession())),
+      basketProvider.overrideWith(() => _SeededBasket('jollof')),
+      walletBalanceProvider.overrideWith(() => _SufficientBalanceWallet()),
+      demoIdentityServiceProvider.overrideWithValue(const _FakeDemoIdentityService()),
+      escrowRepositoryProvider.overrideWithValue(escrow),
+      // An opted-in restaurant, under the cap — the only thing keeping
+      // Pay on Delivery away is the platform switch.
+      vendorsRepositoryProvider.overrideWithValue(const _FakeVendorsRepository(payAtDeliveryEnabled: true)),
+      selectedVendorIdProvider.overrideWith((ref) => 'tantalizers'),
+    ];
+
+    testWidgets('GET /features says podEnabled: false → the option is absent entirely, not greyed out', (tester) async {
+      final escrow = _RecordingEscrowRepository();
+      await tester.pumpWidget(
+        _checkoutHarness(
+          overrides: [
+            ...baseOverrides(escrow),
+            featuresRepositoryProvider.overrideWithValue(const _FakeFeaturesRepository(podEnabled: false)),
+          ],
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1200));
+
+      expect(find.text('RUN IT Wallet'), findsOneWidget);
+      expect(find.text('Pay on Delivery'), findsNothing);
+      expect(find.text('Pay cash when your order arrives.'), findsNothing);
+      expect(find.text('This restaurant requires payment before delivery.'), findsNothing);
+
+      // Wallet checkout is untouched.
+      await tester.tap(find.textContaining('Place order'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(escrow.calls.single['paymentMethod'], 'wallet');
+    });
+
+    testWidgets('a failed GET /features fails closed: the option is absent', (tester) async {
+      await tester.pumpWidget(
+        _checkoutHarness(
+          overrides: [
+            ...baseOverrides(_RecordingEscrowRepository()),
+            featuresRepositoryProvider.overrideWithValue(const _FakeFeaturesRepository(fail: true)),
+          ],
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1200));
+
+      expect(find.text('RUN IT Wallet'), findsOneWidget);
+      expect(find.text('Pay on Delivery'), findsNothing);
+    });
+
+    testWidgets('GET /features says podEnabled: true → the option comes back', (tester) async {
+      await tester.pumpWidget(
+        _checkoutHarness(
+          overrides: [
+            ...baseOverrides(_RecordingEscrowRepository()),
+            featuresRepositoryProvider.overrideWithValue(const _FakeFeaturesRepository(podEnabled: true)),
+          ],
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1200));
+
+      expect(find.text('Pay on Delivery'), findsOneWidget);
+      expect(find.text('Pay cash when your order arrives.'), findsOneWidget);
+    });
+  });
+
+  group('Task 47: Pay on Delivery at checkout (platform switch on)', () {
     testWidgets(
       'an opted-in restaurant, under the cap: Pay on Delivery is selectable and places the order with no wallet balance at all',
       (tester) async {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:run_it/core/network/features_repository.dart';
 import 'package:run_it/core/network/vendors_repository.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
@@ -68,15 +69,34 @@ class _RecordingVendorsRepository extends VendorsRepository {
   }
 }
 
-Widget _harness(_RecordingVendorsRepository repo) => ProviderScope(
+/// Task 67: [podEnabled] is the platform-wide launch switch, off for
+/// launch — the Task 47 tests switch it on to prove the toggle itself
+/// still works once re-enabled.
+Widget _harness(_RecordingVendorsRepository repo, {bool podEnabled = true}) => ProviderScope(
   overrides: [
     authControllerProvider.overrideWith(() => _FakeAuthController(_restaurantSession())),
     vendorsRepositoryProvider.overrideWithValue(repo),
+    podEnabledProvider.overrideWithValue(podEnabled),
   ],
   child: const MaterialApp(home: RestaurantProfileScreen()),
 );
 
 void main() {
+  testWidgets('Task 67: the Pay on Delivery opt-in toggle is absent entirely while switched off platform-wide', (
+    tester,
+  ) async {
+    // Even a restaurant already opted in from before sees no toggle.
+    final repo = _RecordingVendorsRepository(payAtDeliveryEnabled: true);
+    await tester.pumpWidget(_harness(repo, podEnabled: false));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text("Mama Kemi's Kitchen"), findsWidgets);
+    expect(find.text('Accept Pay on Delivery'), findsNothing);
+    expect(find.byType(Switch), findsNothing);
+    expect(repo.upsertCalls, isEmpty);
+  });
+
   testWidgets('Task 47: the Profile tab shows the current Pay on Delivery state and flipping it calls the real backend', (
     tester,
   ) async {

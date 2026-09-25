@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/demo_identity_service.dart';
 import '../../../core/network/escrow_repository.dart';
+import '../../../core/network/features_repository.dart';
 import '../../../core/network/orders_repository.dart';
 import '../../../core/network/ratings_repository.dart';
 import '../../../core/routing/app_router.dart';
@@ -659,9 +660,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     // OrderEscrowService.hold — this is honest UX on top of it, greying the
     // option out with a specific reason rather than hiding it outright.
     final vendor = ref.watch(selectedVendorProfileProvider).valueOrNull;
+    // Task 67: a platform-wide launch decision, not a restaurant-specific
+    // unavailability — so while it's off the option is absent entirely,
+    // never greyed out.
+    final podEnabled = ref.watch(podEnabledProvider);
     final overPodCap = pricing.total > PricingService.payOnDeliveryMaxTotal;
     final restaurantAcceptsPod = vendor?.payAtDeliveryEnabled ?? false;
-    final podEligible = restaurantAcceptsPod && !overPodCap;
+    final podEligible = podEnabled && restaurantAcceptsPod && !overPodCap;
     final podSubtitle = overPodCap
         ? "Pay on Delivery isn't available for orders over ${naira(PricingService.payOnDeliveryMaxTotal)}."
         : !restaurantAcceptsPod
@@ -697,20 +702,22 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 .read(checkoutFormProvider.notifier)
                 .setPayment(PaymentMethod.wallet),
           ),
-          const SizedBox(height: 10),
-          _PaymentOption(
-            icon: Icons.payments_outlined,
-            title: 'Pay on Delivery',
-            subtitle: podSubtitle,
-            selected: podEligible && form.paymentMethod == PaymentMethod.payOnDelivery,
-            // Same "greyed out, tap explains why" convention as the Card /
-            // Bank stub below — never silently does nothing.
-            onTap: podEligible
-                ? () => ref
-                      .read(checkoutFormProvider.notifier)
-                      .setPayment(PaymentMethod.payOnDelivery)
-                : () => ref.read(appNotificationProvider.notifier).info(podSubtitle),
-          ),
+          if (podEnabled) ...[
+            const SizedBox(height: 10),
+            _PaymentOption(
+              icon: Icons.payments_outlined,
+              title: 'Pay on Delivery',
+              subtitle: podSubtitle,
+              selected: podEligible && form.paymentMethod == PaymentMethod.payOnDelivery,
+              // Same "greyed out, tap explains why" convention as the Card /
+              // Bank stub below — never silently does nothing.
+              onTap: podEligible
+                  ? () => ref
+                        .read(checkoutFormProvider.notifier)
+                        .setPayment(PaymentMethod.payOnDelivery)
+                  : () => ref.read(appNotificationProvider.notifier).info(podSubtitle),
+            ),
+          ],
           if (insufficient)
             Padding(
               padding: const EdgeInsets.only(top: 10),

@@ -13,6 +13,7 @@ import { AuthModule } from './auth/auth.module';
 import { CampusModule } from './campus/campus.module';
 import configuration from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
+import { FeaturesModule } from './features/features.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OrderEscrowModule } from './order-escrow/order-escrow.module';
 import { OrdersModule } from './orders/orders.module';
@@ -64,6 +65,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     RedisModule,
     AlertsModule,
     CampusModule,
+    FeaturesModule,
     AuthModule,
     UsersModule,
     WalletModule,

@@ -108,6 +108,17 @@ export default () => ({
     senderName: process.env.BREVO_SENDER_NAME ?? 'RUN-It',
   },
 
+  // Task 67: platform-wide launch switches — the single place a whole
+  // feature is gated on/off, independent of any per-vendor opt-in.
+  // Served to clients read-only via GET /features (see FeaturesController)
+  // so the Flutter app hides what the server would reject anyway.
+  features: {
+    // Pay on Delivery (Task 47). Off by default for launch: every POD
+    // checkout is rejected in OrderEscrowService.hold and no restaurant
+    // can opt in, regardless of any existing Vendor.payAtDeliveryEnabled.
+    podEnabled: process.env.POD_ENABLED === 'true',
+  },
+
   matching: {
     rebroadcastSeconds: Number(process.env.MATCHING_REBROADCAST_SECONDS ?? 20),
     escalateSeconds: Number(process.env.MATCHING_ESCALATE_SECONDS ?? 120),

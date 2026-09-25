@@ -66,6 +66,14 @@ export class OrderEscrowService {
     const paymentMethod = dto.paymentMethod ?? 'wallet';
     const orderType = dto.orderType ?? 'standard';
 
+    // Task 67: the platform-wide launch switch — checked before anything
+    // else touches the wallet, vendor, or order rows, and regardless of
+    // the restaurant's own payAtDeliveryEnabled opt-in. The app hides the
+    // option entirely while this is off; this is the real enforcement.
+    if (paymentMethod === 'pay_on_delivery' && this.config.get<boolean>('features.podEnabled') !== true) {
+      throw new ForbiddenException("Pay on Delivery isn't available yet");
+    }
+
     const foodSubtotalKobo = dto.grossAmountKobo;
     // Task 66: the flat delivery fee (Task 45) plus, for a group order, a
     // flat additive surcharge — never a replacement for the base fee.

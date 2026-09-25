@@ -62,4 +62,8 @@ export const envValidationSchema = Joi.object({
   // to a Dispute for admin/restaurant attention. See MatchingService.
   MATCHING_REBROADCAST_SECONDS: Joi.number().min(1).default(20),
   MATCHING_ESCALATE_SECONDS: Joi.number().min(1).default(120),
+
+  // Task 67: Pay on Delivery launch switch — see configuration.ts's
+  // `features.podEnabled`. Anything but the literal string 'true' is off.
+  POD_ENABLED: Joi.string().valid('true', 'false').default('false'),
 });
