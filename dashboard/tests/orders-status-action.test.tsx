@@ -89,3 +89,91 @@ describe("Orders status action", () => {
     expect(row().queryByText("New")).not.toBeInTheDocument();
   });
 });
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+}
+
+describe("Task 61: declining an order", () => {
+  it("only offers Decline on a placed (not yet accepted) order", () => {
+    const preparing: IncomingOrder = { ...placedOrder, id: "order-2", pickupCode: "PQ-1111", status: "preparing" };
+    render(<OrdersBoard initialData={{ ...initialData, items: [placedOrder, preparing], total: 2 }} />);
+
+    const placedRow = within(screen.getByText("XK-7291").closest("tr")!);
+    const preparingRow = within(screen.getByText("PQ-1111").closest("tr")!);
+    expect(placedRow.getByRole("button", { name: "Decline" })).toBeInTheDocument();
+    expect(preparingRow.queryByRole("button", { name: "Decline" })).not.toBeInTheDocument();
+  });
+
+  it("requires a reason, POSTs it, and only drops the order once the refresh confirms it", async () => {
+    const user = userEvent.setup();
+    const calls: { url: string; opts?: RequestInit }[] = [];
+    const fetchMock = vi.fn((url: string, opts?: RequestInit) => {
+      calls.push({ url, opts });
+      if (opts?.method === "POST") return Promise.resolve(json({ id: "order-1", status: "cancelled" }));
+      return Promise.resolve(json({ items: [], total: 0, page: 1, limit: 20 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<OrdersBoard initialData={initialData} />);
+    await user.click(screen.getByRole("button", { name: "Decline" }));
+
+    const confirm = () => screen.getByRole("button", { name: "Decline order" });
+    expect(confirm()).toBeDisabled();
+
+    await user.click(screen.getByLabelText("Out of stock"));
+    expect(confirm()).toBeEnabled();
+    await user.click(confirm());
+
+    await waitFor(() => expect(screen.queryByText("XK-7291")).not.toBeInTheDocument());
+    const post = calls.find((c) => c.opts?.method === "POST")!;
+    expect(post.url).toBe("/api/proxy/vendors/me/orders/order-1/decline");
+    expect(JSON.parse(post.opts!.body as string)).toEqual({ reason: "out_of_stock" });
+  });
+
+  it("'Other' stays disabled until real free text is typed, and sends it trimmed", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn((_url: string, opts?: RequestInit) =>
+      Promise.resolve(opts?.method === "POST" ? json({}) : json({ items: [], total: 0, page: 1, limit: 20 })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<OrdersBoard initialData={initialData} />);
+    await user.click(screen.getByRole("button", { name: "Decline" }));
+    await user.click(screen.getByLabelText("Other"));
+
+    const confirm = screen.getByRole("button", { name: "Decline order" });
+    expect(confirm).toBeDisabled();
+    await user.type(screen.getByLabelText("Reason (shown to the student)"), "   ");
+    expect(confirm).toBeDisabled();
+    await user.type(screen.getByLabelText("Reason (shown to the student)"), "Gas ran out ");
+    expect(confirm).toBeEnabled();
+    await user.click(confirm);
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, o]) => o?.method === "POST")).toBe(true));
+    const [, opts] = fetchMock.mock.calls.find(([, o]) => o?.method === "POST")!;
+    expect(JSON.parse(opts!.body as string)).toEqual({ reason: "other", note: "Gas ran out" });
+  });
+
+  it("shows the backend's real rejection and keeps the order when declining fails", async () => {
+    const user = userEvent.setup();
+    const { toast } = await import("sonner");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(json({ message: 'Cannot decline order order-1 — it is currently "preparing", not "placed"', statusCode: 409 }, 409)),
+      ),
+    );
+
+    render(<OrdersBoard initialData={initialData} />);
+    await user.click(screen.getByRole("button", { name: "Decline" }));
+    await user.click(screen.getByLabelText("Too busy"));
+    await user.click(screen.getByRole("button", { name: "Decline order" }));
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("currently \"preparing\""), expect.anything()),
+    );
+    expect(screen.getByText("XK-7291")).toBeInTheDocument();
+  });
+});
+

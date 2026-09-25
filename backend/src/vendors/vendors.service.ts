@@ -1,11 +1,13 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { MenuItem, OrderStatus } from '@prisma/client';
+import { MenuItem, OrderStatus, Prisma } from '@prisma/client';
 import { CampusService } from '../campus/campus.service';
 import { MatchingService } from '../matching/matching.service';
 import { NotificationsEmitterService } from '../notifications/notifications-emitter.service';
+import { OrderEscrowService } from '../order-escrow/order-escrow.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
+import { DeclineOrderDto, OrderDeclineReasonInput } from './dto/decline-order.dto';
 import { DEFAULT_PAGE_SIZE, ListOrdersQueryDto, MAX_PAGE_SIZE } from './dto/list-orders-query.dto';
 import {
   DEFAULT_PAGE_SIZE as DEFAULT_VENDOR_PAGE_SIZE,
@@ -32,6 +34,18 @@ const REQUIRED_CURRENT_STATUS: Record<VendorDrivenStatus, OrderStatus> = {
   ready_for_pickup: 'preparing',
 };
 
+// Task 61: the student-facing wording for each OrderDeclineReason ('other'
+// uses the restaurant's own free text instead).
+const DECLINE_REASON_LABELS: Record<Exclude<OrderDeclineReasonInput, 'other'>, string> = {
+  out_of_stock: 'Out of stock',
+  kitchen_closed: 'Kitchen closed',
+  too_busy: 'Too busy',
+};
+
+function formatNaira(kobo: number): string {
+  return `₦${(kobo / 100).toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
+}
+
 @Injectable()
 export class VendorsService {
   constructor(
@@ -40,6 +54,7 @@ export class VendorsService {
     private readonly matching: MatchingService,
     private readonly campus: CampusService,
     private readonly config: ConfigService,
+    private readonly escrow: OrderEscrowService,
   ) {}
 
   // Task 13c: replaces the Task 12 auto-approve stopgap this comment used
@@ -271,13 +286,23 @@ export class VendorsService {
       );
     }
 
-    const updated = await this.prisma.order.update({
-      where: { id: orderId },
+    // Conditional on the status just checked (Task 61): a concurrent
+    // restaurant decline may have cancelled + refunded the order since the
+    // read above, and accepting must never resurrect that.
+    const updated = await this.prisma.order
+      .update({
+        where: { id: orderId, status: requiredCurrentStatus },
       // Task 46: "preparing" is the vendor's acceptance moment — the one
       // real event this transition set covers (ready_for_pickup has no
       // timestamp of its own, per this task's exact four fields).
-      data: { status: dto.status, ...(dto.status === 'preparing' ? { acceptedAt: new Date() } : {}) },
-    });
+        data: { status: dto.status, ...(dto.status === 'preparing' ? { acceptedAt: new Date() } : {}) },
+      })
+      .catch((error: unknown) => {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+          throw new ConflictException(`Order ${orderId} changed while updating it — refresh and try again`);
+        }
+        throw error;
+      });
 
     // "preparing" is the vendor's acceptance of the order — the student-
     // facing "order accepted" moment. "ready_for_pickup" has no event of
@@ -303,6 +328,54 @@ export class VendorsService {
     }
 
     return updated;
+  }
+
+  // Task 61: the alternative to accepting — same point in the lifecycle
+  // (`placed` only), same ownership check. Closes the order out through
+  // the exact OrderEscrowService.refund() a student cancellation uses, with
+  // the decline fields written in that same transaction and the `placed`
+  // precondition re-checked there too, so a decline racing an accept can
+  // only ever have one winner.
+  async declineOrder(userId: string, orderId: string, dto: DeclineOrderDto) {
+    const vendor = await this.getOwnVendorOrThrow(userId);
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.vendorId !== vendor.id) throw new ForbiddenException('You do not own this order');
+    if (order.status !== 'placed') {
+      throw new ConflictException(`Cannot decline order ${orderId} — it is currently "${order.status}", not "placed"`);
+    }
+
+    const note = dto.reason === 'other' ? dto.note!.trim() : null;
+    // refund() is what closes out the escrow either way. Whether that
+    // moves any money is decided by how the order was actually paid, never
+    // assumed: a wallet order gets its full debit credited back; a Pay on
+    // Delivery order (Task 47) was never charged, so its refund step moves
+    // nothing — refund() skips the wallet entirely when the hold never
+    // debited one.
+    const walletPaid = order.paymentMethod === 'wallet';
+    const escrow = await this.escrow.refund(orderId, {
+      requireOrderStatus: 'placed',
+      orderData: { declinedAt: new Date(), declineReason: dto.reason, declineReasonNote: note },
+    });
+
+    const reasonText = dto.reason === 'other' ? note! : DECLINE_REASON_LABELS[dto.reason];
+    this.notifications.emit({
+      type: 'order_declined',
+      recipientUserId: order.studentUserId,
+      title: 'Order declined',
+      body: walletPaid
+        ? `${vendor.businessName} declined your order — "${reasonText}". Your ${formatNaira(escrow.grossAmount)} refund is on its way back to your RUN IT wallet.`
+        : `${vendor.businessName} declined your order — "${reasonText}". You haven't been charged for it.`,
+      data: { orderId, reason: dto.reason, refunded: String(walletPaid) },
+    });
+
+    return {
+      id: orderId,
+      status: 'cancelled' as const,
+      declineReason: dto.reason,
+      declineReasonNote: note,
+      refundedAmount: walletPaid ? escrow.grossAmount : 0,
+    };
   }
 
   async metrics(userId: string, query: MetricsQueryDto) {

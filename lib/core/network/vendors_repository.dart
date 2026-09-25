@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/ordering/domain/order_decline.dart';
 import '../../features/vendor/domain/vendor_dashboard_models.dart';
 import 'api_client.dart';
 
@@ -205,6 +206,25 @@ class VendorsRepository {
       '/vendors/me/orders/$orderId/status',
       token: token,
       body: {'status': status.toJson},
+    );
+  }
+
+  /// Task 61: the alternative to accepting a `placed` order — the backend
+  /// cancels it and refunds the student in one step. [note] is required
+  /// (and only sent) for [OrderDeclineReason.other].
+  Future<void> declineOrder({
+    required String orderId,
+    required OrderDeclineReason reason,
+    String? note,
+    required String token,
+  }) async {
+    await client.post(
+      '/vendors/me/orders/$orderId/decline',
+      token: token,
+      body: {
+        'reason': reason.toJson,
+        if (reason == OrderDeclineReason.other) 'note': note?.trim(),
+      },
     );
   }
 

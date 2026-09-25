@@ -2,12 +2,20 @@
 
 import { useState } from "react";
 import { Column, DataTable } from "@/components/shared/data-table";
-import { Drawer } from "@/components/shared/modal";
+import { Drawer, Modal } from "@/components/shared/modal";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { formatDateTime, formatKobo } from "@/lib/format";
 import { usePolling } from "@/lib/hooks/use-polling";
 import { toast } from "@/lib/toast";
-import { IncomingOrder, IncomingOrdersResponse, OrderStatus, VendorApiError, vendorClient } from "@/lib/api/vendor-client";
+import {
+  IncomingOrder,
+  IncomingOrdersResponse,
+  ORDER_DECLINE_REASONS,
+  OrderDeclineReason,
+  OrderStatus,
+  VendorApiError,
+  vendorClient,
+} from "@/lib/api/vendor-client";
 
 const NEXT_ACTION: Partial<Record<OrderStatus, { label: string; next: "preparing" | "ready_for_pickup" }>> = {
   placed: { label: "Start Preparing", next: "preparing" },
@@ -31,6 +39,10 @@ export function OrdersBoard({ initialData }: { initialData: IncomingOrdersRespon
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
   const [selected, setSelected] = useState<IncomingOrder | null>(null);
   const [actioningId, setActioningId] = useState<string | null>(null);
+  // Task 61: the order being declined (modal open) and the chosen reason.
+  const [declineTarget, setDeclineTarget] = useState<IncomingOrder | null>(null);
+  const [declineReason, setDeclineReason] = useState<OrderDeclineReason | null>(null);
+  const [declineNote, setDeclineNote] = useState("");
 
   async function refresh() {
     try {
@@ -55,6 +67,32 @@ export function OrdersBoard({ initialData }: { initialData: IncomingOrdersRespon
       toast.success(`Order updated to "${action.next === "preparing" ? "Preparing" : "Ready for pickup"}"`);
     } catch (err) {
       toast.error(err instanceof VendorApiError ? err.message : "Couldn't update the order. Please try again.");
+    } finally {
+      setActioningId(null);
+    }
+  }
+
+  function closeDecline() {
+    setDeclineTarget(null);
+    setDeclineReason(null);
+    setDeclineNote("");
+  }
+
+  const declineValid = declineReason !== null && (declineReason !== "other" || declineNote.trim().length > 0);
+
+  // Task 61: the backend cancels the order and refunds the student in one
+  // step; nothing changes here until that and the follow-up refresh land.
+  async function decline() {
+    if (!declineTarget || !declineReason || !declineValid) return;
+    const order = declineTarget;
+    setActioningId(order.id);
+    try {
+      await vendorClient.declineOrder(order.id, declineReason, declineNote);
+      closeDecline();
+      await refresh();
+      toast.success("Order declined. The student has been notified and refunded.");
+    } catch (err) {
+      toast.error(err instanceof VendorApiError ? err.message : "Couldn't decline the order. Please try again.");
     } finally {
       setActioningId(null);
     }
@@ -95,16 +133,30 @@ export function OrdersBoard({ initialData }: { initialData: IncomingOrdersRespon
         const action = NEXT_ACTION[o.status];
         if (!action) return null;
         return (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              advance(o);
-            }}
-            disabled={actioningId === o.id}
-            className="px-3 py-1.5 rounded-lg bg-[var(--primary)] text-white text-xs font-medium hover:bg-[#5A0E25] transition-colors disabled:opacity-50"
-          >
-            {actioningId === o.id ? "Updating…" : action.label}
-          </button>
+          <div className="flex items-center justify-end gap-2">
+            {o.status === "placed" && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeclineTarget(o);
+                }}
+                disabled={actioningId === o.id}
+                className="px-3 py-1.5 rounded-lg border border-[var(--border)] text-xs font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                Decline
+              </button>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                advance(o);
+              }}
+              disabled={actioningId === o.id}
+              className="px-3 py-1.5 rounded-lg bg-[var(--primary)] text-white text-xs font-medium hover:bg-[#5A0E25] transition-colors disabled:opacity-50"
+            >
+              {actioningId === o.id ? "Updating…" : action.label}
+            </button>
+          </div>
         );
       },
     },
@@ -222,9 +274,63 @@ export function OrdersBoard({ initialData }: { initialData: IncomingOrdersRespon
                 {actioningId === selected.id ? "Updating…" : NEXT_ACTION[selected.status]!.label}
               </button>
             )}
+
+            {selected.status === "placed" && (
+              <button
+                onClick={() => setDeclineTarget(selected)}
+                disabled={actioningId === selected.id}
+                className="w-full py-2.5 rounded-lg border border-[var(--border)] text-red-600 font-medium transition-colors hover:bg-red-50 disabled:opacity-50"
+              >
+                Decline order
+              </button>
+            )}
           </div>
         )}
       </Drawer>
+
+      <Modal
+        open={!!declineTarget}
+        onOpenChange={(open) => !open && closeDecline()}
+        title={`Decline order ${declineTarget?.pickupCode ?? ""}`}
+        footer={
+          <button
+            onClick={decline}
+            disabled={!declineValid || actioningId === declineTarget?.id}
+            className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+          >
+            {actioningId === declineTarget?.id ? "Declining…" : "Decline order"}
+          </button>
+        }
+      >
+        <fieldset className="space-y-2">
+          <legend className="text-sm text-[var(--muted-foreground)] mb-2">
+            The student is refunded in full and sees the reason you pick.
+          </legend>
+          {ORDER_DECLINE_REASONS.map((r) => (
+            <label key={r.value} className="flex items-center gap-2 text-sm text-[var(--foreground)] cursor-pointer">
+              <input
+                type="radio"
+                name="decline-reason"
+                value={r.value}
+                checked={declineReason === r.value}
+                onChange={() => setDeclineReason(r.value)}
+              />
+              {r.label}
+            </label>
+          ))}
+          {declineReason === "other" && (
+            <textarea
+              aria-label="Reason (shown to the student)"
+              value={declineNote}
+              onChange={(e) => setDeclineNote(e.target.value)}
+              maxLength={280}
+              rows={3}
+              className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+              placeholder="Tell the student why"
+            />
+          )}
+        </fieldset>
+      </Modal>
     </>
   );
 }

@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { VendorsService } from '../src/vendors/vendors.service';
 import { createConfigMock, createMatchingServiceMock, createNotificationsEmitterMock, createPrismaMock } from './support/mocks';
 
@@ -13,8 +14,16 @@ function makeService(configValues: Record<string, unknown> = {}) {
   // Task 67: empty by default — i.e. Pay on Delivery switched off, the
   // real launch default.
   const config = createConfigMock(configValues);
-  const service = new VendorsService(prisma as any, notifications as any, matching as any, campus as any, config as any);
-  return { service, prisma, notifications, matching, campus };
+  const escrow = { refund: jest.fn() };
+  const service = new VendorsService(
+    prisma as any,
+    notifications as any,
+    matching as any,
+    campus as any,
+    config as any,
+    escrow as any,
+  );
+  return { service, prisma, notifications, matching, campus, escrow };
 }
 
 describe('VendorsService menu ownership enforcement', () => {
@@ -488,9 +497,24 @@ describe('VendorsService.advanceOrderStatus', () => {
 
     expect(result.status).toBe('preparing');
     expect(prisma.order.update).toHaveBeenCalledWith({
-      where: { id: 'order-1' },
+      where: { id: 'order-1', status: 'placed' },
       data: { status: 'preparing', acceptedAt: expect.any(Date) },
     });
+  });
+
+  it('Task 61: accepting loses cleanly (409) if a concurrent decline already cancelled the order', async () => {
+    const { service, prisma, notifications, matching } = makeService();
+    prisma.vendor.findUnique.mockResolvedValue({ id: 'vendor-A' });
+    prisma.order.findUnique.mockResolvedValue({ id: 'order-1', vendorId: 'vendor-A', status: 'placed' });
+    prisma.order.update.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Record to update not found.', { code: 'P2025', clientVersion: 'test' }),
+    );
+
+    await expect(service.advanceOrderStatus('user-A', 'order-1', { status: 'preparing' })).rejects.toThrow(
+      ConflictException,
+    );
+    expect(notifications.emit).not.toHaveBeenCalled();
+    expect(matching.broadcastNewJob).not.toHaveBeenCalled();
   });
 
   it('allows preparing -> ready_for_pickup for the order\'s own vendor', async () => {
@@ -552,5 +576,114 @@ describe('VendorsService.advanceOrderStatus', () => {
     await service.advanceOrderStatus('user-A', 'order-1', { status: 'ready_for_pickup' });
 
     expect(matching.broadcastNewJob).not.toHaveBeenCalled();
+  });
+});
+
+describe('VendorsService.declineOrder (Task 61)', () => {
+  const placedWalletOrder = {
+    id: 'order-1',
+    vendorId: 'vendor-A',
+    studentUserId: 'student-1',
+    status: 'placed',
+    paymentMethod: 'wallet',
+  };
+
+  function setUp(order: Record<string, unknown> | null = placedWalletOrder) {
+    const ctx = makeService();
+    ctx.prisma.vendor.findUnique.mockResolvedValue({ id: 'vendor-A', businessName: 'Spice Garden' });
+    ctx.prisma.order.findUnique.mockResolvedValue(order);
+    ctx.escrow.refund.mockResolvedValue({ id: 'esc1', status: 'refunded', grossAmount: 250_000 });
+    return ctx;
+  }
+
+  it('refunds a wallet order in full through escrow.refund, writing the reason in the same transaction', async () => {
+    const { service, escrow, notifications } = setUp();
+
+    const result = await service.declineOrder('user-A', 'order-1', { reason: 'out_of_stock' });
+
+    expect(escrow.refund).toHaveBeenCalledWith('order-1', {
+      requireOrderStatus: 'placed',
+      orderData: { declinedAt: expect.any(Date), declineReason: 'out_of_stock', declineReasonNote: null },
+    });
+    expect(result).toEqual({
+      id: 'order-1',
+      status: 'cancelled',
+      declineReason: 'out_of_stock',
+      declineReasonNote: null,
+      refundedAmount: 250_000,
+    });
+    expect(notifications.emit).toHaveBeenCalledWith({
+      type: 'order_declined',
+      recipientUserId: 'student-1',
+      title: 'Order declined',
+      body: 'Spice Garden declined your order — "Out of stock". Your ₦2,500 refund is on its way back to your RUN IT wallet.',
+      data: { orderId: 'order-1', reason: 'out_of_stock', refunded: 'true' },
+    });
+  });
+
+  it("uses the restaurant's own free text for 'other', trimmed", async () => {
+    const { service, escrow, notifications } = setUp();
+
+    await service.declineOrder('user-A', 'order-1', { reason: 'other', note: '  Gas ran out  ' });
+
+    expect(escrow.refund).toHaveBeenCalledWith(
+      'order-1',
+      expect.objectContaining({ orderData: expect.objectContaining({ declineReason: 'other', declineReasonNote: 'Gas ran out' }) }),
+    );
+    expect(notifications.emit).toHaveBeenCalledWith(
+      expect.objectContaining({ body: expect.stringContaining('"Gas ran out"') }),
+    );
+  });
+
+  it('never persists a note for a fixed reason, even if one was sent', async () => {
+    const { service, escrow } = setUp();
+
+    await service.declineOrder('user-A', 'order-1', { reason: 'too_busy', note: 'ignored' });
+
+    expect(escrow.refund).toHaveBeenCalledWith(
+      'order-1',
+      expect.objectContaining({ orderData: expect.objectContaining({ declineReasonNote: null }) }),
+    );
+  });
+
+  it("a Pay on Delivery order: closed out with no money refunded and an honest 'not charged' message", async () => {
+    const { service, escrow, notifications } = setUp({ ...placedWalletOrder, paymentMethod: 'pay_on_delivery' });
+
+    const result = await service.declineOrder('user-A', 'order-1', { reason: 'kitchen_closed' });
+
+    expect(escrow.refund).toHaveBeenCalledTimes(1);
+    expect(result.refundedAmount).toBe(0);
+    const event = notifications.emit.mock.calls[0][0];
+    expect(event.body).toBe('Spice Garden declined your order — "Kitchen closed". You haven\'t been charged for it.');
+    expect(event.body).not.toMatch(/refund/i);
+    expect(event.data.refunded).toBe('false');
+  });
+
+  it("rejects declining another vendor's order", async () => {
+    const { service, escrow, notifications } = setUp({ ...placedWalletOrder, vendorId: 'vendor-B' });
+
+    await expect(service.declineOrder('user-A', 'order-1', { reason: 'too_busy' })).rejects.toThrow(ForbiddenException);
+    expect(escrow.refund).not.toHaveBeenCalled();
+    expect(notifications.emit).not.toHaveBeenCalled();
+  });
+
+  it('rejects declining an order that has already been accepted', async () => {
+    const { service, escrow } = setUp({ ...placedWalletOrder, status: 'preparing' });
+
+    await expect(service.declineOrder('user-A', 'order-1', { reason: 'too_busy' })).rejects.toThrow(ConflictException);
+    expect(escrow.refund).not.toHaveBeenCalled();
+  });
+
+  it('404s for an unknown order', async () => {
+    const { service } = setUp(null);
+    await expect(service.declineOrder('user-A', 'nope', { reason: 'too_busy' })).rejects.toThrow(NotFoundException);
+  });
+
+  it('sends no notification if the refund itself fails (e.g. lost a race with an accept)', async () => {
+    const { service, escrow, notifications } = setUp();
+    escrow.refund.mockRejectedValue(new ConflictException('Order order-1 is no longer placed'));
+
+    await expect(service.declineOrder('user-A', 'order-1', { reason: 'too_busy' })).rejects.toThrow(ConflictException);
+    expect(notifications.emit).not.toHaveBeenCalled();
   });
 });

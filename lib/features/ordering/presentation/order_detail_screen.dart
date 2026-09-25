@@ -258,7 +258,7 @@ class _CancelledSummary extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Order cancelled',
+                order.isDeclined ? 'Declined by ${order.vendorName}' : 'Order cancelled',
                 style: Theme.of(
                   context,
                 ).textTheme.titleLarge?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w700),
@@ -268,6 +268,14 @@ class _CancelledSummary extends StatelessWidget {
                   formatter.format(order.cancelledAt!),
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
                 ),
+              // Task 61: the restaurant's own stated reason, word for word.
+              if (order.declineReasonLabel != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Reason: ${order.declineReasonLabel}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.inkText),
+                ),
+              ],
               const SizedBox(height: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -276,7 +284,7 @@ class _CancelledSummary extends StatelessWidget {
                   borderRadius: BorderRadius.circular(AppRadius.pill),
                 ),
                 child: Text(
-                  '${naira(order.totalKobo ~/ 100)} refunded',
+                  order.wasPrepaid ? '${naira(order.totalKobo ~/ 100)} refunded' : "You weren't charged",
                   style: Theme.of(
                     context,
                   ).textTheme.labelSmall?.copyWith(color: AppColors.success, fontWeight: FontWeight.w600),

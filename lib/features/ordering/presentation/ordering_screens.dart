@@ -935,6 +935,17 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     final session = ref.watch(orderTrackingProvider);
     final stage = session.stage;
     if (stage == null) return const _NoActiveOrder();
+    final declined = session.declined;
+    if (declined != null) {
+      return _DeclinedOrder(
+        info: declined,
+        onDone: () {
+          unawaited(ref.read(orderHistoryProvider.notifier).refresh());
+          ref.read(orderTrackingProvider.notifier).resetOrder();
+          context.go(AppRoutes.studentOrders);
+        },
+      );
+    }
 
     final delivered = stage == OrderStage.delivered;
     final confirmed = stage == OrderStage.confirmed;
@@ -1519,6 +1530,67 @@ class _EnjoyYourMealMessage extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Task 61: replaces the live tracker once the real backend reports the
+/// restaurant declined the order — their stated reason, and exactly what
+/// happened to the student's money.
+class _DeclinedOrder extends StatelessWidget {
+  const _DeclinedOrder({required this.info, required this.onDone});
+  final DeclinedOrderInfo info;
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Track your order'), automaticallyImplyLeading: false),
+    body: SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 24, AppSpacing.lg, 24),
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(color: AppColors.accentRose, shape: BoxShape.circle),
+            child: const Icon(Icons.cancel_outlined, color: AppColors.primaryMaroon, size: 28),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Order declined',
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: OrderingColors.text(context)),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "${info.vendorName} couldn't take your order.",
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: OrderingColors.muted(context)),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'Reason: ${info.reason}',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: OrderingColors.text(context)),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.successBackground,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: Text(
+              info.refundedKobo > 0
+                  ? 'Your ${naira(info.refundedKobo ~/ 100)} refund is on its way back to your RUN IT wallet.'
+                  : "You haven't been charged for this order.",
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.success, fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(height: 24),
+          PrimaryButton(label: 'Back to My Orders', onPressed: onDone),
+        ],
+      ),
+    ),
+  );
 }
 
 class _NoActiveOrder extends StatelessWidget {

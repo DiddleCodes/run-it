@@ -118,6 +118,16 @@ enum OrderType {
   group
 }
 
+// Task 61: the fixed set a restaurant picks from when declining a `placed`
+// order (VendorsService.declineOrder). `other` requires free text in
+// Order.declineReasonNote; the rest never carry one.
+enum OrderDeclineReason {
+  out_of_stock
+  kitchen_closed
+  too_busy
+  other
+}
+
 // Task 47: whether a runner's reported cash collection for a Pay on
 // Delivery order has been squared with the platform. `disputed` means the
 // runner reported collecting something other than the order total — see
@@ -499,6 +509,14 @@ model Order {
   deliveredAt DateTime? @map("delivered_at")
   cancelledAt DateTime? @map("cancelled_at")
 
+  // Task 61: set only when the restaurant declined the order (always
+  // alongside status 'cancelled' + cancelledAt, in the same transaction as
+  // the escrow refund) — a student's own cancellation leaves all three
+  // null, which is how the two are told apart.
+  declinedAt        DateTime?           @map("declined_at")
+  declineReason     OrderDeclineReason? @map("decline_reason")
+  declineReasonNote String?             @map("decline_reason_note")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -808,6 +826,7 @@ model ReconciliationResolution {
 enum NotificationType {
   order_placed
   order_accepted
+  order_declined
   order_picked_up
   order_delivered
   account_suspended

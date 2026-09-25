@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/vendors_repository.dart';
 import '../../auth/application/auth_controller.dart';
+import '../../ordering/domain/order_decline.dart';
 import '../domain/vendor_dashboard_models.dart';
 
 /// The Orders tab's own list — defaults to the live kitchen queue (no
@@ -50,6 +51,20 @@ class RestaurantOrdersController extends AsyncNotifier<VendorOrdersPage> {
     await ref
         .read(vendorsRepositoryProvider)
         .advanceOrderStatus(orderId: orderId, status: newStatus, token: session.accessToken);
+    await refresh();
+  }
+
+  /// Task 61: same contract as [advanceStatus] — throws on failure, and
+  /// only resolves once the refetched list confirms the order left the
+  /// queue.
+  Future<void> declineOrder(String orderId, OrderDeclineReason reason, {String? note}) async {
+    final session = ref.read(authControllerProvider);
+    if (session == null) {
+      throw StateError('declineOrder() called with no active session');
+    }
+    await ref
+        .read(vendorsRepositoryProvider)
+        .declineOrder(orderId: orderId, reason: reason, note: note, token: session.accessToken);
     await refresh();
   }
 }

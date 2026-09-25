@@ -1085,4 +1085,32 @@ describe('OrderEscrowService.refund', () => {
       data: { status: 'cancelled', cancelledAt: expect.any(Date) },
     });
   });
+
+  it('Task 61: a required order status + extra order fields are applied in the same order write', async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue({ ...heldEscrow });
+    prisma.walletTransaction.findUniqueOrThrow.mockResolvedValue({ id: 'wt1', walletId: 'w1' });
+    prisma.orderEscrow.updateMany.mockResolvedValue({ count: 1 });
+    prisma.order.updateMany.mockResolvedValue({ count: 1 });
+    prisma.orderEscrow.findUniqueOrThrow.mockResolvedValue({ ...heldEscrow, status: 'refunded' });
+
+    await service.refund('order-1', { requireOrderStatus: 'placed', orderData: { declineReason: 'too_busy' } });
+
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'order-1', status: 'placed' },
+      data: { declineReason: 'too_busy', status: 'cancelled', cancelledAt: expect.any(Date) },
+    });
+  });
+
+  it('Task 61: throws (rolling the whole refund back) when the order is no longer in the required status', async () => {
+    const { service, prisma } = makeService();
+    prisma.orderEscrow.findUnique.mockResolvedValue({ ...heldEscrow });
+    prisma.walletTransaction.findUniqueOrThrow.mockResolvedValue({ id: 'wt1', walletId: 'w1' });
+    prisma.orderEscrow.updateMany.mockResolvedValue({ count: 1 });
+    // e.g. the restaurant accepted it (placed -> preparing) a moment earlier
+    prisma.order.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(service.refund('order-1', { requireOrderStatus: 'placed' })).rejects.toThrow(ConflictException);
+    expect(prisma.orderEscrow.findUniqueOrThrow).not.toHaveBeenCalled();
+  });
 });

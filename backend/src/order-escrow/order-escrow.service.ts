@@ -508,7 +508,16 @@ export class OrderEscrowService {
     return releasedEscrow;
   }
 
-  async refund(orderId: string): Promise<OrderEscrow> {
+  // Task 61: [options] lets a caller that's cancelling for its own reason
+  // (VendorsService.declineOrder) ride the exact same refund mechanics as a
+  // student cancellation while adding two things atomically inside this
+  // one transaction: a precondition on the order's current status (a
+  // restaurant decline must lose to a concurrent accept, never refund an
+  // order the kitchen already started) and its own extra order fields.
+  async refund(
+    orderId: string,
+    options: { requireOrderStatus?: OrderStatus; orderData?: Prisma.OrderUpdateManyMutationInput } = {},
+  ): Promise<OrderEscrow> {
     const escrow = await this.findByOrderId(orderId);
     if (escrow.status !== 'held') {
       throw new ConflictException(`Escrow for order ${orderId} is ${escrow.status}, not held — nothing to refund`);
@@ -557,10 +566,14 @@ export class OrderEscrowService {
       // never turn a successful refund into a thrown error. Safe to set
       // cancelledAt unconditionally — the `status: 'held'` guard above
       // ensures this transaction body only ever runs once per order.
-      await tx.order.updateMany({
-        where: { id: orderId },
-        data: { status: 'cancelled', cancelledAt: new Date() },
+      const cancelled = await tx.order.updateMany({
+        where: { id: orderId, ...(options.requireOrderStatus ? { status: options.requireOrderStatus } : {}) },
+        data: { ...options.orderData, status: 'cancelled', cancelledAt: new Date() },
       });
+      // Throwing here rolls back the escrow flip and wallet credit above.
+      if (options.requireOrderStatus && cancelled.count === 0) {
+        throw new ConflictException(`Order ${orderId} is no longer ${options.requireOrderStatus} — nothing was refunded`);
+      }
 
       return tx.orderEscrow.findUniqueOrThrow({ where: { id: escrow.id } });
     });

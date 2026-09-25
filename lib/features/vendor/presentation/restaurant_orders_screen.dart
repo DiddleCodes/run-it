@@ -7,6 +7,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_notification.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/skeleton.dart';
+import '../../ordering/domain/order_decline.dart';
 import '../../ordering/presentation/widgets/ordering_components.dart' show naira;
 import '../application/restaurant_orders_controller.dart';
 import '../domain/vendor_dashboard_models.dart';
@@ -84,10 +85,46 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
     }
   }
 
+  /// Task 61: offered only alongside the accept action on a `placed`
+  /// order. The sheet returns the chosen reason; nothing is sent until the
+  /// restaurant confirms it there.
+  Future<void> _decline() async {
+    final choice = await showModalBottomSheet<_DeclineChoice>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+      ),
+      builder: (_) => const _DeclineSheet(),
+    );
+    if (choice == null || !mounted) return;
+
+    setState(() => _advancing = true);
+    try {
+      await ref
+          .read(restaurantOrdersProvider.notifier)
+          .declineOrder(widget.order.id, choice.reason, note: choice.note);
+      if (!mounted) return;
+      ref.read(appNotificationProvider.notifier).success('Order declined. The student has been notified.');
+    } catch (e) {
+      if (!mounted) return;
+      ref
+          .read(appNotificationProvider.notifier)
+          .error(
+            e is ApiException ? e.message : "Couldn't reach the server. Check your connection and try again.",
+          );
+    } finally {
+      if (mounted) setState(() => _advancing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final order = widget.order;
     final nextAction = order.status.nextVendorAction;
+    final canDecline = order.status == RestaurantOrderStatus.placed;
+    final declinedBecause = declineReasonText(order.declineReason, order.declineReasonNote);
     final showPickupCode =
         order.status == RestaurantOrderStatus.readyForPickup || order.status == RestaurantOrderStatus.pickedUp;
 
@@ -169,15 +206,37 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
               if (showPickupCode) _PickupCodeBadge(code: order.pickupCode),
             ],
           ),
+          if (declinedBecause != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'Declined: $declinedBecause',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.mutedText),
+              ),
+            ),
           if (nextAction != null) ...[
             const SizedBox(height: AppSpacing.md),
-            SizedBox(
-              width: double.infinity,
-              child: PrimaryButton(
-                label: order.status.nextActionLabel,
-                loading: _advancing,
-                onPressed: _advancing ? null : () => _advance(nextAction),
-              ),
+            Row(
+              children: [
+                if (canDecline) ...[
+                  Expanded(
+                    child: PrimaryButton(
+                      label: 'Decline',
+                      style: PrimaryButtonStyle.outlined,
+                      onPressed: _advancing ? null : _decline,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(
+                  flex: canDecline ? 2 : 1,
+                  child: PrimaryButton(
+                    label: order.status.nextActionLabel,
+                    loading: _advancing,
+                    onPressed: _advancing ? null : () => _advance(nextAction),
+                  ),
+                ),
+              ],
             ),
           ],
         ],
@@ -308,6 +367,99 @@ class _ErrorState extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _DeclineChoice {
+  const _DeclineChoice(this.reason, this.note);
+  final OrderDeclineReason reason;
+  final String? note;
+}
+
+/// Task 61: pick exactly one reason; "Other" requires free text before
+/// Decline enables. Pops a [_DeclineChoice], or nothing if dismissed.
+class _DeclineSheet extends StatefulWidget {
+  const _DeclineSheet();
+
+  @override
+  State<_DeclineSheet> createState() => _DeclineSheetState();
+}
+
+class _DeclineSheetState extends State<_DeclineSheet> {
+  OrderDeclineReason? _reason;
+  final _note = TextEditingController();
+
+  @override
+  void dispose() {
+    _note.dispose();
+    super.dispose();
+  }
+
+  bool get _valid =>
+      _reason != null && (_reason != OrderDeclineReason.other || _note.text.trim().isNotEmpty);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        20,
+        AppSpacing.lg,
+        MediaQuery.of(context).viewInsets.bottom + AppSpacing.lg,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Decline this order?',
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: AppColors.inkText, fontSize: 19),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "The student is refunded in full and sees the reason you pick.",
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
+          ),
+          const SizedBox(height: 8),
+          RadioGroup<OrderDeclineReason>(
+            groupValue: _reason,
+            onChanged: (value) => setState(() => _reason = value),
+            child: Column(
+              children: [
+                for (final reason in OrderDeclineReason.values)
+                  RadioListTile<OrderDeclineReason>(
+                    value: reason,
+                    title: Text(reason.label),
+                    contentPadding: EdgeInsets.zero,
+                    activeColor: AppColors.accentForest,
+                  ),
+              ],
+            ),
+          ),
+          if (_reason == OrderDeclineReason.other)
+            TextField(
+              controller: _note,
+              autofocus: true,
+              maxLength: 280,
+              decoration: const InputDecoration(hintText: 'Tell the student why'),
+              onChanged: (_) => setState(() {}),
+            ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: PrimaryButton(
+              label: 'Decline order',
+              onPressed: _valid
+                  ? () => Navigator.pop(
+                      context,
+                      _DeclineChoice(_reason!, _reason == OrderDeclineReason.other ? _note.text.trim() : null),
+                    )
+                  : null,
+            ),
+          ),
+        ],
       ),
     );
   }

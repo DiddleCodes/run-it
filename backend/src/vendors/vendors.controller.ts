@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/jwt-payload.interface';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
+import { DeclineOrderDto } from './dto/decline-order.dto';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
 import { ListVendorsQueryDto } from './dto/list-vendors-query.dto';
 import { MetricsQueryDto } from './dto/metrics-query.dto';
@@ -126,5 +127,15 @@ export class VendorsController {
   ) {
     assertCanActAsVendor(user);
     return this.vendors.advanceOrderStatus(user.sub, orderId, dto);
+  }
+
+  // Task 61: the alternative to accepting a `placed` order — cancels it
+  // with a stated reason and refunds the student (see
+  // VendorsService.declineOrder).
+  @Post('me/orders/:orderId/decline')
+  @UseGuards(JwtAuthGuard)
+  declineOrder(@CurrentUser() user: JwtPayload, @Param('orderId') orderId: string, @Body() dto: DeclineOrderDto) {
+    assertCanActAsVendor(user);
+    return this.vendors.declineOrder(user.sub, orderId, dto);
   }
 }

@@ -73,8 +73,14 @@ class _MyOrdersScreenState extends ConsumerState<MyOrdersScreen> {
     // limitation rather than fabricated history).
     final hasActiveOrder =
         session.isActive &&
+        session.declined == null &&
         session.stage != OrderStage.delivered &&
         session.stage != OrderStage.confirmed;
+    // Task 61: a restaurant decline moves the order straight into the real
+    // Cancelled history — refetch the moment it's detected.
+    ref.listen(orderTrackingProvider.select((s) => s.declined != null), (wasDeclined, isDeclined) {
+      if (isDeclined && wasDeclined != true) ref.read(orderHistoryProvider.notifier).refresh();
+    });
     final history = ref.watch(orderHistoryProvider);
 
     return Scaffold(
@@ -612,7 +618,7 @@ class _CancelledOrdersTab extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        'Cancelled ${formatter.format(entry.cancelledAt!)}',
+                        '${entry.isDeclined ? 'Declined by restaurant' : 'Cancelled'} ${formatter.format(entry.cancelledAt!)}',
                         style: Theme.of(
                           context,
                         ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
@@ -624,23 +630,25 @@ class _CancelledOrdersTab extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '+${naira(entry.totalKobo ~/ 100)}',
+                      entry.wasPrepaid ? '+${naira(entry.totalKobo ~/ 100)}' : 'Not charged',
                       style: Theme.of(context).textTheme.labelLarge
                           ?.copyWith(color: AppColors.success, fontWeight: FontWeight.w700),
                     ),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppColors.successBackground,
-                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                    if (entry.wasPrepaid) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.successBackground,
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                        ),
+                        child: Text(
+                          'Refunded',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: AppColors.success, fontWeight: FontWeight.w600),
+                        ),
                       ),
-                      child: Text(
-                        'Refunded',
-                        style: Theme.of(context).textTheme.labelSmall
-                            ?.copyWith(color: AppColors.success, fontWeight: FontWeight.w600),
-                      ),
-                    ),
+                    ],
                   ],
                 ),
               ],

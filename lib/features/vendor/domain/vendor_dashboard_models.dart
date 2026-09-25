@@ -1,3 +1,5 @@
+import '../../ordering/domain/order_decline.dart';
+
 /// Task 12's Restaurant Dashboard order lifecycle — mirrors the backend's
 /// `OrderStatus` enum exactly (see `schema.prisma`'s own doc comment there
 /// for the full placed → preparing → ready_for_pickup → picked_up →
@@ -80,6 +82,8 @@ class RestaurantOrder {
     this.note,
     required this.createdAt,
     required this.items,
+    this.declineReason,
+    this.declineReasonNote,
   });
   final String id;
   final RestaurantOrderStatus status;
@@ -91,6 +95,9 @@ class RestaurantOrder {
   final String? note;
   final DateTime createdAt;
   final List<RestaurantOrderItem> items;
+  // Task 61: set only on an order this restaurant declined.
+  final OrderDeclineReason? declineReason;
+  final String? declineReasonNote;
 
   factory RestaurantOrder.fromJson(Map<String, dynamic> json) => RestaurantOrder(
     id: json['id'] as String,
@@ -103,6 +110,8 @@ class RestaurantOrder {
     items: (json['items'] as List)
         .map((e) => RestaurantOrderItem.fromJson(e as Map<String, dynamic>))
         .toList(),
+    declineReason: OrderDeclineReasonJson.tryParse(json['declineReason'] as String?),
+    declineReasonNote: json['declineReasonNote'] as String?,
   );
 }
 

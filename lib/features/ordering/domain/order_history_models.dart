@@ -1,3 +1,5 @@
+import 'order_decline.dart';
+
 /// One line item on a real, backend-persisted order — shared by both the
 /// history list and the detail fetch (Task 46), same convention as the
 /// vendor side's `RestaurantOrderItem`.
@@ -37,6 +39,10 @@ class OrderHistoryEntry {
     this.pickedUpAt,
     this.deliveredAt,
     this.cancelledAt,
+    this.paymentMethod,
+    this.declinedAt,
+    this.declineReason,
+    this.declineReasonNote,
   });
 
   final String id;
@@ -56,6 +62,21 @@ class OrderHistoryEntry {
   final DateTime? pickedUpAt;
   final DateTime? deliveredAt;
   final DateTime? cancelledAt;
+  // Task 61: 'wallet' | 'pay_on_delivery'; null only from an older backend.
+  final String? paymentMethod;
+  // Task 61: set only when the restaurant declined the order (a student's
+  // own cancellation leaves these null).
+  final DateTime? declinedAt;
+  final OrderDeclineReason? declineReason;
+  final String? declineReasonNote;
+
+  bool get isDeclined => declinedAt != null;
+
+  /// Whether cancelling this order moved money back to the student — false
+  /// only for Pay on Delivery, which never charged anything up front.
+  bool get wasPrepaid => paymentMethod != 'pay_on_delivery';
+
+  String? get declineReasonLabel => declineReasonText(declineReason, declineReasonNote);
 
   String get itemsSummary =>
       items.map((line) => '${line.quantity}× ${line.name}').join(', ');
@@ -79,6 +100,10 @@ class OrderHistoryEntry {
         pickedUpAt: _parseNullable(json['pickedUpAt']),
         deliveredAt: _parseNullable(json['deliveredAt']),
         cancelledAt: _parseNullable(json['cancelledAt']),
+        paymentMethod: json['paymentMethod'] as String?,
+        declinedAt: _parseNullable(json['declinedAt']),
+        declineReason: OrderDeclineReasonJson.tryParse(json['declineReason'] as String?),
+        declineReasonNote: json['declineReasonNote'] as String?,
       );
 }
 

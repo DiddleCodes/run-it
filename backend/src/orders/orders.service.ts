@@ -236,6 +236,13 @@ export class OrdersService {
       pickedUpAt: order.pickedUpAt,
       deliveredAt: order.deliveredAt,
       cancelledAt: order.cancelledAt,
+      // Task 61: lets a cancelled/declined order say honestly whether money
+      // was refunded (wallet) or never taken (Pay on Delivery).
+      paymentMethod: order.paymentMethod,
+      // Task 61: null unless the restaurant declined it.
+      declinedAt: order.declinedAt,
+      declineReason: order.declineReason,
+      declineReasonNote: order.declineReasonNote,
     };
   }
 
@@ -274,6 +281,13 @@ export class OrdersService {
         pickedUpAt: order.pickedUpAt,
         deliveredAt: order.deliveredAt,
         cancelledAt: order.cancelledAt,
+        // Task 61: lets a cancelled/declined order say honestly whether money
+        // was refunded (wallet) or never taken (Pay on Delivery).
+        paymentMethod: order.paymentMethod,
+        // Task 61: null unless the restaurant declined it.
+        declinedAt: order.declinedAt,
+        declineReason: order.declineReason,
+        declineReasonNote: order.declineReasonNote,
       })),
       total,
       page,

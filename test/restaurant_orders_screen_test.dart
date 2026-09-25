@@ -4,8 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:run_it/core/network/api_exception.dart';
 import 'package:run_it/core/network/vendors_repository.dart';
 import 'package:run_it/core/widgets/app_notification.dart';
+import 'package:run_it/core/widgets/primary_button.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
+import 'package:run_it/features/ordering/domain/order_decline.dart';
 import 'package:run_it/features/vendor/domain/vendor_dashboard_models.dart';
 import 'package:run_it/features/vendor/presentation/restaurant_orders_screen.dart';
 
@@ -53,6 +55,24 @@ class _FakeVendorsRepository extends VendorsRepository {
   _FakeVendorsRepository(this.orders);
   final List<RestaurantOrder> orders;
   bool failNextAdvance = false;
+  bool failNextDecline = false;
+  final List<(String, OrderDeclineReason, String?)> declineCalls = [];
+
+  /// Task 61: mirrors the backend — a declined order is cancelled, which
+  /// drops it out of the default kitchen queue.
+  @override
+  Future<void> declineOrder({
+    required String orderId,
+    required OrderDeclineReason reason,
+    String? note,
+    required String token,
+  }) async {
+    if (failNextDecline) {
+      throw const ApiException(409, 'Cannot decline order — it is currently "preparing", not "placed"');
+    }
+    declineCalls.add((orderId, reason, note));
+    orders.removeWhere((o) => o.id == orderId);
+  }
 
   @override
   Future<VendorOrdersPage> fetchOrders({
@@ -170,5 +190,109 @@ void main() {
     expect(repo.orders.single.status, RestaurantOrderStatus.placed);
     expect(find.text('New'), findsOneWidget);
     expect(find.text('Start Preparing'), findsOneWidget);
+  });
+
+  group('Task 61: declining an order', () {
+    Future<void> openDeclineSheet(WidgetTester tester) async {
+      await tester.tap(find.text('Decline'));
+      await tester.pumpAndSettle();
+      expect(find.text('Decline this order?'), findsOneWidget);
+    }
+
+    PrimaryButton confirmButton(WidgetTester tester) =>
+        tester.widget<PrimaryButton>(find.widgetWithText(PrimaryButton, 'Decline order'));
+
+    testWidgets('Decline is offered next to Start Preparing on a new order only', (tester) async {
+      final repo = _FakeVendorsRepository([
+        _order(id: 'order-1', status: RestaurantOrderStatus.placed),
+        _order(id: 'order-2', status: RestaurantOrderStatus.preparing),
+      ]);
+      await tester.pumpWidget(_harness(repo));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('Decline'), findsOneWidget);
+      expect(find.text('Start Preparing'), findsOneWidget);
+      expect(find.text('Mark Ready for Pickup'), findsOneWidget);
+    });
+
+    testWidgets('picking a fixed reason declines the order and it leaves the queue', (tester) async {
+      final repo = _FakeVendorsRepository([_order(id: 'order-1', status: RestaurantOrderStatus.placed)]);
+      await tester.pumpWidget(_harness(repo));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await openDeclineSheet(tester);
+      for (final label in ['Out of stock', 'Kitchen closed', 'Too busy', 'Other']) {
+        expect(find.text(label), findsOneWidget);
+      }
+      expect(confirmButton(tester).onPressed, isNull);
+
+      await tester.tap(find.text('Kitchen closed'));
+      await tester.pump();
+      expect(confirmButton(tester).onPressed, isNotNull);
+
+      await tester.tap(find.text('Decline order'));
+      await tester.pumpAndSettle();
+
+      expect(repo.declineCalls, [('order-1', OrderDeclineReason.kitchenClosed, null)]);
+      expect(find.text('Order declined. The student has been notified.'), findsOneWidget);
+      expect(find.text('Start Preparing'), findsNothing);
+    });
+
+    testWidgets("'Other' requires real free text, sent trimmed", (tester) async {
+      final repo = _FakeVendorsRepository([_order(id: 'order-1', status: RestaurantOrderStatus.placed)]);
+      await tester.pumpWidget(_harness(repo));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await openDeclineSheet(tester);
+      await tester.tap(find.text('Other'));
+      await tester.pump();
+      expect(confirmButton(tester).onPressed, isNull);
+
+      await tester.enterText(find.byType(TextField), '   ');
+      await tester.pump();
+      expect(confirmButton(tester).onPressed, isNull);
+
+      await tester.enterText(find.byType(TextField), '  Gas ran out ');
+      await tester.pump();
+      await tester.tap(find.text('Decline order'));
+      await tester.pumpAndSettle();
+
+      expect(repo.declineCalls, [('order-1', OrderDeclineReason.other, 'Gas ran out')]);
+    });
+
+    testWidgets('dismissing the sheet sends nothing', (tester) async {
+      final repo = _FakeVendorsRepository([_order(id: 'order-1', status: RestaurantOrderStatus.placed)]);
+      await tester.pumpWidget(_harness(repo));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await openDeclineSheet(tester);
+      await tester.tap(find.text('Too busy'));
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+
+      expect(repo.declineCalls, isEmpty);
+      expect(find.text('Start Preparing'), findsOneWidget);
+    });
+
+    testWidgets('a rejected decline shows the real backend error and keeps the order', (tester) async {
+      final repo = _FakeVendorsRepository([_order(id: 'order-1', status: RestaurantOrderStatus.placed)])
+        ..failNextDecline = true;
+      await tester.pumpWidget(_harness(repo));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await openDeclineSheet(tester);
+      await tester.tap(find.text('Too busy'));
+      await tester.pump();
+      await tester.tap(find.text('Decline order'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('currently "preparing"'), findsOneWidget);
+      expect(find.text('Start Preparing'), findsOneWidget);
+    });
   });
 }

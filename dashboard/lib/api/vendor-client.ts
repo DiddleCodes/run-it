@@ -37,6 +37,17 @@ function extractMessage(message: unknown): string {
 
 export type OrderStatus = "placed" | "preparing" | "ready_for_pickup" | "picked_up" | "delivered" | "cancelled";
 
+// Task 61: mirrors the backend's OrderDeclineReason enum. `note` is
+// required (and only sent) for "other".
+export type OrderDeclineReason = "out_of_stock" | "kitchen_closed" | "too_busy" | "other";
+
+export const ORDER_DECLINE_REASONS: { value: OrderDeclineReason; label: string }[] = [
+  { value: "out_of_stock", label: "Out of stock" },
+  { value: "kitchen_closed", label: "Kitchen closed" },
+  { value: "too_busy", label: "Too busy" },
+  { value: "other", label: "Other" },
+];
+
 export interface VendorCategory {
   slug: string;
   label: string;
@@ -171,6 +182,11 @@ export const vendorClient = {
   },
   updateOrderStatus: (orderId: string, status: "preparing" | "ready_for_pickup") =>
     proxyFetch(`vendors/me/orders/${orderId}/status`, { method: "PATCH", body: { status } }),
+  declineOrder: (orderId: string, reason: OrderDeclineReason, note?: string) =>
+    proxyFetch(`vendors/me/orders/${orderId}/decline`, {
+      method: "POST",
+      body: reason === "other" ? { reason, note: note?.trim() } : { reason },
+    }),
 
   getMetrics: (params: { from?: string; to?: string } = {}) => {
     const search = new URLSearchParams();
