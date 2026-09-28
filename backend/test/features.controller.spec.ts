@@ -1,4 +1,5 @@
 import { FeaturesController } from '../src/features/features.controller';
+import { PricingController } from '../src/features/pricing.controller';
 import configuration from '../src/config/configuration';
 import { createConfigMock } from './support/mocks';
 
@@ -32,3 +33,17 @@ describe('configuration features.podEnabled (Task 67)', () => {
     expect(configuration().features.podEnabled).toBe(expected);
   });
 });
+
+describe('PricingController (Task 70)', () => {
+  it('serves the exact numbers hold() charges with', () => {
+    const config = createConfigMock({ 'escrow.serviceFeeRate': 0.05, 'escrow.defaultDeliveryFeeKobo': 50_000 });
+    expect(new PricingController(config as any).get()).toEqual({
+      serviceFeeRate: 0.05,
+      deliveryFeeKobo: 50_000,
+      groupOrderSurchargeKobo: 15_000,
+      standardMainMealCap: 2,
+      groupMainMealCap: 4,
+    });
+  });
+});
+

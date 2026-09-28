@@ -1,4 +1,4 @@
-import { computeCommissionShares } from '../src/order-escrow/commission.util';
+import { computeCommissionShares, computeServiceFeeKobo } from '../src/order-escrow/commission.util';
 
 const RATES = {
   restaurantCommissionRate: 0.15,
@@ -55,3 +55,24 @@ describe('computeCommissionShares', () => {
     );
   });
 });
+
+describe('computeServiceFeeKobo (Task 70)', () => {
+  it.each([
+    [100_000, 5_000], // ₦1,000 -> ₦50
+    [123_400, 6_200], // ₦1,234 -> ₦61.70 -> ₦62
+    [123_000, 6_200], // ₦1,230 -> ₦61.50 -> ₦62 (half rounds up)
+    [122_900, 6_100], // ₦1,229 -> ₦61.45 -> ₦61
+    [1_000, 100], // ₦10 -> ₦0.50 -> ₦1
+    [900, 0], // ₦9 -> ₦0.45 -> ₦0
+    [0, 0],
+  ])('5%% of %i kobo is %i kobo, to the nearest whole naira', (subtotal, expected) => {
+    expect(computeServiceFeeKobo(subtotal, 0.05)).toBe(expected);
+  });
+
+  it('is always a whole number of naira', () => {
+    for (let subtotal = 0; subtotal < 500_000; subtotal += 1_337) {
+      expect(computeServiceFeeKobo(subtotal, 0.05) % 100).toBe(0);
+    }
+  });
+});
+

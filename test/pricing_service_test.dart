@@ -46,8 +46,39 @@ void main() {
       expect(result.packagingTotal, 200);
       // Task 45: a single flat ₦500 fee — no more campus zones.
       expect(result.deliveryFee, 500);
-      expect(result.serviceFee, 150);
-      expect(result.total, 7750);
+      // Task 70: 5% of the food subtotal only (₦6,900 -> ₦345) — packaging
+      // and delivery never count toward it.
+      expect(result.serviceFee, 345);
+      expect(result.serviceFeePercentLabel, '5%');
+      expect(result.total, 6900 + 200 + 500 + 345);
+    });
+
+    // Task 70.
+    test('uses the backend-served rate and delivery fee when given', () {
+      const basket = Basket(
+        eateryId: 'tantalizers',
+        items: [BasketItem(menuItemId: 'malt', quantity: 1)],
+      );
+
+      final result = PricingService.calculate(
+        basket: basket,
+        menuItems: _menuItems,
+        config: const PricingConfig(serviceFeeRate: 0.1, deliveryFee: 600),
+      );
+
+      expect(result.serviceFee, 70);
+      expect(result.deliveryFee, 600);
+      expect(result.serviceFeePercentLabel, '10%');
+    });
+
+    test('serviceFeeFor rounds to the nearest whole naira, half up — same as the backend', () {
+      expect(PricingService.serviceFeeFor(1000, 0.05), 50);
+      expect(PricingService.serviceFeeFor(1234, 0.05), 62); // 61.70
+      expect(PricingService.serviceFeeFor(1230, 0.05), 62); // 61.50
+      expect(PricingService.serviceFeeFor(1229, 0.05), 61); // 61.45
+      expect(PricingService.serviceFeeFor(10, 0.05), 1); // 0.50
+      expect(PricingService.serviceFeeFor(9, 0.05), 0); // 0.45
+      expect(PricingService.serviceFeeFor(0, 0.05), 0);
     });
 
     test('does not apply fees to an empty basket', () {

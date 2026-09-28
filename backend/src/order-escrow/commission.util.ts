@@ -60,3 +60,18 @@ export function computeCommissionShares(
     restaurantPlatformFee: rates.restaurantPlatformFeeKobo,
   };
 }
+
+/**
+ * Task 70: the student-facing service fee — [rate] (e.g. 0.05) of the food
+ * subtotal only, rounded to the nearest whole naira (half up). Integer
+ * maths throughout (the rate as whole basis points), so this and the
+ * Flutter client's own copy (PricingService.serviceFeeFor) can never
+ * disagree by a kobo over floating-point rounding.
+ */
+export function computeServiceFeeKobo(foodSubtotalKobo: number, rate: number): number {
+  const basisPoints = Math.round(rate * 10_000);
+  // kobo * bps / 10_000 = fee in kobo; / 100 more = fee in naira.
+  const feeNaira = Math.floor((foodSubtotalKobo * basisPoints + 500_000) / 1_000_000);
+  return feeNaira * 100;
+}
+

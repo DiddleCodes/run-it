@@ -19,7 +19,7 @@ import { MatchingService } from '../matching/matching.service';
 import { NotificationsEmitterService } from '../notifications/notifications-emitter.service';
 import { PaystackService } from '../paystack/paystack.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { computeCommissionShares } from './commission.util';
+import { computeCommissionShares, computeServiceFeeKobo } from './commission.util';
 import { HoldEscrowDto } from './dto/hold-escrow.dto';
 import { generateVerificationCode } from '../orders/pin-code.util';
 
@@ -74,52 +74,90 @@ export class OrderEscrowService {
       throw new ForbiddenException("Pay on Delivery isn't available yet");
     }
 
-    const foodSubtotalKobo = dto.grossAmountKobo;
-    // Task 66: the flat delivery fee (Task 45) plus, for a group order, a
-    // flat additive surcharge — never a replacement for the base fee.
-    // dto.deliveryFeeKobo (or the configured default, same fallback as
-    // before this task) is always the BASE fee; the Flutter client never
-    // needs to compute the group-inflated total itself, and a direct API
-    // call can't under-pay a group order's surcharge by only adjusting
-    // deliveryFeeKobo — the surcharge is applied here regardless of what
-    // was sent.
-    const baseDeliveryFeeKobo =
-      dto.deliveryFeeKobo ?? (this.config.get<number>('escrow.defaultDeliveryFeeKobo') as number);
-    const deliveryFeeKobo = orderType === 'group' ? baseDeliveryFeeKobo + GROUP_ORDER_SURCHARGE_KOBO : baseDeliveryFeeKobo;
-    const serviceFeeKobo = dto.serviceFeeKobo ?? 0;
-    const totalAmountKobo = foodSubtotalKobo + deliveryFeeKobo + serviceFeeKobo;
+    // Task 70: every amount below is derived here from the database — the
+    // client's own item prices/subtotal/fees are only ever compared
+    // against, never charged. Items must all be real, currently available
+    // menu items of the one restaurant this order is for.
+    const lines = dto.items ?? [];
+    if (lines.length === 0 || lines.some((line) => !line.menuItemId)) {
+      throw new BadRequestException('An order must contain at least one menu item, and every line must be one.');
+    }
+    const requestedMenuItemIds = [...new Set(lines.map((line) => line.menuItemId))];
+    const menuItems = await this.prisma.menuItem.findMany({
+      where: { id: { in: requestedMenuItemIds } },
+      select: {
+        id: true,
+        name: true,
+        price: true,
+        isAvailable: true,
+        isMainMeal: true,
+        vendorId: true,
+        vendor: { select: { userId: true } },
+      },
+    });
+    const menuById = new Map(menuItems.map((item) => [item.id, item]));
+    if (requestedMenuItemIds.some((id) => !menuById.has(id))) {
+      throw new BadRequestException('One or more items are no longer on the menu — refresh your basket and try again.');
+    }
+    const orderVendorIds = new Set(menuItems.map((item) => item.vendorId));
+    if (
+      orderVendorIds.size !== 1 ||
+      menuItems[0].vendor.userId !== dto.restaurantUserId ||
+      (dto.vendorId !== undefined && dto.vendorId !== menuItems[0].vendorId)
+    ) {
+      throw new BadRequestException("These items aren't all on this restaurant's menu.");
+    }
+    const unavailable = menuItems.filter((item) => !item.isAvailable);
+    if (unavailable.length) {
+      throw new BadRequestException(
+        `${unavailable.map((item) => item.name).join(', ')} ${unavailable.length === 1 ? 'is' : 'are'} no longer available — remove ${unavailable.length === 1 ? 'it' : 'them'} to continue.`,
+      );
+    }
 
     // Task 66: the real, server-side anti-abuse enforcement — the checkout
     // UI's higher/lower cap is honest UX on top of this, never a
-    // substitute for it. Every item's isMainMeal is re-derived here from
-    // the database by menuItemId, never trusted from the client's own
-    // item name/price/quantity payload, so a direct API call can't stay
-    // 'standard' (or claim 'group') while smuggling more main meals past
-    // the real cap than its menu items actually justify. An item with no
-    // menuItemId (or one that no longer resolves to a real MenuItem row)
-    // can't be verified as a main meal, so it doesn't count — the real
-    // Flutter checkout always sends menuItemId for anything in the live
-    // menu it rendered.
+    // substitute for it. isMainMeal comes from the database rows above,
+    // never the client's payload.
     const cap = orderType === 'group' ? GROUP_MAIN_MEAL_CAP : STANDARD_MAIN_MEAL_CAP;
-    const requestedMenuItemIds = [...new Set((dto.items ?? []).map((item) => item.menuItemId).filter((id): id is string => !!id))];
-    const mainMealMenuItems = requestedMenuItemIds.length
-      ? await this.prisma.menuItem.findMany({
-          where: { id: { in: requestedMenuItemIds }, isMainMeal: true },
-          select: { id: true },
-        })
-      : [];
-    const mainMealIds = new Set(mainMealMenuItems.map((item) => item.id));
-    const mainMealCount = (dto.items ?? []).reduce(
-      (sum, item) => sum + (item.menuItemId && mainMealIds.has(item.menuItemId) ? item.quantity : 0),
+    const mainMealCount = lines.reduce(
+      (sum, line) => sum + (menuById.get(line.menuItemId)!.isMainMeal ? line.quantity : 0),
       0,
     );
     if (mainMealCount > cap) {
       throw new BadRequestException(
         orderType === 'group'
-          ? `Group orders can include at most ${GROUP_MAIN_MEAL_CAP} main meals (this basket has ${mainMealCount}).`
+          ? `Group orders can include at most ${GROUP_MAIN_MEAL_CAP} main meals (this basket has ${mainMealCount}). Place a second order for the rest.`
           : `Standard orders can include at most ${STANDARD_MAIN_MEAL_CAP} main meals (this basket has ${mainMealCount}). Switch to Group Order to add more.`,
       );
     }
+
+    const foodSubtotalKobo = lines.reduce((sum, line) => sum + menuById.get(line.menuItemId)!.price * line.quantity, 0);
+    if (dto.grossAmountKobo !== undefined && dto.grossAmountKobo !== foodSubtotalKobo) {
+      throw new ConflictException('Menu prices have changed since your basket was loaded — refresh it and try again.');
+    }
+
+    // Task 45/66: a single flat delivery fee, plus a flat additive
+    // surcharge for a group order — never a replacement for the base fee.
+    // Task 70: server-authoritative — a client-sent base fee that differs
+    // from the configured one is rejected, never charged.
+    const baseDeliveryFeeKobo = this.config.get<number>('escrow.defaultDeliveryFeeKobo') as number;
+    if (dto.deliveryFeeKobo !== undefined && dto.deliveryFeeKobo !== baseDeliveryFeeKobo) {
+      throw new BadRequestException(`The delivery fee is ₦${baseDeliveryFeeKobo / 100} — refresh your basket and try again.`);
+    }
+    const deliveryFeeKobo = orderType === 'group' ? baseDeliveryFeeKobo + GROUP_ORDER_SURCHARGE_KOBO : baseDeliveryFeeKobo;
+
+    // Task 70: SERVICE_FEE_RATE of the food subtotal (delivery excluded),
+    // to the nearest ₦1 — same rejection rule as the delivery fee above.
+    const serviceFeeKobo = computeServiceFeeKobo(
+      foodSubtotalKobo,
+      this.config.get<number>('escrow.serviceFeeRate') as number,
+    );
+    if (dto.serviceFeeKobo !== undefined && dto.serviceFeeKobo !== serviceFeeKobo) {
+      throw new BadRequestException(
+        `The service fee for this order is ₦${serviceFeeKobo / 100}, not ₦${dto.serviceFeeKobo / 100} — refresh your basket and try again.`,
+      );
+    }
+    const totalAmountKobo = foodSubtotalKobo + deliveryFeeKobo + serviceFeeKobo;
 
     // Task 47: a Pay on Delivery order never touches the student's wallet
     // at all — no lookup, no debit. A wallet order keeps the exact
@@ -223,17 +261,16 @@ export class OrderEscrowService {
         update: {},
       });
 
-      if (dto.items?.length) {
-        await tx.orderItem.createMany({
-          data: dto.items.map((item) => ({
-            orderId,
-            menuItemId: item.menuItemId,
-            nameSnapshot: item.name,
-            priceSnapshot: item.priceKobo,
-            quantity: item.quantity,
-          })),
-        });
-      }
+      // Task 70: snapshots the real database name/price, not the client's.
+      await tx.orderItem.createMany({
+        data: lines.map((line) => ({
+          orderId,
+          menuItemId: line.menuItemId,
+          nameSnapshot: menuById.get(line.menuItemId)!.name,
+          priceSnapshot: menuById.get(line.menuItemId)!.price,
+          quantity: line.quantity,
+        })),
+      });
 
       try {
         return await tx.orderEscrow.create({

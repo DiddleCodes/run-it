@@ -21,6 +21,7 @@ export const envValidationSchema = Joi.object({
   DEFAULT_DELIVERY_FEE: Joi.number().integer().min(0).default(50000),
   RESTAURANT_PLATFORM_FEE: Joi.number().integer().min(0).default(20000),
   RUNNER_DELIVERY_PAY: Joi.number().integer().min(0).default(20000),
+  SERVICE_FEE_RATE: Joi.number().min(0).max(1).default(0.05),
 
   INTERNAL_SERVICE_API_KEY: Joi.string().min(8).required(),
 

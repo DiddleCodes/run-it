@@ -23,7 +23,30 @@ const ESCROW_CONFIG = {
   'escrow.defaultDeliveryFeeKobo': 50_000,
   'escrow.restaurantPlatformFeeKobo': 20_000,
   'escrow.runnerDeliveryPayKobo': 20_000,
+  'escrow.serviceFeeRate': 0.05,
 };
+
+// Task 70: hold() prices every order from real menu rows. This stands in
+// for the menu_items table: `food-<kobo>` is a non-main item priced at
+// exactly <kobo>; `m*` ids are ₦1,500 main meals, `s*` ₦500 sides — all
+// available, all on vendor v1 owned by restaurant user r1.
+function catalogItem(id: string) {
+  const food = /^food-(\d+)$/.exec(id);
+  return {
+    id,
+    name: `Item ${id}`,
+    price: food ? Number(food[1]) : id.startsWith('m') ? 150_000 : 50_000,
+    isAvailable: true,
+    isMainMeal: id.startsWith('m'),
+    vendorId: 'v1',
+    vendor: { userId: 'r1' },
+  };
+}
+
+// One menu line worth exactly [kobo] of food.
+function food(kobo: number) {
+  return { menuItemId: `food-${kobo}`, quantity: 1 };
+}
 
 function makeService(extraConfig: Record<string, unknown> = {}) {
   const prisma = createPrismaMock();
@@ -32,6 +55,7 @@ function makeService(extraConfig: Record<string, unknown> = {}) {
   const notifications = createNotificationsEmitterMock();
   const matching = createMatchingServiceMock();
   const alerts = createAlertsMock();
+  prisma.menuItem.findMany.mockImplementation(async ({ where }: any) => (where.id.in as string[]).map(catalogItem));
   const service = new OrderEscrowService(prisma as any, paystack as any, config as any, notifications as any, matching as any, alerts as any);
   return { service, prisma, paystack, config, notifications, matching, alerts };
 }
@@ -47,6 +71,7 @@ describe('OrderEscrowService.hold', () => {
         restaurantUserId: 'r1',
         runnerUserId: 'run1',
         grossAmountKobo: 10_000,
+        items: [food(10_000)],
       }),
     ).rejects.toThrow(ConflictException);
   });
@@ -62,6 +87,7 @@ describe('OrderEscrowService.hold', () => {
         restaurantUserId: 'r1',
         runnerUserId: 'run1',
         grossAmountKobo: 10_000,
+        items: [food(10_000)],
       }),
     ).rejects.toThrow(NotFoundException);
   });
@@ -78,6 +104,7 @@ describe('OrderEscrowService.hold', () => {
         restaurantUserId: 'r1',
         runnerUserId: 'run1',
         grossAmountKobo: 10_000,
+        items: [food(10_000)],
       }),
     ).rejects.toThrow(HttpException);
   });
@@ -96,19 +123,20 @@ describe('OrderEscrowService.hold', () => {
       restaurantUserId: 'r1',
       runnerUserId: 'run1',
       grossAmountKobo: 100_000,
+      items: [food(100_000)],
       deliveryFeeKobo: 50_000,
-      serviceFeeKobo: 15_000,
+      serviceFeeKobo: 5_000,
     });
 
     // Total charged = food subtotal (100,000) + delivery fee (50,000) +
     // service fee (15,000) = 165,000.
     expect(prisma.wallet.updateMany).toHaveBeenCalledWith({
-      where: { id: 'w1', balance: { gte: 165_000 } },
-      data: { balance: { decrement: 165_000 } },
+      where: { id: 'w1', balance: { gte: 155_000 } },
+      data: { balance: { decrement: 155_000 } },
     });
     expect(prisma.walletTransaction.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ walletId: 'w1', type: 'debit', amount: 165_000, status: 'success' }),
+        data: expect.objectContaining({ walletId: 'w1', type: 'debit', amount: 155_000, status: 'success' }),
       }),
     );
 
@@ -120,45 +148,33 @@ describe('OrderEscrowService.hold', () => {
     expect(result.restaurantCommission).toBe(15_000);
     expect(result.restaurantShare).toBe(100_000 - 15_000 - 20_000);
     expect(result.runnerShare).toBe(20_000);
-    expect(result.platformFee).toBe(165_000 - result.restaurantShare - result.runnerShare);
-    expect(result.platformFee + result.runnerShare + result.restaurantShare).toBe(165_000);
-    expect(result.grossAmount).toBe(165_000);
+    expect(result.platformFee).toBe(155_000 - result.restaurantShare - result.runnerShare);
+    expect(result.platformFee + result.runnerShare + result.restaurantShare).toBe(155_000);
+    expect(result.grossAmount).toBe(155_000);
     expect(result.status).toBe('held');
     expect(result.studentWalletTransactionId).toBe('wt1');
   });
 
   it('keeps the service fee out of the commissionable base — it never touches the restaurant payout', async () => {
-    const { service, prisma } = makeService();
-    prisma.orderEscrow.findUnique.mockResolvedValue(null);
-    prisma.wallet.findUnique.mockResolvedValue({ id: 'w1', userId: 's1', balance: 1_000_000 });
-    prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
-    prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
-    prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null });
-    prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
+    async function holdWithRate(rate: number) {
+      const { service, prisma } = makeService({ 'escrow.serviceFeeRate': rate });
+      prisma.orderEscrow.findUnique.mockResolvedValue(null);
+      prisma.wallet.findUnique.mockResolvedValue({ id: 'w1', userId: 's1', balance: 1_000_000 });
+      prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
+      prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
+      prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null });
+      prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
+      return service.hold('order-1', { studentUserId: 's1', restaurantUserId: 'r1', items: [food(100_000)] });
+    }
 
-    const withoutServiceFee = await service.hold('order-1', {
-      studentUserId: 's1',
-      restaurantUserId: 'r1',
-      runnerUserId: 'run1',
-      grossAmountKobo: 100_000,
-      deliveryFeeKobo: 50_000,
-    });
+    const withoutServiceFee = await holdWithRate(0);
+    const withServiceFee = await holdWithRate(0.05);
 
-    prisma.orderEscrow.findUnique.mockResolvedValue(null);
-    const withServiceFee = await service.hold('order-2', {
-      studentUserId: 's1',
-      restaurantUserId: 'r1',
-      runnerUserId: 'run1',
-      grossAmountKobo: 100_000,
-      deliveryFeeKobo: 50_000,
-      serviceFeeKobo: 15_000,
-    });
-
-    // Same restaurant payout either way — the ₦150 service fee flows
-    // entirely to platform revenue, not diluted 85/15 like the old
-    // grossAmountKobo-includes-everything shape did.
+    // Same restaurant payout and runner pay either way — the 5% (₦50)
+    // service fee flows entirely to platform revenue.
     expect(withServiceFee.restaurantShare).toBe(withoutServiceFee.restaurantShare);
-    expect(withServiceFee.platformFee).toBe(withoutServiceFee.platformFee + 15_000);
+    expect(withServiceFee.runnerShare).toBe(withoutServiceFee.runnerShare);
+    expect(withServiceFee.platformFee).toBe(withoutServiceFee.platformFee + 5_000);
   });
 
   it('falls back to DEFAULT_DELIVERY_FEE when the caller omits deliveryFeeKobo', async () => {
@@ -175,12 +191,14 @@ describe('OrderEscrowService.hold', () => {
       restaurantUserId: 'r1',
       runnerUserId: 'run1',
       grossAmountKobo: 100_000,
+      items: [food(100_000)],
     });
 
-    // ESCROW_CONFIG's defaultDeliveryFeeKobo is 50,000 (₦500).
-    expect(result.grossAmount).toBe(150_000);
+    // ESCROW_CONFIG's defaultDeliveryFeeKobo is 50,000 (₦500), plus the
+    // 5% (5,000) service fee on the 100,000 food subtotal.
+    expect(result.grossAmount).toBe(155_000);
     expect(prisma.wallet.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ balance: { gte: 150_000 } }) }),
+      expect.objectContaining({ where: expect.objectContaining({ balance: { gte: 155_000 } }) }),
     );
   });
 
@@ -199,11 +217,11 @@ describe('OrderEscrowService.hold', () => {
       restaurantUserId: 'r1',
       runnerUserId: 'run1',
       grossAmountKobo: 100_000,
-      deliveryFeeKobo: 0,
+      items: [food(100_000)],
     });
 
     expect(result.restaurantShare).toBe(100_000 - 10_000 - 20_000);
-    expect(result.platformFee).toBe(100_000 - result.restaurantShare - result.runnerShare);
+    expect(result.platformFee).toBe(result.grossAmount - result.restaurantShare - result.runnerShare);
   });
 
   it("persists the single order-level note, and no longer accepts per-item notes", async () => {
@@ -220,6 +238,7 @@ describe('OrderEscrowService.hold', () => {
       restaurantUserId: 'r1',
       runnerUserId: 'run1',
       grossAmountKobo: 100_000,
+      items: [food(100_000)],
       note: 'Leave at the gate, please',
     });
 
@@ -230,51 +249,28 @@ describe('OrderEscrowService.hold', () => {
     );
   });
 
-  it('auto-provisions a placeholder vendor for a restaurant user with no vendor profile, and creates the Order row', async () => {
+  it('Task 70: snapshots the real menu name/price onto the order, never the client-sent ones', async () => {
     const { service, prisma } = makeService();
     prisma.orderEscrow.findUnique.mockResolvedValue(null);
-    prisma.wallet.findUnique.mockResolvedValue({ id: 'w1', userId: 's1', balance: 100_000 });
+    prisma.wallet.findUnique.mockResolvedValue({ id: 'w1', userId: 's1', balance: 1_000_000 });
     prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
     prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
-    prisma.vendor.findUnique.mockResolvedValue(null);
-    prisma.vendor.create.mockResolvedValue({ id: 'auto-vendor-1', commissionRateOverride: null });
+    prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null });
     prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
 
     await service.hold('order-1', {
       studentUserId: 's1',
       restaurantUserId: 'r1',
-      runnerUserId: 'run1',
-      grossAmountKobo: 10_000,
-      items: [{ name: 'Jollof', priceKobo: 3_000, quantity: 2 }],
+      // A tampered line claiming the ₦1,500 main costs ₦30 under another name.
+      items: [{ menuItemId: 'm1', name: 'Totally cheap', priceKobo: 3_000, quantity: 2 }],
     });
 
-    expect(prisma.vendor.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ userId: 'r1' }) }),
-    );
+    expect(prisma.orderItem.createMany).toHaveBeenCalledWith({
+      data: [{ orderId: 'order-1', menuItemId: 'm1', nameSnapshot: 'Item m1', priceSnapshot: 150_000, quantity: 2 }],
+    });
+    // 2 x 150,000 food + 50,000 delivery + 15,000 (5%) service = 365,000.
     expect(prisma.order.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'order-1' },
-        create: expect.objectContaining({
-          id: 'order-1',
-          vendorId: 'auto-vendor-1',
-          status: 'placed',
-          // Default delivery fee (50,000, per ESCROW_CONFIG) added on top of
-          // the 10,000 food subtotal since deliveryFeeKobo wasn't supplied.
-          totalAmount: 60_000,
-        }),
-      }),
-    );
-    expect(prisma.orderItem.createMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: [
-          expect.objectContaining({
-            orderId: 'order-1',
-            nameSnapshot: 'Jollof',
-            priceSnapshot: 3_000,
-            quantity: 2,
-          }),
-        ],
-      }),
+      expect.objectContaining({ create: expect.objectContaining({ totalAmount: 365_000 }) }),
     );
   });
 
@@ -304,6 +300,7 @@ describe('OrderEscrowService.hold', () => {
         restaurantUserId: 'r1',
         runnerUserId: 'run1',
         grossAmountKobo: 10_000,
+        items: [food(10_000)],
       }),
     ).rejects.toThrow(ConflictException);
   });
@@ -323,6 +320,7 @@ describe('OrderEscrowService.hold', () => {
       studentUserId: 's1',
       restaurantUserId: 'r1',
       grossAmountKobo: 10_000,
+      items: [food(10_000)],
     });
 
     expect(result.runnerUserId).toBeNull();
@@ -346,6 +344,7 @@ describe('OrderEscrowService.hold', () => {
         restaurantUserId: 'r1',
         runnerUserId: 'run1',
         grossAmountKobo: 10_000,
+        items: [food(10_000)],
       }),
     ).rejects.toThrow('connection reset');
   });
@@ -362,6 +361,7 @@ describe('OrderEscrowService.hold — Task 67 Pay on Delivery launch switch (off
         studentUserId: 's1',
         restaurantUserId: 'r1',
         grossAmountKobo: 100_000,
+        items: [food(100_000)],
         paymentMethod: 'pay_on_delivery',
       }),
     ).rejects.toThrow(new ForbiddenException("Pay on Delivery isn't available yet"));
@@ -383,6 +383,7 @@ describe('OrderEscrowService.hold — Task 67 Pay on Delivery launch switch (off
       studentUserId: 's1',
       restaurantUserId: 'r1',
       grossAmountKobo: 100_000,
+      items: [food(100_000)],
     });
 
     expect(result.studentWalletTransactionId).toBe('wt1');
@@ -408,6 +409,7 @@ describe('OrderEscrowService.hold — Task 47 Pay on Delivery (switched on)', ()
       restaurantUserId: 'r1',
       runnerUserId: 'run1',
       grossAmountKobo: 100_000,
+      items: [food(100_000)],
       deliveryFeeKobo: 50_000,
       paymentMethod: 'pay_on_delivery',
     });
@@ -435,6 +437,7 @@ describe('OrderEscrowService.hold — Task 47 Pay on Delivery (switched on)', ()
         studentUserId: 's1',
         restaurantUserId: 'r1',
         grossAmountKobo: 100_000,
+        items: [food(100_000)],
         paymentMethod: 'pay_on_delivery',
       }),
     ).rejects.toThrow(ForbiddenException);
@@ -451,6 +454,7 @@ describe('OrderEscrowService.hold — Task 47 Pay on Delivery (switched on)', ()
         studentUserId: 's1',
         restaurantUserId: 'r1',
         grossAmountKobo: 960_000,
+        items: [food(960_000)],
         deliveryFeeKobo: 50_000,
         paymentMethod: 'pay_on_delivery',
       }),
@@ -470,7 +474,6 @@ describe('OrderEscrowService.hold — Task 66 Group Ordering', () => {
   it('rejects a standard order with 3 main meals', async () => {
     const { service, prisma } = makeService();
     prisma.orderEscrow.findUnique.mockResolvedValue(null);
-    prisma.menuItem.findMany.mockResolvedValue([{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }]);
 
     await expect(
       service.hold('order-1', {
@@ -488,7 +491,6 @@ describe('OrderEscrowService.hold — Task 66 Group Ordering', () => {
   it('rejects a standard order whose main-meal quantities sum past the cap, even across distinct items', async () => {
     const { service, prisma } = makeService();
     prisma.orderEscrow.findUnique.mockResolvedValue(null);
-    prisma.menuItem.findMany.mockResolvedValue([{ id: 'm1' }]);
 
     await expect(
       service.hold('order-1', {
@@ -509,7 +511,6 @@ describe('OrderEscrowService.hold — Task 66 Group Ordering', () => {
     prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
     prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
     prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null });
-    prisma.menuItem.findMany.mockResolvedValue([{ id: 'm1' }, { id: 'm2' }]);
     prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
 
     const result = await service.hold('order-1', {
@@ -528,7 +529,6 @@ describe('OrderEscrowService.hold — Task 66 Group Ordering', () => {
   it('rejects a group order with 5 main meals', async () => {
     const { service, prisma } = makeService();
     prisma.orderEscrow.findUnique.mockResolvedValue(null);
-    prisma.menuItem.findMany.mockResolvedValue([{ id: 'm1' }]);
 
     await expect(
       service.hold('order-1', {
@@ -549,13 +549,12 @@ describe('OrderEscrowService.hold — Task 66 Group Ordering', () => {
     prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
     prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
     prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null });
-    prisma.menuItem.findMany.mockResolvedValue([{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }, { id: 'm4' }]);
     prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
 
     const result = await service.hold('order-1', {
       studentUserId: 's1',
       restaurantUserId: 'r1',
-      grossAmountKobo: 400_000,
+      grossAmountKobo: 600_000,
       // Flutter always sends the BASE flat fee (₦500) — the group
       // surcharge is applied server-side regardless, per hold()'s own doc
       // comment.
@@ -564,13 +563,14 @@ describe('OrderEscrowService.hold — Task 66 Group Ordering', () => {
       items: [mainMealItem('m1', 1), mainMealItem('m2', 1), mainMealItem('m3', 1), mainMealItem('m4', 1)],
     });
 
-    // Total charged = food subtotal (400,000) + delivery fee (50,000 base
-    // + 15,000 group surcharge = 65,000) = 465,000.
+    // Total charged = food subtotal (4 x 150,000 = 600,000) + delivery fee
+    // (50,000 base + 15,000 group surcharge = 65,000) + 5% service fee
+    // (30,000) = 695,000.
     expect(prisma.wallet.updateMany).toHaveBeenCalledWith({
-      where: { id: 'w1', balance: { gte: 465_000 } },
-      data: { balance: { decrement: 465_000 } },
+      where: { id: 'w1', balance: { gte: 695_000 } },
+      data: { balance: { decrement: 695_000 } },
     });
-    expect(result.grossAmount).toBe(465_000);
+    expect(result.grossAmount).toBe(695_000);
     expect(prisma.order.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ create: expect.objectContaining({ orderType: 'group' }) }),
     );
@@ -583,19 +583,19 @@ describe('OrderEscrowService.hold — Task 66 Group Ordering', () => {
     prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
     prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
     prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null });
-    prisma.menuItem.findMany.mockResolvedValue([{ id: 'm1' }]);
     prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
 
     const result = await service.hold('order-1', {
       studentUserId: 's1',
       restaurantUserId: 'r1',
-      grossAmountKobo: 100_000,
+      grossAmountKobo: 150_000,
       orderType: 'group',
       items: [mainMealItem('m1', 1)],
     });
 
-    // Base default (50,000) + group surcharge (15,000) = 65,000.
-    expect(result.grossAmount).toBe(100_000 + 65_000);
+    // Base default (50,000) + group surcharge (15,000) = 65,000, plus the
+    // 5% (7,500) service fee.
+    expect(result.grossAmount).toBe(150_000 + 65_000 + 7_500);
   });
 
   it('a standard order is completely unaffected: unchanged ₦500 (50,000 kobo) delivery fee, no surcharge', async () => {
@@ -605,17 +605,16 @@ describe('OrderEscrowService.hold — Task 66 Group Ordering', () => {
     prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
     prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
     prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null });
-    prisma.menuItem.findMany.mockResolvedValue([{ id: 'm1' }]);
     prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
 
     const result = await service.hold('order-1', {
       studentUserId: 's1',
       restaurantUserId: 'r1',
-      grossAmountKobo: 100_000,
+      grossAmountKobo: 150_000,
       items: [mainMealItem('m1', 1)],
     });
 
-    expect(result.grossAmount).toBe(100_000 + 50_000);
+    expect(result.grossAmount).toBe(150_000 + 50_000 + 7_500);
   });
 
   it('does not count side/drink/dessert items toward the main-meal cap', async () => {
@@ -626,15 +625,13 @@ describe('OrderEscrowService.hold — Task 66 Group Ordering', () => {
     prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
     prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null });
     // Only m1/m2 are real main meals; s1/s2/s3 resolve to isMainMeal:
-    // false and so are excluded from this findMany's `isMainMeal: true`
-    // filter entirely.
-    prisma.menuItem.findMany.mockResolvedValue([{ id: 'm1' }, { id: 'm2' }]);
+    // false in the menu catalog, so 10 sides never count.
     prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
 
     const result = await service.hold('order-1', {
       studentUserId: 's1',
       restaurantUserId: 'r1',
-      grossAmountKobo: 700_000,
+      grossAmountKobo: 800_000,
       items: [
         mainMealItem('m1', 1),
         mainMealItem('m2', 1),
@@ -647,32 +644,169 @@ describe('OrderEscrowService.hold — Task 66 Group Ordering', () => {
     expect(result).toBeDefined();
   });
 
-  it('ignores a client-supplied isMainMeal-like claim on an unresolvable item (no real menuItemId can never count)', async () => {
+  it('Task 70: rejects a line with no real menu item outright — nothing unverifiable can be ordered or priced', async () => {
     const { service, prisma } = makeService();
     prisma.orderEscrow.findUnique.mockResolvedValue(null);
 
-    // Three items with no menuItemId at all — nothing to look up, so none
-    // of them can be verified as main meals no matter what their `name`
-    // implies (e.g. "Jollof Rice x3"). A direct API call can't smuggle
-    // main meals past the cap this way; it just orders three unverifiable
-    // line items, none of which count against the cap.
-    prisma.wallet.findUnique.mockResolvedValue({ id: 'w1', userId: 's1', balance: 1_000_000 });
-    prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
-    prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
-    prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null });
-    prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
+    await expect(
+      service.hold('order-1', {
+        studentUserId: 's1',
+        restaurantUserId: 'r1',
+        items: [{ name: 'Jollof Rice', priceKobo: 150_000, quantity: 3 }] as any,
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.wallet.findUnique).not.toHaveBeenCalled();
+    expect(prisma.order.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('OrderEscrowService.hold — Task 70 server-authoritative pricing + 5% service fee', () => {
+  function readyToCharge(extraConfig: Record<string, unknown> = {}) {
+    const ctx = makeService(extraConfig);
+    ctx.prisma.orderEscrow.findUnique.mockResolvedValue(null);
+    ctx.prisma.wallet.findUnique.mockResolvedValue({ id: 'w1', userId: 's1', balance: 1_000_000 });
+    ctx.prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
+    ctx.prisma.walletTransaction.create.mockResolvedValue({ id: 'wt1' });
+    ctx.prisma.vendor.findUnique.mockResolvedValue({ id: 'v1', commissionRateOverride: null });
+    ctx.prisma.orderEscrow.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'esc1', ...data }));
+    return ctx;
+  }
+
+  it('₦1,000 of food, solo: charges exactly ₦1,550 and splits restaurant ₦650 / runner ₦200 / platform ₦700', async () => {
+    const { service, prisma } = readyToCharge();
 
     const result = await service.hold('order-1', {
       studentUserId: 's1',
       restaurantUserId: 'r1',
-      grossAmountKobo: 450_000,
-      items: [
-        { name: 'Jollof Rice', priceKobo: 150_000, quantity: 3 },
-      ] as any,
+      grossAmountKobo: 100_000,
+      deliveryFeeKobo: 50_000,
+      serviceFeeKobo: 5_000,
+      items: [food(100_000)],
     });
 
-    expect(result).toBeDefined();
-    expect(prisma.menuItem.findMany).not.toHaveBeenCalled();
+    expect(prisma.wallet.updateMany).toHaveBeenCalledWith({
+      where: { id: 'w1', balance: { gte: 155_000 } },
+      data: { balance: { decrement: 155_000 } },
+    });
+    expect(result.grossAmount).toBe(155_000);
+    expect(result.restaurantShare).toBe(65_000);
+    expect(result.runnerShare).toBe(20_000);
+    expect(result.platformFee).toBe(70_000);
+  });
+
+  it('rejects a tampered serviceFeeKobo — nothing is charged', async () => {
+    const { service, prisma } = readyToCharge();
+
+    await expect(
+      service.hold('order-1', { studentUserId: 's1', restaurantUserId: 'r1', serviceFeeKobo: 100, items: [food(100_000)] }),
+    ).rejects.toThrow(new BadRequestException('The service fee for this order is ₦50, not ₦1 — refresh your basket and try again.'));
+    expect(prisma.wallet.updateMany).not.toHaveBeenCalled();
+    expect(prisma.order.upsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects a tampered deliveryFeeKobo (e.g. zero) — the flat fee is server-set', async () => {
+    const { service, prisma } = readyToCharge();
+
+    await expect(
+      service.hold('order-1', { studentUserId: 's1', restaurantUserId: 'r1', deliveryFeeKobo: 0, items: [food(100_000)] }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.wallet.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects (409) a subtotal claim that no longer matches real menu prices, instead of charging a different amount', async () => {
+    const { service, prisma } = readyToCharge();
+
+    await expect(
+      service.hold('order-1', {
+        studentUserId: 's1',
+        restaurantUserId: 'r1',
+        grossAmountKobo: 1_000, // claims ₦10 for a ₦1,500 main
+        items: [{ menuItemId: 'm1', quantity: 1 }],
+      }),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.wallet.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects an item that is no longer available', async () => {
+    const { service, prisma } = readyToCharge();
+    prisma.menuItem.findMany.mockResolvedValue([{ ...catalogItem('m1'), name: 'Jollof', isAvailable: false }]);
+
+    await expect(
+      service.hold('order-1', { studentUserId: 's1', restaurantUserId: 'r1', items: [{ menuItemId: 'm1', quantity: 1 }] }),
+    ).rejects.toThrow(new BadRequestException('Jollof is no longer available — remove it to continue.'));
+    expect(prisma.wallet.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects an item that doesn't exist (e.g. deleted from the menu)", async () => {
+    const { service, prisma } = readyToCharge();
+    prisma.menuItem.findMany.mockResolvedValue([]);
+
+    await expect(
+      service.hold('order-1', { studentUserId: 's1', restaurantUserId: 'r1', items: [{ menuItemId: 'gone', quantity: 1 }] }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it("rejects items from another restaurant's menu (a cheaper menu can't be billed to this one)", async () => {
+    const { service, prisma } = readyToCharge();
+    prisma.menuItem.findMany.mockResolvedValue([{ ...catalogItem('m1'), vendorId: 'v2', vendor: { userId: 'r2' } }]);
+
+    await expect(
+      service.hold('order-1', { studentUserId: 's1', restaurantUserId: 'r1', items: [{ menuItemId: 'm1', quantity: 1 }] }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.wallet.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects a basket that mixes two restaurants', async () => {
+    const { service, prisma } = readyToCharge();
+    prisma.menuItem.findMany.mockResolvedValue([catalogItem('m1'), { ...catalogItem('s1'), vendorId: 'v2' }]);
+
+    await expect(
+      service.hold('order-1', {
+        studentUserId: 's1',
+        restaurantUserId: 'r1',
+        items: [
+          { menuItemId: 'm1', quantity: 1 },
+          { menuItemId: 's1', quantity: 1 },
+        ],
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects a vendorId that does not own the items', async () => {
+    const { service } = readyToCharge();
+
+    await expect(
+      service.hold('order-1', {
+        studentUserId: 's1',
+        restaurantUserId: 'r1',
+        vendorId: 'someone-else',
+        items: [{ menuItemId: 'm1', quantity: 1 }],
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('a group order still adds exactly the ₦150 surcharge — the 5% fee is on food only', async () => {
+    const { service } = readyToCharge();
+
+    const solo = await service.hold('order-1', { studentUserId: 's1', restaurantUserId: 'r1', items: [food(100_000)] });
+    const { service: service2 } = readyToCharge();
+    const group = await service2.hold('order-2', {
+      studentUserId: 's1',
+      restaurantUserId: 'r1',
+      orderType: 'group',
+      items: [food(100_000)],
+    });
+
+    expect(group.grossAmount - solo.grossAmount).toBe(15_000);
+    expect(group.restaurantShare).toBe(solo.restaurantShare);
+  });
+
+  it('honours a configured SERVICE_FEE_RATE', async () => {
+    const { service } = readyToCharge({ 'escrow.serviceFeeRate': 0.1 });
+
+    const result = await service.hold('order-1', { studentUserId: 's1', restaurantUserId: 'r1', items: [food(100_000)] });
+
+    expect(result.grossAmount).toBe(100_000 + 50_000 + 10_000);
   });
 });
 

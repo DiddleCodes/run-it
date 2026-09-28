@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMinSize,
   IsArray,
   IsIn,
   IsInt,
@@ -19,20 +20,23 @@ export const ORDER_TYPES = ['standard', 'group'] as const;
 export type OrderTypeInput = (typeof ORDER_TYPES)[number];
 
 export class OrderItemInputDto {
-  // Nullable on the created row too — the menu item this pointed at may
-  // since have been edited or deleted; name/price are snapshotted below
-  // regardless.
-  @IsOptional()
+  // Task 70: required — the menu item is the only thing hold() trusts. Its
+  // real name and price are re-read from the database (and snapshotted onto
+  // the OrderItem row from there); the name/price below are the client's
+  // own echo of what it displayed, accepted for wire compatibility and
+  // never used for money.
   @IsUUID()
-  menuItemId?: string;
+  menuItemId!: string;
 
+  @IsOptional()
   @IsString()
-  name!: string;
+  name?: string;
 
-  // Kobo, integer, never a float.
+  // Kobo, integer, never a float. Ignored for pricing (see above).
+  @IsOptional()
   @IsInt()
   @Min(1)
-  priceKobo!: number;
+  priceKobo?: number;
 
   @IsInt()
   @Min(1)
@@ -56,11 +60,16 @@ export class HoldEscrowDto {
 
   // Kobo, integer, never a float. Despite the name, this is the food
   // subtotal only as of Task 15 (delivery fee is now a separate line item
-  // below) — kept named grossAmountKobo for wire compatibility with the
-  // Flutter client, which doesn't yet distinguish the two.
+  // below) — kept named grossAmountKobo for wire compatibility.
+  // Task 70: the client's claim of what it showed, never the amount
+  // charged — hold() re-derives the real subtotal from database prices and
+  // rejects (409) a claim that doesn't match, so a student is never
+  // charged anything other than what they were shown. Optional: omitting
+  // it just skips that comparison.
+  @IsOptional()
   @IsInt()
   @Min(1)
-  grossAmountKobo!: number;
+  grossAmountKobo?: number;
 
   // Kobo, integer, never a float. Task 15: a separate line item from the
   // food subtotal above, never subject to restaurant commission. Optional
@@ -68,6 +77,9 @@ export class HoldEscrowDto {
   // hold() falls back to the configured DEFAULT_DELIVERY_FEE when omitted.
   // Task 45: now a single flat fee (no more zone tiers), and 100% platform
   // revenue — see commission.util.ts.
+  // Task 70: server-authoritative — anything other than the configured
+  // flat fee is rejected (400), never charged. Always the BASE fee; a
+  // group order's surcharge is added by hold() itself.
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -75,8 +87,10 @@ export class HoldEscrowDto {
 
   // Kobo, integer, never a float. Task 45: a separate line item from the
   // food subtotal, same spirit as deliveryFeeKobo above — never subject to
-  // restaurant commission, flows 100% to platform revenue. Optional so an
-  // old caller that omits it still works (defaults to 0).
+  // restaurant commission, flows 100% to platform revenue.
+  // Task 70: now SERVICE_FEE_RATE (5%) of the server-derived food subtotal,
+  // computed by hold() itself — a value that doesn't match is rejected
+  // (400), never charged. Optional: omitting it just skips the comparison.
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -124,9 +138,11 @@ export class HoldEscrowDto {
   @IsString()
   deliveryLocationLabel?: string;
 
-  @IsOptional()
+  // Task 70: required — the food subtotal (and so every fee and payout)
+  // is computed from these items' real database prices.
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => OrderItemInputDto)
-  items?: OrderItemInputDto[];
+  items!: OrderItemInputDto[];
 }

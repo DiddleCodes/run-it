@@ -11,6 +11,7 @@ import '../../../core/network/demo_identity_service.dart';
 import '../../../core/network/escrow_repository.dart';
 import '../../../core/network/features_repository.dart';
 import '../../../core/network/orders_repository.dart';
+import '../../../core/network/pricing_repository.dart';
 import '../../../core/network/ratings_repository.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
@@ -30,6 +31,7 @@ import '../application/ordering_providers.dart';
 import '../domain/ordering_models.dart';
 import '../domain/pricing_service.dart';
 import 'my_orders_screen.dart';
+import 'widgets/main_meal_cap_guard.dart';
 import 'report_problem_screen.dart';
 import 'widgets/ordering_components.dart';
 
@@ -170,9 +172,7 @@ class _EateryMenuScreenState extends ConsumerState<EateryMenuScreen> {
                               isEateryOpen: place.isOpen,
                               quantity: quantity,
                               onAdd: () => _add(item),
-                              onRemove: () => ref
-                                  .read(basketProvider.notifier)
-                                  .setQuantity(item.id, quantity - 1),
+                              onRemove: () => _setQuantity(item, quantity - 1),
                               onTap: item.isAvailable && place.isOpen
                                   ? () => _openOptionsSheet(item, quantity)
                                   : null,
@@ -198,6 +198,7 @@ class _EateryMenuScreenState extends ConsumerState<EateryMenuScreen> {
             final subtotal = PricingService.calculate(
               basket: basket,
               menuItems: items,
+              config: ref.watch(pricingConfigProvider),
             ).subtotal;
             return 'View Basket · $count item${count == 1 ? '' : 's'} · ${naira(subtotal)}';
           }(),
@@ -219,25 +220,43 @@ class _EateryMenuScreenState extends ConsumerState<EateryMenuScreen> {
       builder: (_) => _ItemOptionsSheet(
         item: item,
         initialQuantity: currentQuantity == 0 ? 1 : currentQuantity,
-        onConfirm: (quantity) {
+        onConfirm: (quantity) async {
+          Navigator.pop(context);
+          // Task 70: the cap choice happens here, before anything changes.
+          if (!await confirmMainMealIncrease(context, ref, item: item, newQuantity: quantity)) return;
+          if (!mounted) return;
+          final mealsBefore = currentMainMeals(ref);
           final result = ref
               .read(basketProvider.notifier)
               .setLine(item, quantity: quantity);
           if (result == AddToBasketResult.needsReplacement) {
-            Navigator.pop(context);
             _confirmReplace(item);
             return;
           }
-          Navigator.pop(context);
+          await offerSoloIfGroupUnneeded(context, ref, mainMealsBefore: mealsBefore);
         },
       ),
     );
   }
 
-  void _add(MenuItem item) {
+  Future<void> _add(MenuItem item) async {
+    final basket = ref.read(basketProvider);
+    final current = basket.eateryId == item.eateryId
+        ? basket.items.where((line) => line.menuItemId == item.id).fold(0, (sum, line) => sum + line.quantity)
+        : 0;
+    // Task 70: a 3rd solo / 5th group main meal asks first; switching to
+    // Group Order adds this meal straight away.
+    if (!await confirmMainMealIncrease(context, ref, item: item, newQuantity: current + 1)) return;
+    if (!mounted) return;
     final result = ref.read(basketProvider.notifier).add(item);
     if (result != AddToBasketResult.needsReplacement) return;
     _confirmReplace(item);
+  }
+
+  Future<void> _setQuantity(MenuItem item, int quantity) async {
+    final mealsBefore = currentMainMeals(ref);
+    ref.read(basketProvider.notifier).setQuantity(item.id, quantity);
+    await offerSoloIfGroupUnneeded(context, ref, mainMealsBefore: mealsBefore);
   }
 
   void _confirmReplace(MenuItem item) {
@@ -356,6 +375,7 @@ class _BasketScreenState extends ConsumerState<BasketScreen> {
       basket: basket,
       menuItems: menu,
       isGroupOrder: form.isGroupOrder,
+      config: ref.watch(pricingConfigProvider),
     );
     if (basket.isEmpty) return const _EmptyBasket();
     final lines = <(BasketItem, MenuItem)>[];
@@ -391,8 +411,11 @@ class _BasketScreenState extends ConsumerState<BasketScreen> {
             (entry) => Dismissible(
               key: ValueKey(entry.$1.menuItemId),
               direction: DismissDirection.endToStart,
-              onDismissed: (_) =>
-                  ref.read(basketProvider.notifier).remove(entry.$1.menuItemId),
+              onDismissed: (_) {
+                final mealsBefore = currentMainMeals(ref);
+                ref.read(basketProvider.notifier).remove(entry.$1.menuItemId);
+                offerSoloIfGroupUnneeded(context, ref, mainMealsBefore: mealsBefore);
+              },
               background: Container(
                 alignment: Alignment.centerRight,
                 padding: const EdgeInsets.only(right: 20),
@@ -408,12 +431,27 @@ class _BasketScreenState extends ConsumerState<BasketScreen> {
               child: _BasketLine(
                 item: entry.$2,
                 quantity: entry.$1.quantity,
-                onAdd: () => ref
-                    .read(basketProvider.notifier)
-                    .setQuantity(entry.$1.menuItemId, entry.$1.quantity + 1),
-                onRemove: () => ref
-                    .read(basketProvider.notifier)
-                    .setQuantity(entry.$1.menuItemId, entry.$1.quantity - 1),
+                onAdd: () async {
+                  // Task 70: same cap choice as the Menu's own add.
+                  if (!await confirmMainMealIncrease(
+                    context,
+                    ref,
+                    item: entry.$2,
+                    newQuantity: entry.$1.quantity + 1,
+                  )) {
+                    return;
+                  }
+                  ref
+                      .read(basketProvider.notifier)
+                      .setQuantity(entry.$1.menuItemId, entry.$1.quantity + 1);
+                },
+                onRemove: () {
+                  final mealsBefore = currentMainMeals(ref);
+                  ref
+                      .read(basketProvider.notifier)
+                      .setQuantity(entry.$1.menuItemId, entry.$1.quantity - 1);
+                  offerSoloIfGroupUnneeded(context, ref, mainMealsBefore: mealsBefore);
+                },
               ),
             ),
           ),
@@ -540,13 +578,16 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             // separately. This keeps the total charged identical to what
             // the student was shown; only how the backend splits it
             // internally changes.
-            grossAmountKobo: (pricing.subtotal + pricing.packagingTotal) * 100,
+            // Task 70: the food subtotal the student was shown — the
+            // backend re-derives it from real menu prices and rejects a
+            // mismatch rather than charging a different amount.
+            grossAmountKobo: pricing.subtotal * 100,
             // Task 66: always the BASE flat fee, even for a Group Order —
             // `pricing.deliveryFee` (shown in _Breakdown) already includes
             // the +₦150 surcharge for display, but hold() applies that
             // surcharge itself from orderType below; sending the already-
             // inflated total here would double it.
-            deliveryFeeKobo: PricingService.flatDeliveryFee * 100,
+            deliveryFeeKobo: ref.read(pricingConfigProvider).deliveryFee * 100,
             serviceFeeKobo: pricing.serviceFee * 100,
             token: session.accessToken,
             vendorId: vendor?.id,
@@ -649,6 +690,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       basket: basket,
       menuItems: menu,
       isGroupOrder: form.isGroupOrder,
+      config: ref.watch(pricingConfigProvider),
     );
     final walletInsufficient = wallet < pricing.total;
     // Task 47: only actually blocks placing the order when Wallet is the
@@ -2189,7 +2231,7 @@ class _Breakdown extends StatelessWidget {
               : 'Delivery',
           amount: pricing.deliveryFee,
         ),
-        PriceRow(label: 'Service fee', amount: pricing.serviceFee),
+        PriceRow(label: 'Service fee (${pricing.serviceFeePercentLabel})', amount: pricing.serviceFee),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 9),
           child: Divider(color: OrderingColors.border(context)),
@@ -2236,8 +2278,8 @@ class _GroupOrderToggle extends StatelessWidget {
           style: Theme.of(context).textTheme.labelLarge?.copyWith(color: OrderingColors.text(context)),
         ),
         subtitle: Text(
-          'Ordering for more people? Fit up to ${PricingService.groupMainMealCap} main meals '
-          '(instead of ${PricingService.standardMainMealCap}) for a flat +₦${PricingService.groupOrderSurcharge} delivery.',
+          'Ordering for a group? Fit up to ${PricingService.groupMainMealCap} main meals '
+          '(instead of ${PricingService.standardMainMealCap}) in one delivery for a flat +₦${PricingService.groupOrderSurcharge}.',
           style: Theme.of(context).textTheme.labelSmall?.copyWith(color: OrderingColors.muted(context), height: 1.3),
         ),
       ),
@@ -2295,7 +2337,7 @@ class _MainMealCapNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final message = isGroupOrder
-        ? "That's $mainMealCount main meals — Group Order allows up to $cap. Remove some to continue."
+        ? "That's $mainMealCount main meals — Group Order allows up to $cap. Remove some, or place a second order for the rest."
         : "That's $mainMealCount main meals — Standard orders allow up to $cap. Switch to Group Order to fit more.";
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

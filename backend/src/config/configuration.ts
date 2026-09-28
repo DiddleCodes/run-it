@@ -58,6 +58,11 @@ export default () => ({
     // Kobo, flat. Task 45: what the runner is credited on delivery,
     // independent of the student's delivery fee.
     runnerDeliveryPayKobo: Number(process.env.RUNNER_DELIVERY_PAY ?? 20000),
+    // 0-1. Task 70: the student-facing service fee, applied to the food
+    // subtotal only (no delivery fee), rounded to the nearest ₦1 — 100%
+    // platform revenue, never commissionable (Task 45). Replaces the old
+    // flat ₦150.
+    serviceFeeRate: Number(process.env.SERVICE_FEE_RATE ?? 0.05),
   },
 
   internalServiceApiKey: process.env.INTERNAL_SERVICE_API_KEY,

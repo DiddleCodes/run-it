@@ -178,7 +178,8 @@ void main() {
       // this fixture) — the service fee and delivery fee both travel as
       // their own separate fields now, never folded into it.
       expect(call['grossAmountKobo'], 310000);
-      expect(call['serviceFeeKobo'], 15000);
+      // Task 70: 5% of the ₦3,100 food subtotal = ₦155.
+      expect(call['serviceFeeKobo'], 15500);
       // Task 45: a single flat ₦500 delivery fee, not a zone pick.
       expect(call['deliveryFeeKobo'], 50000);
     },
