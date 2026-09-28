@@ -11,6 +11,8 @@ import 'package:run_it/features/auth/domain/auth_models.dart';
 import 'package:run_it/features/ordering/application/order_tracking_controller.dart';
 import 'package:run_it/features/ordering/presentation/ordering_screens.dart';
 
+import 'support/server_orders.dart';
+
 class _FakeAuthController extends AuthController {
   _FakeAuthController(this._session);
   final AuthSession _session;
@@ -90,7 +92,7 @@ Future<ProviderContainer> _reachConfirmed(WidgetTester tester, Widget harness, S
       .read(orderTrackingProvider.notifier)
       .placeOrder(orderId: orderId, orderItems: const ['1 × Jollof'], total: 3000, eateryName: 'Tantalizers', deliveryLocationLabel: 'Hostel B');
   container.read(orderTrackingProvider.notifier)
-    ..advanceForTest()
+    ..applyServerOrder(serverOrder(orderId, 'ready_for_pickup', runnerName: 'Chidi O.'))
     ..markPickedUp()
     ..markDelivered();
   await tester.pumpAndSettle();

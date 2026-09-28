@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,10 +6,9 @@ import '../../../core/network/orders_repository.dart';
 import '../../../core/widgets/app_notification.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../wallet/application/wallet_controller.dart';
+import '../domain/order_history_models.dart';
 import '../domain/ordering_models.dart';
 import '../presentation/widgets/ordering_components.dart' show naira;
-
-const _mockRunnerNames = ['Chidi A.', 'Amaka O.', 'Tunde B.', 'Ngozi E.'];
 
 /// Task 61: what the student needs to see once the restaurant declined
 /// the live order — straight from the real backend order, never inferred.
@@ -30,9 +28,9 @@ class DeclinedOrderInfo {
       : "$vendorName declined your order: $reason. You haven't been charged for it.";
 }
 
-/// Task 61: how often a just-placed order is re-checked against the real
-/// backend while the restaurant can still decline it. A provider so tests
-/// can shorten it.
+/// How often a live order is re-checked against the real backend (Task 61
+/// for declines, Task 73 for every stage). A provider so tests can shorten
+/// it.
 final orderStatusPollIntervalProvider = Provider<Duration>((ref) => const Duration(seconds: 5));
 
 class OrderTrackingSession {
@@ -105,22 +103,17 @@ class OrderTrackingSession {
       );
 }
 
-/// Drives the student-facing order lifecycle. There is no live backend yet
-/// (that lands in Task 5+), so progression is simulated locally with a
-/// timer per stage — enough to demonstrate the full placed → delivered loop
-/// end to end without a real runner-side connection.
+/// Drives the student-facing order lifecycle from the real backend order
+/// (Task 73) — `GET /orders/:orderId` is polled from placement until the
+/// order is delivered (or cancelled/declined), and every stage, the runner's
+/// name included, comes from [applyServerOrder]. Nothing is simulated.
 class OrderTrackingController extends Notifier<OrderTrackingSession> {
-  Timer? _stageTimer;
   Timer? _statusPoll;
   bool _checkingStatus = false;
-  final _random = Random();
 
   @override
   OrderTrackingSession build() {
-    ref.onDispose(() {
-      _cancelTimer();
-      _stopStatusPoll();
-    });
+    ref.onDispose(_stopStatusPoll);
     return const OrderTrackingSession();
   }
 
@@ -137,7 +130,7 @@ class OrderTrackingController extends Notifier<OrderTrackingSession> {
     required String deliveryLocationLabel,
     String? deliveryPin,
   }) {
-    _cancelTimer();
+    _stopStatusPoll();
     state = OrderTrackingSession(
       stage: OrderStage.placed,
       orderId: orderId,
@@ -148,16 +141,15 @@ class OrderTrackingController extends Notifier<OrderTrackingSession> {
       deliveryPin: deliveryPin,
       justPlaced: true,
     );
-    _scheduleNext();
-    _startStatusPoll();
+    _statusPoll = Timer.periodic(ref.read(orderStatusPollIntervalProvider), (_) => refreshFromServer());
   }
 
-  /// Task 61: only while the restaurant can still decline (the backend
-  /// only allows it on a `placed` order) — stops for good the moment the
-  /// real order is anything else.
-  void _startStatusPoll() {
-    _statusPoll?.cancel();
-    _statusPoll = Timer.periodic(ref.read(orderStatusPollIntervalProvider), (_) => checkForDecline());
+  /// Called once OrderTrackingScreen's "payment confirmed" beat has played
+  /// — a no-op otherwise so a stray call after the order has since moved on
+  /// (or been reset) can't resurrect a stale flag.
+  void acknowledgeJustPlaced() {
+    if (!state.justPlaced) return;
+    state = state.copyWith(justPlaced: false);
   }
 
   void _stopStatusPoll() {
@@ -168,7 +160,7 @@ class OrderTrackingController extends Notifier<OrderTrackingSession> {
   /// One real `GET /orders/:orderId` check. A transient failure just waits
   /// for the next tick. Public so a pull-to-refresh or test can run it
   /// immediately.
-  Future<void> checkForDecline() async {
+  Future<void> refreshFromServer() async {
     final orderId = state.orderId;
     final auth = ref.read(authControllerProvider);
     if (orderId == null || auth == null || state.declined != null || _checkingStatus) return;
@@ -180,11 +172,25 @@ class OrderTrackingController extends Notifier<OrderTrackingSession> {
       // A different order may have been placed (or this one reset) while
       // the request was in flight.
       if (state.orderId != orderId) return;
-      if (order.status == 'placed') return;
+      applyServerOrder(order);
+    } catch (_) {
+      // Transient — the next tick retries.
+    } finally {
+      _checkingStatus = false;
+    }
+  }
+
+  /// The one mapping from a real backend order to what the student sees.
+  /// Forward-only: a stale or out-of-order response can never move the
+  /// tracker backwards, and `confirmed` (a local student action) is never
+  /// overwritten.
+  void applyServerOrder(OrderHistoryEntry order) {
+    if (state.orderId != order.id || state.declined != null) return;
+
+    if (order.status == 'cancelled') {
       _stopStatusPoll();
       if (!order.isDeclined) return;
-
-      _cancelTimer();
+      // Task 61: the restaurant declined it.
       final info = DeclinedOrderInfo(
         vendorName: order.vendorName,
         reason: order.declineReasonLabel ?? 'No reason given',
@@ -193,53 +199,45 @@ class OrderTrackingController extends Notifier<OrderTrackingSession> {
       state = state.copyWith(declined: info, justPlaced: false);
       ref.read(appNotificationProvider.notifier).info(info.message);
       if (info.refundedKobo > 0) unawaited(ref.read(walletBalanceProvider.notifier).refresh());
-    } catch (_) {
-      // Transient — the next tick retries.
-    } finally {
-      _checkingStatus = false;
+      return;
     }
-  }
 
-  /// Called once OrderTrackingScreen's "payment confirmed" beat has played
-  /// — a no-op otherwise so a stray call after the order has since moved on
-  /// (or been reset) can't resurrect a stale flag.
-  void acknowledgeJustPlaced() {
-    if (!state.justPlaced) return;
-    state = state.copyWith(justPlaced: false);
-  }
+    final serverStage = switch (order.status) {
+      'placed' => OrderStage.placed,
+      'preparing' || 'ready_for_pickup' =>
+        order.runnerName != null ? OrderStage.runnerAssigned : OrderStage.preparing,
+      'picked_up' => OrderStage.pickedUp,
+      'delivered' => OrderStage.delivered,
+      _ => null,
+    };
+    if (serverStage == null) return;
 
-  void _scheduleNext() {
-    _stageTimer?.cancel();
-    _stageTimer = Timer(const Duration(seconds: 4), _advance);
-  }
-
-  /// Only `placed -> runnerAssigned` is still timer-simulated — there is no
-  /// real runner-matching backend yet. `pickedUp` and `delivered` (Task 11)
-  /// are never reached from here; see [markPickedUp]/[markDelivered].
-  void _advance() {
-    if (state.stage == OrderStage.placed) {
-      state = state.copyWith(
-        stage: OrderStage.runnerAssigned,
-        runnerName: _mockRunnerNames[_random.nextInt(_mockRunnerNames.length)],
-      );
+    final current = state.stage;
+    final advances = current != null && current != OrderStage.confirmed && serverStage.index > current.index;
+    final runnerChanged = order.runnerName != null && order.runnerName != state.runnerName;
+    if (advances || runnerChanged) {
+      state = state.copyWith(stage: advances ? serverStage : null, runnerName: order.runnerName);
     }
+    if (serverStage == OrderStage.delivered) _stopStatusPoll();
   }
 
-  /// Called only after the runner's real `verify-pickup` backend call has
-  /// actually succeeded (Task 11, see RunnerScanScreen) — never
-  /// optimistically, and never by a timer. No-op unless a runner has
-  /// genuinely been assigned, so it can't fire twice or out of order.
+  /// Called right after the runner's real `verify-pickup` backend call has
+  /// succeeded on this same device (Task 11, see RunnerScanScreen) — never
+  /// optimistically, and never by a timer. The next poll would reach the
+  /// same stage; this just saves the wait. No-op unless the restaurant has
+  /// accepted the order and it hasn't already been picked up.
   void markPickedUp() {
-    if (state.stage != OrderStage.runnerAssigned) return;
+    if (state.stage != OrderStage.preparing && state.stage != OrderStage.runnerAssigned) return;
     state = state.copyWith(stage: OrderStage.pickedUp);
   }
 
   /// Called only after the runner's real `verify-delivery` backend call has
-  /// actually succeeded (Task 11) — this is now the ONLY path that reaches
-  /// `delivered`. No-op unless the order was genuinely picked up first.
+  /// actually succeeded (Task 11). No-op unless the order was genuinely
+  /// picked up first.
   void markDelivered() {
     if (state.stage != OrderStage.pickedUp) return;
     state = state.copyWith(stage: OrderStage.delivered);
+    _stopStatusPoll();
   }
 
   /// The one stage transition that is never automatic — a student tap on
@@ -251,21 +249,9 @@ class OrderTrackingController extends Notifier<OrderTrackingSession> {
     state = state.copyWith(stage: OrderStage.confirmed);
   }
 
-  /// Bypasses the timer for deterministic tests/previews, mirroring
-  /// `RunnerController.simulateOfferNow`. Only ever advances
-  /// `placed -> runnerAssigned` now — see [markPickedUp]/[markDelivered]
-  /// for the stages Task 11 gates on a real backend call.
-  void advanceForTest() => _advance();
-
   void resetOrder() {
-    _cancelTimer();
     _stopStatusPoll();
     state = const OrderTrackingSession();
-  }
-
-  void _cancelTimer() {
-    _stageTimer?.cancel();
-    _stageTimer = null;
   }
 }
 

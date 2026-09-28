@@ -43,6 +43,7 @@ class OrderHistoryEntry {
     this.declinedAt,
     this.declineReason,
     this.declineReasonNote,
+    this.runnerName,
   });
 
   final String id;
@@ -71,6 +72,11 @@ class OrderHistoryEntry {
   final String? declineReasonNote;
 
   bool get isDeclined => declinedAt != null;
+
+  /// Task 73: the real claimed runner's display name ("Chidi O."), null
+  /// until a runner has actually claimed the order. Only the detail
+  /// endpoint (GET /orders/:orderId) carries it.
+  final String? runnerName;
 
   /// Whether cancelling this order moved money back to the student — false
   /// only for Pay on Delivery, which never charged anything up front.
@@ -104,6 +110,7 @@ class OrderHistoryEntry {
         declinedAt: _parseNullable(json['declinedAt']),
         declineReason: OrderDeclineReasonJson.tryParse(json['declineReason'] as String?),
         declineReasonNote: json['declineReasonNote'] as String?,
+        runnerName: json['runnerName'] as String?,
       );
 }
 

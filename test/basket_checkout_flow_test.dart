@@ -486,14 +486,15 @@ void main() {
         await tester.pump(const Duration(milliseconds: 50));
 
         expect(find.text('Active (1)'), findsOneWidget);
-        expect(find.text('Order received'), findsOneWidget);
+        // Task 73: the real stage — the restaurant hasn't accepted yet.
+        expect(find.text('Waiting for Tantalizers to accept'), findsOneWidget);
         // Scoped to MyOrdersScreen: OrderTrackingScreen is still mounted in
         // a background shell branch, and its own Task 10 step labels
         // ('Preparing', 'Confirmed', ...) now legitimately share text with
         // this screen's separate compact mini-stepper — an unscoped
         // find.text would match both.
         expect(
-          find.descendant(of: find.byType(MyOrdersScreen), matching: find.text('Confirmed')),
+          find.descendant(of: find.byType(MyOrdersScreen), matching: find.text('Placed')),
           findsOneWidget,
         );
       },

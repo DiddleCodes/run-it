@@ -22,6 +22,8 @@ import 'package:run_it/features/vendor/presentation/restaurant_metrics_screen.da
 import 'package:run_it/features/vendor/presentation/restaurant_orders_screen.dart';
 import 'package:run_it/features/vendor/presentation/widgets/category_picker_field.dart';
 
+import 'support/server_orders.dart';
+
 /// Regression convention for TASK 8a's overflow-bug class: render the
 /// app's core reusable cards at a spread of Dynamic Type scale factors and
 /// assert nothing throws a `RenderFlex overflowed` (or any other) render
@@ -629,7 +631,7 @@ void main() {
               deliveryLocationLabel: 'Hostel B',
             );
         container.read(orderTrackingProvider.notifier)
-          ..advanceForTest()
+          ..applyServerOrder(serverOrder('order-scale-1', 'ready_for_pickup', runnerName: 'Chidi O.'))
           ..markPickedUp()
           ..markDelivered();
         await tester.pumpAndSettle();

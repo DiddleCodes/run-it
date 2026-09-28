@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, NotFoundException } from '@nestjs/common';
-import { OrdersService } from '../src/orders/orders.service';
+import { OrdersService, runnerDisplayName } from '../src/orders/orders.service';
 import { createNotificationsEmitterMock, createPrismaMock, createRedisMock } from './support/mocks';
 
 function makeService() {
@@ -313,6 +313,17 @@ describe('OrdersService.getOrderForViewer', () => {
     expect(result.deliveryPin).toBeUndefined();
   });
 
+  it("Task 73: shows the claimed runner's real display name, and null before anyone has claimed it", async () => {
+    const { service, prisma } = makeService();
+    prisma.order.findUnique.mockResolvedValue({ ...orderWithVendor(), runnerUser: { name: 'Chidi Okafor' } });
+    const claimed = await service.getOrderForViewer('order-1', { sub: 'student-1', role: 'user' });
+    expect(claimed.runnerName).toBe('Chidi O.');
+
+    prisma.order.findUnique.mockResolvedValue({ ...orderWithVendor({ runnerUserId: null } as any), runnerUser: null });
+    const unclaimed = await service.getOrderForViewer('order-1', { sub: 'student-1', role: 'user' });
+    expect(unclaimed.runnerName).toBeNull();
+  });
+
   // Task 46: the detail view's real timestamped lifecycle.
   it('includes vendor name, items, and the full timestamped lifecycle for any party', async () => {
     const { service, prisma } = makeService();
@@ -500,3 +511,16 @@ describe('OrdersService.reportProblem', () => {
     ).rejects.toThrow(NotFoundException);
   });
 });
+
+describe('runnerDisplayName (Task 73)', () => {
+  it.each([
+    ['Chidi Okafor', 'Chidi O.'],
+    ['  amaka   n.  obi ', 'amaka O.'],
+    ['Tunde', 'Tunde'],
+    ['', 'Your runner'],
+    [null, 'Your runner'],
+  ])('%p -> %p', (input, expected) => {
+    expect(runnerDisplayName(input as string | null)).toBe(expected);
+  });
+});
+

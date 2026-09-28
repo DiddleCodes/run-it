@@ -896,12 +896,15 @@ class OrderTrackingScreen extends ConsumerStatefulWidget {
 }
 
 class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
+  // Task 73: one step per real backend stage (OrderStage placed ->
+  // delivered). The student's own "confirmed" tap completes every step
+  // rather than adding a sixth.
   static const _steps = [
-    'Order Received',
+    'Placed',
     'Preparing',
-    'En Route',
+    'Runner assigned',
+    'On its way',
     'Delivered',
-    'Confirmed',
   ];
 
   bool _cancelling = false;
@@ -1001,7 +1004,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     // reversing food that's already physically in transit — the
     // cancellation window closes there.
     final cancellable =
-        stage == OrderStage.placed || stage == OrderStage.runnerAssigned;
+        stage == OrderStage.placed || stage == OrderStage.preparing || stage == OrderStage.runnerAssigned;
     // Task 30: "Report a problem" — there's nothing to report on before
     // the restaurant has actually handed the order off (pickedUp is the
     // earliest real stage a physical problem — wrong items, damaged
@@ -1104,14 +1107,20 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     );
   }
 
+  // Task 73: says only what the real backend order actually shows — no
+  // "looking for a runner" before the restaurant has even accepted, and no
+  // time promises at any stage.
   String _statusLine(OrderTrackingSession session) {
+    final runner = session.runnerName ?? 'Your runner';
     switch (session.stage) {
       case OrderStage.placed:
-        return 'Looking for a runner nearby.';
+        return 'Waiting for ${session.eateryName} to accept your order.';
+      case OrderStage.preparing:
+        return '${session.eateryName} is preparing your order. Looking for a runner nearby.';
       case OrderStage.runnerAssigned:
-        return '${session.runnerName} is heading to ${session.eateryName}.';
+        return '$runner is your runner and will collect your order from ${session.eateryName}.';
       case OrderStage.pickedUp:
-        return '${session.runnerName} has picked up your order.';
+        return '$runner has picked up your order — it’s on its way to you.';
       case OrderStage.delivered:
         return 'Delivered to ${session.deliveryLocationLabel}. Tap below once you have it.';
       case OrderStage.confirmed:

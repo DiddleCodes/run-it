@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:run_it/core/network/orders_repository.dart';
 import 'package:run_it/core/routing/app_router.dart';
 import 'package:run_it/core/widgets/app_notification.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
 import 'package:run_it/features/ordering/application/order_tracking_controller.dart';
+import 'package:run_it/features/ordering/domain/order_history_models.dart';
 import 'package:run_it/features/ordering/domain/ordering_models.dart';
 import 'package:run_it/features/ordering/presentation/ordering_screens.dart';
+
+import 'support/server_orders.dart';
 
 class _FakeAuthController extends AuthController {
   _FakeAuthController(this._session);
@@ -41,7 +45,16 @@ void _setPhoneViewport(WidgetTester tester) {
   addTearDown(tester.view.resetDevicePixelRatio);
 }
 
-Widget _harness() {
+/// The real order as the backend currently reports it — each test moves
+/// [current] forward the way the real restaurant/runner actions would, and
+/// the tracker only ever learns about it through its own polling.
+class _LiveOrdersRepository extends OrdersRepository {
+  OrderHistoryEntry? current;
+  @override
+  Future<OrderHistoryEntry> fetchOrderDetail({required String orderId, required String token}) async => current!;
+}
+
+Widget _harness({OrdersRepository? orders}) {
   final router = GoRouter(
     initialLocation: AppRoutes.orderTracking,
     routes: [
@@ -50,7 +63,13 @@ Widget _harness() {
     ],
   );
   return ProviderScope(
-    overrides: [authControllerProvider.overrideWith(() => _FakeAuthController(_studentSession()))],
+    overrides: [
+      authControllerProvider.overrideWith(() => _FakeAuthController(_studentSession())),
+      if (orders != null) ...[
+        ordersRepositoryProvider.overrideWithValue(orders),
+        orderStatusPollIntervalProvider.overrideWithValue(const Duration(milliseconds: 100)),
+      ],
+    ],
     child: MaterialApp.router(
       routerConfig: router,
       builder: (context, child) => AppNotificationHost(child: child ?? const SizedBox.shrink()),
@@ -60,10 +79,11 @@ Widget _harness() {
 
 void main() {
   testWidgets(
-    'the lifecycle reaches every stage in order, each with the right label and stepper position',
+    'Task 73: every stage comes from the real order — honest copy, the real runner name, and no invented ETAs',
     (tester) async {
       _setPhoneViewport(tester);
-      await tester.pumpWidget(_harness());
+      final orders = _LiveOrdersRepository()..current = serverOrder('order-lifecycle-1', 'placed');
+      await tester.pumpWidget(_harness(orders: orders));
 
       final container = ProviderScope.containerOf(tester.element(find.byType(OrderTrackingScreen)));
       container
@@ -76,50 +96,67 @@ void main() {
             deliveryLocationLabel: 'Hostel B',
           );
       await tester.pump();
-      // AnimatedContainer/AnimatedSwitcher/TweenAnimationBuilder transitions
-      // mid-flight — settle each stage before asserting on it.
       await tester.pumpAndSettle();
 
       expect(container.read(orderTrackingProvider).stage, OrderStage.placed);
-      expect(find.text('Order Received'), findsOneWidget);
-      // Task 43: the checkout success beat plays first, in place of the
-      // normal status line, then settles into it on its own timer.
-      expect(container.read(orderTrackingProvider).justPlaced, isTrue);
+      for (final label in ['Placed', 'Preparing', 'Runner assigned', 'On its way', 'Delivered']) {
+        expect(find.text(label), findsOneWidget);
+      }
+      // Task 43: the checkout success beat plays first.
       expect(find.text('Payment confirmed'), findsOneWidget);
-      expect(find.text('Looking for a runner nearby.'), findsNothing);
-
       await tester.pump(const Duration(milliseconds: 1400));
       await tester.pumpAndSettle();
 
-      expect(container.read(orderTrackingProvider).justPlaced, isFalse);
-      expect(find.text('Looking for a runner nearby.'), findsOneWidget);
+      // Restaurant hasn't accepted: say so — not "looking for a runner".
+      expect(find.text('Waiting for Tantalizers to accept your order.'), findsOneWidget);
+      expect(find.textContaining('Looking for a runner'), findsNothing);
       expect(find.text('Cancel order'), findsOneWidget);
 
-      container.read(orderTrackingProvider.notifier).advanceForTest();
+      // Time passing alone never invents a runner or a stage.
+      await tester.pump(const Duration(seconds: 10));
+      expect(container.read(orderTrackingProvider).stage, OrderStage.placed);
+      expect(container.read(orderTrackingProvider).runnerName, isNull);
+
+      // Restaurant accepts; no runner has claimed it yet.
+      orders.current = serverOrder('order-lifecycle-1', 'preparing');
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pumpAndSettle();
+      expect(container.read(orderTrackingProvider).stage, OrderStage.preparing);
+      expect(find.text('Tantalizers is preparing your order. Looking for a runner nearby.'), findsOneWidget);
+
+      // A real runner claims it — their real name appears.
+      orders.current = serverOrder('order-lifecycle-1', 'ready_for_pickup', runnerName: 'Chidi O.');
+      await tester.pump(const Duration(milliseconds: 150));
       await tester.pumpAndSettle();
       expect(container.read(orderTrackingProvider).stage, OrderStage.runnerAssigned);
-      expect(find.text('Preparing'), findsOneWidget);
+      expect(find.text('Chidi O. is your runner and will collect your order from Tantalizers.'), findsOneWidget);
+      // Still cancellable until pickup (below the fold once a runner shows).
+      await tester.scrollUntilVisible(find.text('Cancel order'), 200);
       expect(find.text('Cancel order'), findsOneWidget);
+      tester.state<ScrollableState>(find.byType(Scrollable).first).position.jumpTo(0);
+      await tester.pumpAndSettle();
 
-      // pickedUp/delivered are no longer timer-driven (Task 11) — they only
-      // ever advance via a real verify-pickup/verify-delivery success,
-      // which RunnerScanScreen reflects here through these same methods.
-      container.read(orderTrackingProvider.notifier).markPickedUp();
+      // Real pickup.
+      orders.current = serverOrder('order-lifecycle-1', 'picked_up', runnerName: 'Chidi O.');
+      await tester.pump(const Duration(milliseconds: 150));
       await tester.pumpAndSettle();
       expect(container.read(orderTrackingProvider).stage, OrderStage.pickedUp);
-      expect(find.text('En Route'), findsOneWidget);
+      expect(find.text('Chidi O. has picked up your order — it’s on its way to you.'), findsOneWidget);
       // The cancellation window has closed — food is physically in transit.
       expect(find.text('Cancel order'), findsNothing);
 
-      container.read(orderTrackingProvider.notifier).markDelivered();
+      // Real delivery.
+      orders.current = serverOrder('order-lifecycle-1', 'delivered', runnerName: 'Chidi O.');
+      await tester.pump(const Duration(milliseconds: 150));
       await tester.pumpAndSettle();
       expect(container.read(orderTrackingProvider).stage, OrderStage.delivered);
       expect(find.textContaining('Delivered to Hostel B'), findsOneWidget);
-      // Confirmation is a student action, never automatic. Below the fold
-      // now that the delivery-PIN card (Task 11) adds height above it.
+      // Confirmation is a student action, never automatic.
       await tester.scrollUntilVisible(find.text("I've received my order"), 200);
       expect(find.text("I've received my order"), findsOneWidget);
       expect(find.text('Enjoy your meal!'), findsNothing);
+      // No time promises anywhere on the way.
+      expect(find.textContaining('min'), findsNothing);
     },
   );
 
@@ -139,7 +176,7 @@ void main() {
             deliveryLocationLabel: 'Hostel B',
           );
       container.read(orderTrackingProvider.notifier)
-        ..advanceForTest()
+        ..applyServerOrder(serverOrder('order-lifecycle-2', 'ready_for_pickup', runnerName: 'Chidi O.'))
         ..markPickedUp()
         ..markDelivered();
       await tester.pumpAndSettle();
@@ -169,7 +206,8 @@ void main() {
           .position
           .jumpTo(0);
       await tester.pumpAndSettle();
-      expect(find.text('Confirmed'), findsWidgets);
+      // Task 73: the student's own confirmation completes every step.
+      expect(find.text('Delivered'), findsWidgets);
       // The rating prompt (Task 14 Part D, extended by Task 48) comes
       // first — Skip reaches the original closing message without
       // submitting a rating.
@@ -201,7 +239,7 @@ void main() {
             deliveryLocationLabel: 'Hostel B',
           );
       final notifier = container.read(orderTrackingProvider.notifier)
-        ..advanceForTest()
+        ..applyServerOrder(serverOrder('order-lifecycle-3', 'ready_for_pickup', runnerName: 'Chidi O.'))
         ..markPickedUp()
         ..markDelivered();
       await tester.pumpAndSettle();

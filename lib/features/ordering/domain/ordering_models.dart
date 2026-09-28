@@ -1,17 +1,15 @@
 enum PaymentMethod { wallet, card, payOnDelivery }
 
-/// The student-side delivery lifecycle. Kept separate from the runner's
-/// `DeliveryStage` since the student sees one extra stage before a runner
-/// has even been matched. `placed -> runnerAssigned` is still simulated
-/// locally (no real runner-matching backend exists yet). `pickedUp` and
-/// `delivered` (Task 11) are reached only via
-/// `OrderTrackingController.markPickedUp`/`markDelivered`, called only
-/// after the runner's real `verify-pickup`/`verify-delivery` backend call
-/// has actually succeeded — never by a timer. `confirmed` is reached only
-/// by an explicit student tap on OrderTrackingScreen (Task 10) — since it's
-/// the trigger point for the (future) rider-rating prompt and must reflect
-/// a real acknowledgement, not an assumption.
-enum OrderStage { placed, runnerAssigned, pickedUp, delivered, confirmed }
+/// Task 73: every stage up to `delivered` is driven by the real backend
+/// order (OrderTrackingController.applyServerOrder) — `placed` until the
+/// restaurant accepts, `preparing` once it has (no runner yet),
+/// `runnerAssigned` once a real runner has claimed it via matching,
+/// `pickedUp` after a real verify-pickup, `delivered` after a real
+/// verify-delivery. Nothing is timer-simulated. `confirmed` is reached only
+/// by an explicit student tap on OrderTrackingScreen (Task 10) — it's the
+/// trigger point for the rating prompt and must reflect a real
+/// acknowledgement, not an assumption.
+enum OrderStage { placed, preparing, runnerAssigned, pickedUp, delivered, confirmed }
 
 class Eatery {
   const Eatery({

@@ -48,9 +48,6 @@ final orderHistoryProvider =
       OrderHistoryController.new,
     );
 
-/// Deterministic per-runner demo rating — mirrors the runner side's own
-/// `_demoRating`; there's no ratings backend for either direction yet.
-double _demoRunnerRating(String name) => 4.5 + (name.hashCode.abs() % 5) / 10;
 
 enum _OrdersTab { active, past, cancelled }
 
@@ -224,24 +221,19 @@ class _SegmentedTabs extends StatelessWidget {
   }
 }
 
-const _stepLabels = ['Confirmed', 'Preparing', 'On the way', 'Arrived'];
+const _stepLabels = ['Placed', 'Preparing', 'Runner', 'On its way'];
 
-(int, String, IconData) _activeStepInfo(OrderStage stage) => switch (stage) {
-  OrderStage.placed => (0, 'Order received', Icons.check_circle_outline_rounded),
-  OrderStage.runnerAssigned => (1, 'Preparing your order', Icons.restaurant_rounded),
-  OrderStage.pickedUp => (2, 'On the way to you', Icons.two_wheeler_rounded),
+// Task 73: mirrors the tracking screen's real-stage copy — no invented
+// ETAs.
+(int, String, IconData) _activeStepInfo(OrderStage stage, {required String eateryName}) => switch (stage) {
+  OrderStage.placed => (0, 'Waiting for $eateryName to accept', Icons.hourglass_top_rounded),
+  OrderStage.preparing => (1, 'Being prepared', Icons.restaurant_rounded),
+  OrderStage.runnerAssigned => (2, 'Runner assigned', Icons.directions_walk_rounded),
+  OrderStage.pickedUp => (3, 'On its way to you', Icons.two_wheeler_rounded),
   // Neither of these ever actually renders here — hasActiveOrder excludes
   // both stages above — but the switch must stay exhaustive.
-  OrderStage.delivered => (3, 'Arrived', Icons.home_rounded),
+  OrderStage.delivered => (4, 'Delivered', Icons.home_rounded),
   OrderStage.confirmed => (4, 'Confirmed', Icons.celebration_rounded),
-};
-
-const _etaByStage = {
-  OrderStage.placed: '15–20 min',
-  OrderStage.runnerAssigned: '10–15 min',
-  OrderStage.pickedUp: '5–10 min',
-  OrderStage.delivered: 'Arrived',
-  OrderStage.confirmed: 'Arrived',
 };
 
 class _ActiveOrderTab extends ConsumerWidget {
@@ -251,7 +243,7 @@ class _ActiveOrderTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stage = session.stage!;
-    final (stepIndex, statusLabel, statusIcon) = _activeStepInfo(stage);
+    final (stepIndex, statusLabel, statusIcon) = _activeStepInfo(stage, eateryName: session.eateryName);
     return ListView(
       padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 14, AppSpacing.lg, 24),
       children: [
@@ -327,32 +319,15 @@ class _ActiveOrderTab extends ConsumerWidget {
               ],
               const SizedBox(height: 16),
               Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Estimated arrival',
-                          style: Theme.of(
-                            context,
-                          ).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
-                        ),
-                        Text(
-                          _etaByStage[stage]!,
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(color: AppColors.inkText),
-                        ),
-                      ],
-                    ),
-                  ),
                   InkWell(
                     onTap: () => context.push(AppRoutes.orderTracking),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'View on map',
+                          'Track order',
                           style: Theme.of(context).textTheme.labelMedium?.copyWith(
                             color: AppColors.primaryMaroon,
                             fontWeight: FontWeight.w700,
@@ -424,28 +399,11 @@ class _RunnerInfoRow extends ConsumerWidget {
                             ?.copyWith(color: AppColors.inkText),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    const Icon(Icons.star_rounded, size: 13, color: AppColors.gold),
-                    const SizedBox(width: 2),
-                    Text(
-                      _demoRunnerRating(name).toStringAsFixed(1),
-                      style: Theme.of(context).textTheme.labelSmall
-                          ?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w700),
-                    ),
                   ],
                 ),
-                Container(
-                  margin: const EdgeInsets.only(top: 3),
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.successBackground,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                  child: Text(
-                    'On campus',
-                    style: Theme.of(context).textTheme.labelSmall
-                        ?.copyWith(color: AppColors.success, fontWeight: FontWeight.w600),
-                  ),
+                Text(
+                  'Your runner',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
                 ),
               ],
             ),

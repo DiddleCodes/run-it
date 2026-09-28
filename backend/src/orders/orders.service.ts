@@ -197,7 +197,7 @@ export class OrdersService {
   async getOrderForViewer(orderId: string, user: JwtPayload) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { vendor: true, items: true },
+      include: { vendor: true, items: true, runnerUser: { select: { name: true } } },
     });
     if (!order) throw new NotFoundException('Order not found');
 
@@ -223,6 +223,10 @@ export class OrdersService {
       // party already allowed to see this order at all can see its own
       // vendor/items/total/note and the full timestamped lifecycle.
       vendorName: order.vendor.businessName,
+      // Task 73: null until a runner has genuinely claimed the order via the
+      // real matching flow (Order.runnerUserId) — never a placeholder name.
+      // First name + last initial only.
+      runnerName: order.runnerUserId ? runnerDisplayName(order.runnerUser?.name) : null,
       totalAmount: order.totalAmount,
       deliveryLocationLabel: order.deliveryLocationLabel,
       note: order.note,
@@ -392,3 +396,14 @@ function codesMatch(submitted: string, expected: string): boolean {
   if (a.length !== b.length) return false;
   return timingSafeEqual(a, b);
 }
+
+// Task 73: "Chidi Okafor" -> "Chidi O.", "Chidi" -> "Chidi"; a runner with
+// no stored name (possible for older OTP signups) is still honestly "Your
+// runner" rather than an invented one.
+export function runnerDisplayName(name: string | null | undefined): string {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'Your runner';
+  if (parts.length === 1) return parts[0];
+  return `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.`;
+}
+

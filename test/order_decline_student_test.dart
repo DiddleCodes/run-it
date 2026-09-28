@@ -10,6 +10,7 @@ import 'package:run_it/features/auth/domain/auth_models.dart';
 import 'package:run_it/features/ordering/application/order_tracking_controller.dart';
 import 'package:run_it/features/ordering/domain/order_decline.dart';
 import 'package:run_it/features/ordering/domain/order_history_models.dart';
+import 'package:run_it/features/ordering/domain/ordering_models.dart';
 import 'package:run_it/features/ordering/presentation/my_orders_screen.dart';
 import 'package:run_it/features/ordering/presentation/order_detail_screen.dart';
 import 'package:run_it/features/ordering/presentation/ordering_screens.dart';
@@ -205,22 +206,32 @@ void main() {
       await tester.pump();
     });
 
-    testWidgets('once the restaurant accepts, polling stops for good', (tester) async {
-      final repo = _ScriptedOrdersRepository([_order(status: 'preparing')]);
-      await tester.pumpWidget(_trackingHarness(repo));
-      await tester.pump();
-      await _placeOrder(tester);
+    testWidgets(
+      'Task 73: once accepted, no decline can arrive — tracking follows the real order and polling stops at delivery',
+      (tester) async {
+        final repo = _ScriptedOrdersRepository([
+          _order(status: 'preparing'),
+          _order(status: 'delivered'),
+        ]);
+        await tester.pumpWidget(_trackingHarness(repo));
+        await tester.pump();
+        await _placeOrder(tester);
+        final container = ProviderScope.containerOf(tester.element(find.byType(OrderTrackingScreen)));
 
-      await tester.pump(const Duration(milliseconds: 110));
-      await tester.pump(const Duration(milliseconds: 600));
+        await tester.pump(const Duration(milliseconds: 110));
+        expect(container.read(orderTrackingProvider).stage, OrderStage.preparing);
 
-      expect(repo.fetches, 1);
-      expect(find.text('Order declined'), findsNothing);
-      ProviderScope.containerOf(tester.element(find.byType(OrderTrackingScreen)))
-          .read(orderTrackingProvider.notifier)
-          .resetOrder();
-      await tester.pump();
-    });
+        await tester.pump(const Duration(milliseconds: 110));
+        expect(container.read(orderTrackingProvider).stage, OrderStage.delivered);
+        final fetchesAtDelivery = repo.fetches;
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(repo.fetches, fetchesAtDelivery);
+        expect(find.text('Order declined'), findsNothing);
+
+        container.read(orderTrackingProvider.notifier).resetOrder();
+        await tester.pump();
+      },
+    );
   });
 
   testWidgets('Task 61: a declined order in history and detail says who declined it, why, and the refund', (
