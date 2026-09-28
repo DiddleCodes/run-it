@@ -737,6 +737,33 @@ describe('OrderEscrowService.hold — Task 70 server-authoritative pricing + 5% 
     expect(prisma.wallet.updateMany).not.toHaveBeenCalled();
   });
 
+  it('Task 72: one unavailable line rejects the WHOLE order — never dropped, never partially placed', async () => {
+    const { service, prisma } = readyToCharge();
+    prisma.menuItem.findMany.mockResolvedValue([
+      catalogItem('m1'),
+      { ...catalogItem('s1'), name: 'Chapman', isAvailable: false },
+      catalogItem('s2'),
+    ]);
+
+    await expect(
+      service.hold('order-1', {
+        studentUserId: 's1',
+        restaurantUserId: 'r1',
+        // A stale client basket still listing the item as orderable.
+        items: [
+          { menuItemId: 'm1', quantity: 1 },
+          { menuItemId: 's1', quantity: 2 },
+          { menuItemId: 's2', quantity: 1 },
+        ],
+      }),
+    ).rejects.toThrow(new BadRequestException('Chapman is no longer available — remove it to continue.'));
+    expect(prisma.wallet.findUnique).not.toHaveBeenCalled();
+    expect(prisma.wallet.updateMany).not.toHaveBeenCalled();
+    expect(prisma.order.upsert).not.toHaveBeenCalled();
+    expect(prisma.orderItem.createMany).not.toHaveBeenCalled();
+    expect(prisma.orderEscrow.create).not.toHaveBeenCalled();
+  });
+
   it("rejects an item that doesn't exist (e.g. deleted from the menu)", async () => {
     const { service, prisma } = readyToCharge();
     prisma.menuItem.findMany.mockResolvedValue([]);
