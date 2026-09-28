@@ -1,8 +1,21 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// Task 74: the real upload key. android/key.properties (gitignored, never
+// committed) points at a keystore that lives OUTSIDE the repo — see the
+// android/SIGNING.md for where it is and why it must be backed up.
+// Losing it means this app identity can never ship another update.
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) FileInputStream(keystorePropertiesFile).use { load(it) }
+}
+val hasReleaseSigning = keystorePropertiesFile.exists()
 
 android {
     namespace = "com.runit.run_it"
@@ -34,11 +47,22 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Never the debug key: without key.properties there's simply no
+            // release signing config, and the check below stops the build.
+            if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
         }
     }
 }
@@ -51,4 +75,17 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+// Task 74: fail a release build loudly rather than ever producing one signed
+// with the debug key (or unsigned). Debug builds don't need key.properties.
+tasks.configureEach {
+    if (!hasReleaseSigning && (name == "packageRelease" || name == "signReleaseBundle")) {
+        doFirst {
+            throw GradleException(
+                "Release signing isn't configured: android/key.properties is missing. " +
+                    "Restore it (and the upload keystore it points to) from the backup — see android/SIGNING.md.",
+            )
+        }
+    }
 }
