@@ -127,7 +127,7 @@ void main() {
   setUp(() => _CountingWallet.builds = 0);
 
   group('Task 61: the student sees a real restaurant decline on the tracking screen', () {
-    testWidgets('wallet order: the stated reason, and confirmation the full refund is on its way', (tester) async {
+    testWidgets('wallet order: the stated reason, and confirmation the full refund has landed', (tester) async {
       final repo = _ScriptedOrdersRepository([
         _order(status: 'placed'),
         _order(status: 'cancelled', reason: OrderDeclineReason.outOfStock),
@@ -147,11 +147,11 @@ void main() {
       expect(find.text('Order declined'), findsOneWidget);
       expect(find.text("Spice Garden couldn't take your order."), findsOneWidget);
       expect(find.text('Reason: Out of stock'), findsOneWidget);
-      expect(find.text('Your ₦2500 refund is on its way back to your RUN IT wallet.'), findsOneWidget);
+      expect(find.text('Your ₦2500 has been refunded to your RUN IT wallet.'), findsOneWidget);
       // The app-level notification carries the same honest message.
       expect(
         find.text(
-          'Spice Garden declined your order: Out of stock. Your ₦2500 refund is on its way back to your RUN IT wallet.',
+          'Spice Garden declined your order: Out of stock. Your ₦2500 has been refunded to your RUN IT wallet.',
         ),
         findsOneWidget,
       );

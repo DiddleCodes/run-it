@@ -1578,7 +1578,7 @@ class _DeclinedOrder extends StatelessWidget {
             ),
             child: Text(
               info.refundedKobo > 0
-                  ? 'Your ${naira(info.refundedKobo ~/ 100)} refund is on its way back to your RUN IT wallet.'
+                  ? 'Your ${naira(info.refundedKobo ~/ 100)} has been refunded to your RUN IT wallet.'
                   : "You haven't been charged for this order.",
               style: Theme.of(
                 context,
