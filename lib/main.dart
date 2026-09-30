@@ -10,6 +10,7 @@ import 'core/theme/app_theme.dart';
 import 'core/widgets/app_notification.dart';
 import 'features/auth/application/auth_controller.dart';
 import 'features/chat/application/chat_controllers.dart';
+import 'features/ordering/application/active_order_restorer.dart';
 
 Future<void> main() async {
   // Task 31: initializeCrashReporting's appRunner callback runs inside
@@ -61,6 +62,8 @@ class RunItApp extends ConsumerWidget {
     // Task 78: the order-chat socket (connected while signed in and in the
     // foreground) and its in-app banner for messages in chats not on screen.
     ref.watch(chatNoticeBannerProvider);
+    // Picks a student's in-progress order back up after an app restart.
+    ref.watch(activeOrderRestorerProvider);
 
     return MaterialApp.router(
       title: 'Run-It',

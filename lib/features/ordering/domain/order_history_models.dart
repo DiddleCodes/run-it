@@ -84,6 +84,10 @@ class OrderHistoryEntry {
 
   String? get declineReasonLabel => declineReasonText(declineReason, declineReasonNote);
 
+  /// Placed and not yet delivered or cancelled — what My Orders' Active
+  /// tab lists and what gets restored after an app restart.
+  bool get isInProgress => const {'placed', 'preparing', 'ready_for_pickup', 'picked_up'}.contains(status);
+
   String get itemsSummary =>
       items.map((line) => '${line.quantity}× ${line.name}').join(', ');
 

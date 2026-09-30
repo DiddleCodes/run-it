@@ -79,6 +79,13 @@ class _MyOrdersScreenState extends ConsumerState<MyOrdersScreen> {
       if (isDeclined && wasDeclined != true) ref.read(orderHistoryProvider.notifier).refresh();
     });
     final history = ref.watch(orderHistoryProvider);
+    // Every order still in progress server-side that isn't the one already
+    // being tracked on this device — e.g. after an app restart, or a
+    // checkout whose confirmation was lost. It went through; it belongs here.
+    final otherActive = [
+      for (final order in history.valueOrNull ?? const <OrderHistoryEntry>[])
+        if (order.isInProgress && order.id != session.orderId) order,
+    ];
 
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,
@@ -111,14 +118,18 @@ class _MyOrdersScreenState extends ConsumerState<MyOrdersScreen> {
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: _SegmentedTabs(
                 value: _tab,
-                activeCount: hasActiveOrder ? 1 : 0,
+                activeCount: (hasActiveOrder ? 1 : 0) + otherActive.length,
                 onChanged: (tab) => setState(() => _tab = tab),
               ),
             ),
             Expanded(
               child: switch (_tab) {
-                _OrdersTab.active => hasActiveOrder
-                    ? _ActiveOrderTab(session: session)
+                _OrdersTab.active => hasActiveOrder || otherActive.isNotEmpty
+                    ? RefreshIndicator(
+                        color: AppColors.primaryMaroon,
+                        onRefresh: () => ref.read(orderHistoryProvider.notifier).refresh(),
+                        child: _ActiveOrderTab(session: hasActiveOrder ? session : null, others: otherActive),
+                      )
                     : const _EmptyState(
                         icon: Icons.receipt_long_outlined,
                         title: 'No active order',
@@ -237,15 +248,35 @@ const _stepLabels = ['Placed', 'Preparing', 'Runner', 'On its way'];
 };
 
 class _ActiveOrderTab extends ConsumerWidget {
-  const _ActiveOrderTab({required this.session});
+  const _ActiveOrderTab({required this.session, required this.others});
+  final OrderTrackingSession? session;
+  final List<OrderHistoryEntry> others;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 14, AppSpacing.lg, 24),
+      children: [
+        if (session case final session?) _TrackedOrderCard(session: session),
+        for (final order in others) ...[
+          const SizedBox(height: 14),
+          _InProgressOrderCard(order: order),
+        ],
+      ],
+    );
+  }
+}
+
+class _TrackedOrderCard extends ConsumerWidget {
+  const _TrackedOrderCard({required this.session});
   final OrderTrackingSession session;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stage = session.stage!;
     final (stepIndex, statusLabel, statusIcon) = _activeStepInfo(stage, eateryName: session.eateryName);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 14, AppSpacing.lg, 24),
+    return Column(
       children: [
         Container(
           padding: const EdgeInsets.all(AppSpacing.ml),
@@ -347,6 +378,115 @@ class _ActiveOrderTab extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// An order that's in progress server-side but isn't the one this device
+/// is tracking — after an app restart, a second order, or a checkout whose
+/// confirmation never arrived. "Track order" picks it up as the tracked
+/// order (tracking screen, runner card, chat); chat is also one tap away
+/// once a runner is on it.
+class _InProgressOrderCard extends ConsumerStatefulWidget {
+  const _InProgressOrderCard({required this.order});
+  final OrderHistoryEntry order;
+
+  @override
+  ConsumerState<_InProgressOrderCard> createState() => _InProgressOrderCardState();
+}
+
+class _InProgressOrderCardState extends ConsumerState<_InProgressOrderCard> {
+  var _opening = false;
+
+  String get _statusLabel => switch (widget.order.status) {
+    'placed' => 'Waiting for ${widget.order.vendorName} to accept',
+    'picked_up' => 'On its way to you',
+    _ => widget.order.runnerName != null ? 'Runner assigned' : 'Being prepared',
+  };
+
+  Future<void> _track() async {
+    final session = ref.read(authControllerProvider);
+    if (session == null || _opening) return;
+    setState(() => _opening = true);
+    String? pin;
+    try {
+      pin = await ref
+          .read(ordersRepositoryProvider)
+          .fetchDeliveryPin(orderId: widget.order.id, token: session.accessToken);
+    } catch (_) {
+      // The tracking screen handles a missing PIN on its own.
+    }
+    if (!mounted) return;
+    ref.read(orderTrackingProvider.notifier).resumeOrder(widget.order, deliveryPin: pin);
+    setState(() => _opening = false);
+    context.push(AppRoutes.orderTracking);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final order = widget.order;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.ml),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceCard,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.borderSubtle),
+        boxShadow: AppElevation.card(false),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _statusLabel,
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const MenuImagePlaceholder(seed: 'order', size: 46),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      order.vendorName,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(color: AppColors.inkText),
+                    ),
+                    Text(
+                      order.itemsSummary,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.mutedText),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                naira(order.totalKobo ~/ 100),
+                style: Theme.of(context).textTheme.labelLarge
+                    ?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          if (order.runnerName != null) ...[
+            const SizedBox(height: AppSpacing.ml),
+            _RunnerInfoRow(name: order.runnerName!, orderId: order.id),
+          ],
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _opening ? null : _track,
+              iconAlignment: IconAlignment.end,
+              icon: const Icon(CupertinoIcons.chevron_right, size: 14),
+              label: const Text('Track order'),
+              style: TextButton.styleFrom(foregroundColor: AppColors.primaryMaroon),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

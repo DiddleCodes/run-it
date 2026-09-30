@@ -528,8 +528,29 @@ class CheckoutScreen extends ConsumerStatefulWidget {
   ConsumerState<CheckoutScreen> createState() => _CheckoutScreenState();
 }
 
+/// Whether an order id already has a real hold behind it, checked after a
+/// hold call's outcome was lost. `null` = couldn't check (still offline).
+enum _OrderCheck { exists, missing, unknown }
+
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   bool _placingOrder = false;
+
+  // Minted once per visit to Checkout and reused by every "Place order" tap,
+  // so a retry after a lost response is the SAME order: the backend refuses
+  // a second hold for an id that already has one (409, before any money
+  // moves) instead of charging again under a new id.
+  late final String _orderId = 'order-${DateTime.now().microsecondsSinceEpoch}';
+
+  Future<_OrderCheck> _checkOrderExists(String orderId, String token) async {
+    try {
+      await ref.read(ordersRepositoryProvider).fetchOrderDetail(orderId: orderId, token: token);
+      return _OrderCheck.exists;
+    } on ApiException catch (e) {
+      return e.statusCode == 404 ? _OrderCheck.missing : _OrderCheck.unknown;
+    } catch (_) {
+      return _OrderCheck.unknown;
+    }
+  }
 
   Future<void> _placeOrder({
     required List<String> orderItems,
@@ -542,7 +563,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     if (session == null) return;
     setState(() => _placingOrder = true);
 
-    final orderId = 'order-${DateTime.now().microsecondsSinceEpoch}';
+    final orderId = _orderId;
     try {
       // Task 14: the real vendor a student actually browsed and ordered
       // from, when one is known — falling back to the fixed demo
@@ -614,24 +635,43 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       // that navigation.
       HapticFeedback.lightImpact();
     } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() => _placingOrder = false);
-      // 402 Payment Required from the backend means the balance check that
-      // gated this button already went stale (e.g. spent elsewhere in
-      // another tab) — anything else is a genuine backend rejection. Either
-      // way, surface the backend's own message rather than a generic one,
-      // and never proceed to OrderTrackingScreen on a failed hold.
-      ref.read(appNotificationProvider.notifier).error(e.message);
-      return;
+      // 409 on this id means a hold already exists for it: an earlier tap
+      // went through but its response never arrived. That order is real —
+      // confirm it and carry on to it rather than calling it a failure.
+      final alreadyPlaced =
+          e.statusCode == 409 &&
+          await _checkOrderExists(orderId, session.accessToken) == _OrderCheck.exists;
+      if (!alreadyPlaced) {
+        if (!mounted) return;
+        setState(() => _placingOrder = false);
+        // 402 Payment Required from the backend means the balance check that
+        // gated this button already went stale (e.g. spent elsewhere in
+        // another tab) — anything else is a genuine backend rejection. Either
+        // way, surface the backend's own message rather than a generic one,
+        // and never proceed to OrderTrackingScreen on a failed hold.
+        ref.read(appNotificationProvider.notifier).error(e.message);
+        return;
+      }
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _placingOrder = false);
-      ref
-          .read(appNotificationProvider.notifier)
-          .error(
-            "Couldn't reach the server. Check your connection and try again.",
-          );
-      return;
+      // Timeout / dropped connection: the hold may have gone through with
+      // only its response lost. Ask before saying anything — never report a
+      // failure for an order that was actually placed (and charged).
+      final check = await _checkOrderExists(orderId, session.accessToken);
+      if (check != _OrderCheck.exists) {
+        if (!mounted) return;
+        setState(() => _placingOrder = false);
+        ref
+            .read(appNotificationProvider.notifier)
+            .error(
+              check == _OrderCheck.missing
+                  ? "Couldn't reach the server. Check your connection and try again."
+                  // Couldn't even check: say so. Retrying is still safe —
+                  // it reuses this order's id, so it can't charge twice.
+                  : "We couldn't confirm your order. Check My Orders before trying again — "
+                        "retrying won't charge you twice.",
+            );
+        return;
+      }
     }
 
     // Task 11: fetched once, right after the hold that generated it —

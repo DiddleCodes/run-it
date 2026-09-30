@@ -144,6 +144,24 @@ class OrderTrackingController extends Notifier<OrderTrackingSession> {
     _statusPoll = Timer.periodic(ref.read(orderStatusPollIntervalProvider), (_) => refreshFromServer());
   }
 
+  /// Picks an order that's already in progress back up from the server —
+  /// after an app restart, or when the student opens a different active
+  /// order from My Orders. Same session as [placeOrder] (polling included),
+  /// minus the "payment confirmed" beat, then fast-forwarded to the order's
+  /// real current stage.
+  void resumeOrder(OrderHistoryEntry order, {String? deliveryPin}) {
+    placeOrder(
+      orderId: order.id,
+      orderItems: [for (final line in order.items) '${line.quantity} × ${line.name}'],
+      total: order.totalKobo ~/ 100,
+      eateryName: order.vendorName,
+      deliveryLocationLabel: order.deliveryLocationLabel ?? '',
+      deliveryPin: deliveryPin,
+    );
+    state = state.copyWith(justPlaced: false);
+    applyServerOrder(order);
+  }
+
   /// Called once OrderTrackingScreen's "payment confirmed" beat has played
   /// — a no-op otherwise so a stray call after the order has since moved on
   /// (or been reset) can't resurrect a stale flag.
