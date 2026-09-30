@@ -489,7 +489,7 @@ class _BrandHeader extends StatelessWidget {
               BlendMode.srcIn,
             ),
             child: Image.asset(
-              'assets/images/runit_icon_mark.png',
+              'assets/branding/run_it_mark.png',
               fit: BoxFit.contain,
             ),
           ),
@@ -498,13 +498,14 @@ class _BrandHeader extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'run-it.',
-              style: Theme.of(context).textTheme.titleLarge
-                  ?.copyWith(color: AppColors.inkText),
+            Image.asset(
+              'assets/branding/run_it_wordmark_horizontal.png',
+              height: 20,
+              semanticLabel: 'Run-It',
             ),
+            const SizedBox(height: 4),
             Text(
-              'Food your way',
+              'Need it, Run-It',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: AppColors.gold,
                 fontWeight: FontWeight.w600,

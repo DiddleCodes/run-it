@@ -1,11 +1,11 @@
 {
-    "name": "run_it",
-    "short_name": "run_it",
+    "name": "Run-It",
+    "short_name": "Run-It",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FBF4E9",
+    "theme_color": "#4F0B20",
+    "description": "Campus deliveries, powered by peers already heading your way.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

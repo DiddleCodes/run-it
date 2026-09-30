@@ -83,7 +83,7 @@ class WalletRepository {
     final purpose = metadata?['purpose'] as String?;
     final (title, subtitle) = switch (purpose) {
       'wallet_topup' => ('Wallet top-up', 'Paystack'),
-      'escrow_hold' => ('Order payment', 'Food order'),
+      'escrow_hold' => ('Order payment', 'Held until delivery'),
       'escrow_refund' => ('Order refund', 'Cancelled order'),
       'wallet_withdrawal' => ('Withdrawal', 'To your bank account'),
       _ => ('Wallet transaction', json['status'] as String? ?? ''),

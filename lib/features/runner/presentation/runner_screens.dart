@@ -305,7 +305,7 @@ class ActiveDeliveryScreen extends ConsumerWidget {
             DeliveryStatusStepper(stage: active.status),
             const SizedBox(height: 30),
             Text(
-              pickup ? 'Head to the eatery.' : 'Bring it to the student.',
+              pickup ? 'Head to the pickup point.' : 'Bring it to the student.',
               style: Theme.of(context).textTheme.headlineMedium
                   ?.copyWith(color: OrderingColors.text(context)),
             ),

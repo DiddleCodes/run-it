@@ -83,53 +83,54 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+    - assets/branding/
 
   # Fraunces (headlines) + Manrope (body/UI) + JetBrains Mono (numeric/data
   # display) are loaded at runtime via google_fonts, so no bundled font
   # files are declared here. (GeneralSans/Satoshi OTFs remain under
   # assets/fonts/ but are no longer referenced.)
 
-# Task 22: real app icon, generated from the run-it. wordmark's own dome
-# glyph (assets/images/02_run-it_logo.png) composited onto the app's
-# actual cream background (AppColors.backgroundCream) — see
-# assets/icons/app_icon.png/app_icon_foreground.png. Regenerate with
-# `dart run flutter_launcher_icons` after changing either source image.
+# Task 76: RUN-It rebrand. Every asset below is derived from the brand
+# sources in design/branding/source/ by tool/generate_brand_assets.py (see
+# its docstring) — change a source there, re-run that script, then both
+# commands below.
+#
+# Launcher icon: the maroon "arrow" tile. app_icon.png is full-bleed
+# (iOS applies its own corner mask, so no white may show); the Android
+# adaptive icon draws the arrow (app_icon_foreground.png, inside the safe
+# zone) over the same maroon. Regenerate with `dart run flutter_launcher_icons`.
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: "assets/icons/app_icon.png"
   remove_alpha_ios: true
-  adaptive_icon_background: "#FBF4E9"
+  adaptive_icon_background: "#4F0B20"
   adaptive_icon_foreground: "assets/icons/app_icon_foreground.png"
+  # The foreground is already laid out on the full 108dp adaptive canvas,
+  # arrow inside the 66dp safe zone — the plugin's default 16% inset would
+  # shrink it a second time (the "small, padded" failure Task 41 chased).
+  adaptive_icon_foreground_inset: 0
+  web:
+    generate: true
+    image_path: "assets/icons/app_icon.png"
+    background_color: "#FBF4E9"
+    theme_color: "#4F0B20"
 
 # Native launch screen (the brief flash before the in-Flutter SplashScreen
-# widget takes over) — same cream background as SplashScreen's own
-# backgroundCream base, so there's no color discontinuity in the handoff.
+# takes over) — cream, like SplashScreen, so the handoff has no colour jump.
 #
-# Task 41: deliberately NOT app_icon_foreground.png (used above for the
-# Android adaptive icon) — that file is intentionally mostly-transparent
-# padding around a small centered glyph, which is correct for an adaptive
-# icon (the OS masks/crops it) but rendered small and, since its two-tone
-# maroon+pale-pink glyph loses most of its contrast against this same
-# cream background, faded when drawn directly as a flat splash image with
-# no masking. assets/icons/splash_icon.png is a dedicated asset: the same
-# glyph, flattened to one solid AppColors.primaryMaroon (matching the
-# ColorFiltered/BlendMode.srcIn treatment this mark already gets
-# everywhere else it needs to read crisply — see welcome_back_screen.dart)
-# and cropped tight enough to actually read at a glance. Regenerate with
-# `dart run flutter_native_splash:create` after changing this asset.
+# iOS + Android < 12 show the stacked RUN iT lockup (splash_icon.png, at
+# source resolution — treated as 4x). Android 12+ forces the splash icon
+# into a circle, which would crop a wide lockup, so it gets the rounded
+# arrow mark sized to fit inside that circle (splash_icon_android12.png).
 #
-# Task 28: iOS's LaunchImage.imageset PNGs are hand-replaced with crisp
-# @1x/2x/3x exports downsampled directly from this source at their real
-# 92pt display size — not regenerated through this 1024px `image` (which
-# `:create` would upscale and export oversized/blurry). Re-running
-# `dart run flutter_native_splash:create` overwrites those PNGs back to
-# that oversized/blurry default AND resets LaunchScreen.storyboard's icon
-# size/position back to dead-center — see that storyboard's own doc
-# comment for the exact values to reapply after.
+# After `dart run flutter_native_splash:create`, re-apply two hand edits it
+# overwrites: (1) re-run tool/generate_brand_assets.py, which re-exports the
+# crisp iOS LaunchImage @1x/2x/3x (:create would upscale/blur them), and
+# (2) LaunchScreen.storyboard's size/position constraints — see that file.
 flutter_native_splash:
   color: "#FBF4E9"
   image: assets/icons/splash_icon.png
   android_12:
     color: "#FBF4E9"
-    image: assets/icons/splash_icon.png
+    image: assets/icons/splash_icon_android12.png

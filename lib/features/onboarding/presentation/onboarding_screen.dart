@@ -20,7 +20,7 @@ class _OnboardingPage {
   });
 
   /// The headline is split so the final word/phrase can render in
-  /// [AppColors.accentRose] — e.g. "Campus meals, delivered to " + "you."
+  /// [AppColors.accentRose] — e.g. "Campus essentials, delivered to " + "you."
   final String headlinePrefix;
   final String headlineHighlight;
   final String body;
@@ -170,7 +170,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   late final _pages = [
     _OnboardingPage(
-      headlinePrefix: 'Campus meals, delivered to ',
+      headlinePrefix: 'Campus essentials, delivered to ',
       headlineHighlight: 'you.',
       body: 'Order from the spots you already know, brought to you by peers already heading your way.',
       visual: (context, parallax) => Transform.translate(
@@ -179,10 +179,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
       header: (context) => Column(
         children: [
-          Image.asset('assets/images/02_run-it_logo.png', height: 56),
-          const SizedBox(height: 6),
+          Image.asset('assets/branding/run_it_wordmark_horizontal_on_dark.png', height: 32),
+          const SizedBox(height: 10),
           Text(
-            'Food, your way.',
+            'Need it, Run-It',
             style: Theme.of(context).textTheme.bodyMedium
                 ?.copyWith(color: AppColors.onMaroon.withValues(alpha: .65)),
           ),
@@ -259,12 +259,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           child: Row(
                             children: [
                               Image.asset(
-                                'assets/images/02_run-it_logo.png',
-                                height: 34,
+                                'assets/branding/run_it_wordmark_horizontal_on_dark.png',
+                                height: 18,
                               ),
                               const SizedBox(width: 10),
                               Text(
-                                'Food, your way.',
+                                'Need it, Run-It',
                                 style: Theme.of(context).textTheme.labelSmall
                                     ?.copyWith(
                                       color: AppColors.onMaroon.withValues(

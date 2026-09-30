@@ -53,7 +53,7 @@ class RunItApp extends ConsumerWidget {
         ref.read(authControllerProvider.notifier).handleUnauthorized();
 
     return MaterialApp.router(
-      title: 'run-it.',
+      title: 'Run-It',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       routerConfig: ref.watch(appRouterProvider),

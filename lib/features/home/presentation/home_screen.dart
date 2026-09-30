@@ -107,7 +107,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Good food. Closer than you think.',
+                      'What you need, closer than you think.',
                       style: textTheme.bodyMedium?.copyWith(
                         color: AppColors.mutedText,
                       ),
@@ -247,17 +247,15 @@ class _Header extends ConsumerWidget {
             color: AppColors.primaryMaroonDeep,
             borderRadius: BorderRadius.circular(15),
           ),
-          // The real run-it. brand mark (cropped from the wordmark asset),
-          // recolored to white via ColorFiltered since the source PNG
-          // renders the icon in maroon — replaces the earlier generic
-          // Material shopping-bag placeholder.
+          // Task 76: the RUN iT arrow mark (assets/branding/run_it_mark.png),
+          // kept on-palette via ColorFiltered like every other badge glyph.
           child: ColorFiltered(
             colorFilter: const ColorFilter.mode(
               AppColors.onMaroon,
               BlendMode.srcIn,
             ),
             child: Image.asset(
-              'assets/images/runit_icon_mark.png',
+              'assets/branding/run_it_mark.png',
               fit: BoxFit.contain,
             ),
           ),
@@ -413,7 +411,7 @@ class _Search extends StatelessWidget {
             decoration: InputDecoration(
               isCollapsed: true,
               border: InputBorder.none,
-              hintText: 'Search meals, stores, or cravings...',
+              hintText: 'Search stores, items, or cravings...',
               hintStyle: Theme.of(context).textTheme.bodyMedium
                   ?.copyWith(color: AppColors.mutedText),
             ),
