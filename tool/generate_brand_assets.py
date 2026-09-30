@@ -189,6 +189,13 @@ def main():
         save(lockup.resize((w, round(lockup.height * w / lockup.width)), Image.LANCZOS),
              f"ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage{suffix}.png")
 
+    # Android status-bar notification icon: Android draws only the alpha
+    # channel (white), tinted by default_notification_color. 24dp per density.
+    print("Android notification icon:")
+    for density, px in (("mdpi", 24), ("hdpi", 36), ("xhdpi", 48), ("xxhdpi", 72), ("xxxhdpi", 96)):
+        save(centred((px, px), arrow((255, 255, 255), round(px * 0.9))),
+             f"android/app/src/main/res/drawable-{density}/ic_stat_run_it.png")
+
     print("Dashboard:")
     mark512 = rounded_mark(512)
     save(mark512, "dashboard/public/brand/run-it-icon.png")

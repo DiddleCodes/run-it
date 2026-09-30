@@ -41,7 +41,7 @@ describe('NotificationsService.handle', () => {
 
     expect(fcmQueue.add).toHaveBeenCalledWith(
       'push',
-      { userId: 'user-1', payload: { title: baseEvent.title, body: baseEvent.body, data: baseEvent.data } },
+      { userId: 'user-1', payload: { title: baseEvent.title, body: baseEvent.body, data: { ...baseEvent.data, type: baseEvent.type } } },
       expect.objectContaining({ attempts: 3 }),
     );
   });

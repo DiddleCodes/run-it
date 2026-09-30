@@ -56,7 +56,13 @@ export class NotificationsService {
       // same reasoning as the Paystack webhook queue.
       await this.fcmQueue.add(
         'push',
-        { userId: event.recipientUserId, payload: { title: event.title, body: event.body, data: event.data } },
+        // `type` rides along in the data payload so the app can route a
+        // tapped notification (e.g. a restaurant's new order -> its orders
+        // list) without guessing from the copy.
+        {
+          userId: event.recipientUserId,
+          payload: { title: event.title, body: event.body, data: { ...event.data, type: event.type } },
+        },
         { attempts: 3, backoff: { type: 'exponential', delay: 3_000 }, removeOnComplete: { count: 1000 }, removeOnFail: { count: 5000 } },
       );
 

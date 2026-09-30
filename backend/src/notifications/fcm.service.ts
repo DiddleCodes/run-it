@@ -3,6 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { App, cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getMessaging, Messaging } from 'firebase-admin/messaging';
 
+// Must match MainActivity.ORDERS_CHANNEL_ID in the Android app.
+export const ANDROID_ORDERS_CHANNEL_ID = 'orders';
+
 export interface PushPayload {
   title: string;
   body: string;
@@ -60,6 +63,11 @@ export class FcmService implements OnModuleInit {
       token,
       notification: { title: payload.title, body: payload.body },
       data: payload.data,
+      // The mobile app creates the "orders" channel (MainActivity) at high
+      // importance, so order updates make a sound and show as a heads-up.
+      android: { priority: 'high', notification: { channelId: ANDROID_ORDERS_CHANNEL_ID } },
+      // iOS is silent unless the payload asks for a sound.
+      apns: { payload: { aps: { sound: 'default' } } },
     });
   }
 

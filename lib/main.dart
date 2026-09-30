@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/firebase/firebase_bootstrap.dart';
 import 'core/monitoring/crash_reporting.dart';
 import 'core/network/api_client.dart';
+import 'core/notifications/push_notifications.dart';
 import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/app_notification.dart';
@@ -51,6 +52,11 @@ class RunItApp extends ConsumerWidget {
     // StatefulWidget/initState just for this.
     ApiClient.onUnauthorized = () =>
         ref.read(authControllerProvider.notifier).handleUnauthorized();
+
+    // Push notifications: registers this device after sign-in, banners
+    // pushes that arrive while the app is open, routes a tapped one. A
+    // no-op where Firebase isn't running.
+    ref.watch(pushNotificationsProvider);
 
     return MaterialApp.router(
       title: 'Run-It',
