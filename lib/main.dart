@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/firebase/firebase_bootstrap.dart';
 import 'core/monitoring/crash_reporting.dart';
 import 'core/network/api_client.dart';
 import 'core/routing/app_router.dart';
@@ -18,7 +19,7 @@ Future<void> main() async {
   // block, before crash reporting existed, now live inside appRunner
   // instead of ahead of it.
   await initializeCrashReporting(
-    appRunner: () {
+    appRunner: () async {
       // Holds the native launch screen up past Flutter's own default
       // first-frame auto-dismiss — without this, the native splash and
       // SplashScreen's redirect timer race independently, and the timer
@@ -30,6 +31,9 @@ Future<void> main() async {
       // redirect timer's start — line up with what the user actually sees.
       final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
       FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+      // Task 75: after the binding exists, before the app (and anything
+      // that may touch Firebase) starts.
+      await initializeFirebase();
       runApp(const ProviderScope(child: RunItApp()));
     },
   );

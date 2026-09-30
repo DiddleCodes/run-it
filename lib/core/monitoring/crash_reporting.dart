@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
@@ -8,13 +10,11 @@ import '../network/api_config.dart';
 /// Chose sentry_flutter over firebase_crashlytics despite firebase_core
 /// already being a pubspec dependency (used for FCM push notifications on
 /// the backend side) — that dependency is deceptive as a cost signal.
-/// Firebase is not actually wired into this Flutter app at all: no
-/// `Firebase.initializeApp()` call exists anywhere in `lib/`, no
-/// google-services.json/GoogleService-Info.plist exists in android/ios,
-/// and firebase_auth/cloud_firestore/firebase_storage (also pubspec
-/// dependencies) are never imported by any file either. Adding Crashlytics
-/// would mean standing up a real Firebase project and native platform
-/// config from zero — there is no existing foundation to build on. Sentry
+/// At the time (Task 31) Firebase wasn't wired into this Flutter app at all
+/// — no initializeApp() call, no native config — so Crashlytics would have
+/// meant standing it up from zero. (Task 75 has since initialized Firebase
+/// for push notifications — see core/firebase/firebase_bootstrap.dart — but
+/// the reasoning below for Sentry still holds.) Sentry
 /// also already covers the backend (Task 31's other half), so one project
 /// dashboard/account covers both sides instead of two.
 ///
@@ -24,10 +24,13 @@ import '../network/api_config.dart';
 /// [appRunner] inside its own guarded zone, so assigning them here too
 /// would either double-report or silently lose whichever handler runs
 /// second.
-Future<void> initializeCrashReporting({required VoidCallback appRunner}) async {
+// Task 75: FutureOr so startup can await async setup (Firebase) inside the
+// same guarded zone — SentryFlutter.init's own appRunner already accepts
+// this shape.
+Future<void> initializeCrashReporting({required FutureOr<void> Function() appRunner}) async {
   if (sentryDsn.isEmpty) {
     debugPrint('SENTRY_DSN not configured — crash reporting is disabled for this build.');
-    appRunner();
+    await appRunner();
     return;
   }
 

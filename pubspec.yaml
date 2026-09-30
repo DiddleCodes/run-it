@@ -33,7 +33,11 @@ dependencies:
   google_fonts: ^6.2.1
 
   # Backend
+  # Task 75: Firebase is now genuinely initialized at startup (see main.dart
+  # and lib/firebase_options.dart); firebase_messaging is the push client
+  # the next task wires device-token registration onto.
   firebase_core: ^3.10.0
+  firebase_messaging: ^15.2.10
   firebase_auth: ^5.4.1
   cloud_firestore: ^5.6.2
   firebase_storage: ^12.4.1
@@ -61,11 +65,8 @@ dependencies:
   # step.
   flutter_native_splash: ^2.4.3
 
-  # Task 31: crash/error reporting. firebase_core/auth/storage above are
-  # declared but never actually initialized anywhere in this app (no
-  # Firebase.initializeApp() call, no google-services.json/
-  # GoogleService-Info.plist) — see crash_reporting.dart's own doc comment
-  # for why that ruled out Crashlytics as the "already paid for" option.
+  # Task 31: crash/error reporting — Sentry rather than Crashlytics (see
+  # crash_reporting.dart's own doc comment for why).
   sentry_flutter: ^9.28.0
 
 dev_dependencies:

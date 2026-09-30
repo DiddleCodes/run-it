@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "694264652054",
+    "project_id": "run-it-febca",
+    "storage_bucket": "run-it-febca.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:694264652054:android:96c2410f7f6bd4e61f7037",
+        "android_client_info": {
+          "package_name": "com.runit.run_it"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAXc3RichygJNfqdObck_C6PLNKXfHlNWc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
