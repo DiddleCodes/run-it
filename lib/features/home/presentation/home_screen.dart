@@ -86,7 +86,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       backgroundColor: AppColors.backgroundCream,
       body: SafeArea(
         bottom: false,
-        child: CustomScrollView(
+        // The error state has always said "Pull down to try again" — this
+        // is what makes that true.
+        child: RefreshIndicator(
+          color: AppColors.primaryMaroon,
+          onRefresh: _refresh,
+          child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             const SliverPadding(
               padding: EdgeInsets.fromLTRB(AppSpacing.lg, 12, AppSpacing.lg, 0),
@@ -171,18 +177,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 28, AppSpacing.lg, 12),
               sliver: SliverToBoxAdapter(
-                child: Text(
-                  'Popular around campus',
-                  style: textTheme.titleLarge?.copyWith(
-                    color: AppColors.inkText,
-                  ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Popular around campus',
+                        style: textTheme.titleLarge?.copyWith(
+                          color: AppColors.inkText,
+                        ),
+                      ),
+                    ),
+                    if (vendorsAsync.isLoading && vendorsAsync.hasValue)
+                      const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryMaroon),
+                      ),
+                  ],
                 ),
               ),
             ),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, 124),
               sliver: SliverToBoxAdapter(
+                // skipLoadingOnReload: a new search term or category keeps
+                // the current results on screen until the new ones arrive
+                // (with the spinner by the heading) instead of blanking the
+                // row to a skeleton after every pause in typing.
                 child: vendorsAsync.when(
+                  skipLoadingOnReload: true,
                   loading: () => const _VendorRowSkeleton(),
                   error: (_, _) => const _VendorsErrorState(),
                   data: (vendors) => vendors.isEmpty
@@ -221,8 +243,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ],
         ),
+        ),
       ),
     );
+  }
+
+  Future<void> _refresh() async {
+    try {
+      await Future.wait([
+        ref.refresh(campusEateriesProvider.future),
+        ref.refresh(vendorCategoriesProvider.future),
+      ]);
+    } catch (_) {
+      // The error state below already says what happened.
+    }
   }
 
   void _notify(BuildContext context, String message) {
@@ -392,10 +426,10 @@ class _Search extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: 54,
-    padding: const EdgeInsets.symmetric(horizontal: 16),
+    padding: const EdgeInsets.symmetric(horizontal: 18),
     decoration: BoxDecoration(
       color: AppColors.surfaceCard,
-      borderRadius: BorderRadius.circular(17),
+      borderRadius: BorderRadius.circular(AppRadius.pill),
       border: Border.all(color: AppColors.borderSubtle),
     ),
     child: Row(
@@ -408,9 +442,19 @@ class _Search extends StatelessWidget {
             onChanged: onChanged,
             style: Theme.of(context).textTheme.bodyMedium
                 ?.copyWith(color: AppColors.inkText),
+            // The app theme gives every TextField a filled, outlined box
+            // (enabled/focused borders + fillColor), which drew a second
+            // box inside this pill — `border: none` alone only replaced
+            // the base border. Switch all of it off so the field, icon and
+            // filter button read as one control.
             decoration: InputDecoration(
               isCollapsed: true,
+              filled: false,
+              contentPadding: EdgeInsets.zero,
               border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              disabledBorder: InputBorder.none,
               hintText: 'Search meals, stores, or cravings...',
               hintStyle: Theme.of(context).textTheme.bodyMedium
                   ?.copyWith(color: AppColors.mutedText),
