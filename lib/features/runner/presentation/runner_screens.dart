@@ -296,7 +296,18 @@ class ActiveDeliveryScreen extends ConsumerWidget {
     }
     final pickup = active.status == DeliveryStage.accepted;
     return Scaffold(
-      appBar: AppBar(title: Text(pickup ? 'Pickup' : 'Drop-off')),
+      appBar: AppBar(
+        title: Text(pickup ? 'Pickup' : 'Drop-off'),
+        actions: [
+          // Task 78: chat with the student on this order (job.id is the
+          // real order id the claim was made on).
+          IconButton(
+            onPressed: () => context.push(AppRoutes.orderChat, extra: active.job.id),
+            icon: const Icon(Icons.chat_bubble_outline_rounded),
+            tooltip: 'Message the student',
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, AppSpacing.lg, 24),
         child: Column(

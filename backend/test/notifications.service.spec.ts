@@ -34,6 +34,15 @@ describe('NotificationsService.handle', () => {
     });
   });
 
+  it('Task 78: a push-only event (persist: false) is pushed but never stored', async () => {
+    const { service, prisma, fcmQueue } = makeService();
+
+    await service.handle({ ...baseEvent, type: 'chat_message', persist: false });
+
+    expect(prisma.notification.create).not.toHaveBeenCalled();
+    expect(fcmQueue.add).toHaveBeenCalledTimes(1);
+  });
+
   it('enqueues an FCM push job for the recipient', async () => {
     const { service, fcmQueue } = makeService();
 

@@ -233,6 +233,7 @@ model User {
 
   studentOrders      Order[]        @relation("StudentOrders")
   runnerOrders       Order[]        @relation("RunnerOrders")
+  sentMessages       Message[]      @relation("SentMessages")
   ratingsReceived    RunnerRating[] @relation("RunnerRatingsReceived")
   ratingsGiven       RunnerRating[] @relation("StudentRatingsGiven")
   // Task 48: a student's own restaurant ratings given — distinct from
@@ -526,6 +527,7 @@ model Order {
   vendorRating       VendorRating?
   dispute            Dispute?
   cashCollectionDebt CashCollectionDebt?
+  messages           Message[]
 
   @@index([vendorId, createdAt])
   @@map("orders")
@@ -831,6 +833,10 @@ enum NotificationType {
   order_delivered
   account_suspended
   account_reinstated
+  // Task 78: order chat. Pushed only (never stored as a Notification row —
+  // the message itself is the record), so this value exists to type the
+  // event, not to appear in anyone's notification feed.
+  chat_message
 }
 
 model Notification {
@@ -869,4 +875,23 @@ model DeviceToken {
 
   @@index([userId])
   @@map("device_tokens")
+}
+
+// Task 78: student <-> runner chat, one conversation per order. Only the
+// order's student and its assigned runner may read or send (ChatService),
+// and only while a runner is assigned and the order isn't delivered or
+// cancelled — history stays readable afterwards.
+model Message {
+  id           String    @id @default(uuid())
+  orderId      String    @map("order_id")
+  order        Order     @relation(fields: [orderId], references: [id])
+  senderUserId String    @map("sender_user_id")
+  sender       User      @relation("SentMessages", fields: [senderUserId], references: [id])
+  body         String
+  createdAt    DateTime  @default(now()) @map("created_at")
+  // Set when the other party opens the chat — drives unread counts.
+  readAt       DateTime? @map("read_at")
+
+  @@index([orderId, createdAt])
+  @@map("messages")
 }

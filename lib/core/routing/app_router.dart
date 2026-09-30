@@ -15,6 +15,7 @@ import '../../features/auth/presentation/set_passcode_screen.dart';
 import '../../features/auth/presentation/signup_screen.dart';
 import '../../features/auth/presentation/verify_email_screen.dart';
 import '../../features/auth/presentation/welcome_back_screen.dart';
+import '../../features/chat/presentation/order_chat_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/ordering/presentation/my_orders_screen.dart';
@@ -110,6 +111,9 @@ abstract class AppRoutes {
   // Task 46: pushed with `extra: orderId` (String) — same convention as
   // [menu]'s vendorId, not a path parameter.
   static const orderDetail = '/order-detail';
+  // Task 78: an order's student <-> runner chat, pushed with `extra: orderId`
+  // (String), same convention as [orderDetail]. Shared by both sides.
+  static const orderChat = '/order-chat';
   static const studentWallet = '/wallet';
   static const studentProfile = '/profile';
   static const runItPlus = '/plus';
@@ -267,7 +271,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           // profile setup, and the Restaurant Dashboard shell (Task 12).
           if (AppRoutes._runnerShellRoutes.contains(loc) ||
               AppRoutes._runnerVerifiedOnlyRoutes.contains(loc) ||
-              AppRoutes._studentShellRoutes.contains(loc)) {
+              AppRoutes._studentShellRoutes.contains(loc) ||
+              loc == AppRoutes.orderChat) {
             return AppRoutes.restaurantProfileSetup;
           }
         case AccountType.student:
@@ -395,6 +400,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.orderDetail,
         builder: (context, state) => OrderDetailScreen(orderId: state.extra as String),
+      ),
+      GoRoute(
+        path: AppRoutes.orderChat,
+        builder: (context, state) => OrderChatScreen(orderId: state.extra as String),
       ),
       GoRoute(
         path: AppRoutes.studentWallet,

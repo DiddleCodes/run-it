@@ -112,11 +112,14 @@ final deviceTokenRepositoryProvider = Provider<DeviceTokenRepository>((ref) => c
 /// Where a tapped notification should take the user, or null to just open
 /// the app. A restaurant's new order goes to its orders list; a student's
 /// order update goes to live tracking when it's the order being tracked on
-/// this device, otherwise to that order's detail.
+/// this device, otherwise to that order's detail; a chat message opens that
+/// order's chat.
 String? pushDestination(PushMessage message, {required String? trackedOrderId}) {
   final orderId = message.orderId;
   if (message.type == 'order_placed') return AppRoutes.restaurantOrders;
   if (orderId == null) return null;
+  // Task 78: a new chat message opens that order's chat.
+  if (message.type == 'chat_message') return AppRoutes.orderChat;
   return orderId == trackedOrderId ? AppRoutes.orderTracking : AppRoutes.orderDetail;
 }
 
@@ -249,7 +252,7 @@ class PushNotificationsController {
     final trackedOrderId = ref.read(orderTrackingProvider).orderId;
     final destination = pushDestination(message, trackedOrderId: trackedOrderId);
     if (destination == null) return;
-    if (destination == AppRoutes.orderDetail) {
+    if (destination == AppRoutes.orderDetail || destination == AppRoutes.orderChat) {
       unawaited(router.push(destination, extra: message.orderId));
     } else {
       router.go(destination);

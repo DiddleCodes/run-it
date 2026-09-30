@@ -21,4 +21,8 @@ export interface NotificationEvent {
   // client's own routing (e.g. { orderId, vendorId }). Values must be
   // strings — that's what FCM's data payload requires.
   data?: Record<string, string>;
+  // Task 78: false = push only, no Notification row. For events whose own
+  // record lives elsewhere (a chat message is its own Message row) and
+  // that would only clutter the notification feed. Defaults to true.
+  persist?: boolean;
 }

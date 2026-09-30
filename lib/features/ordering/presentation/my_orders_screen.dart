@@ -315,7 +315,7 @@ class _ActiveOrderTab extends ConsumerWidget {
               StatusStepper(steps: _stepLabels, activeIndex: stepIndex),
               if (session.runnerName != null) ...[
                 const SizedBox(height: AppSpacing.ml),
-                _RunnerInfoRow(name: session.runnerName!),
+                _RunnerInfoRow(name: session.runnerName!, orderId: session.orderId),
               ],
               const SizedBox(height: 16),
               Row(
@@ -352,8 +352,9 @@ class _ActiveOrderTab extends ConsumerWidget {
 }
 
 class _RunnerInfoRow extends ConsumerWidget {
-  const _RunnerInfoRow({required this.name});
+  const _RunnerInfoRow({required this.name, required this.orderId});
   final String name;
+  final String? orderId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -415,11 +416,12 @@ class _RunnerInfoRow extends ConsumerWidget {
                 .info('Calling your runner is coming soon.'),
           ),
           const SizedBox(width: 8),
+          // Task 78: real order chat.
           _RunnerActionButton(
             icon: CupertinoIcons.chat_bubble_fill,
-            onTap: () => ref
-                .read(appNotificationProvider.notifier)
-                .info('Messaging your runner is coming soon.'),
+            onTap: () => orderId == null
+                ? ref.read(appNotificationProvider.notifier).info('Chat opens once your order is confirmed.')
+                : context.push(AppRoutes.orderChat, extra: orderId),
           ),
         ],
       ),

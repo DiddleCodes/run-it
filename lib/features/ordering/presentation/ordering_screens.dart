@@ -1062,7 +1062,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
               _MapPlaceholder(delivered: delivered),
               if (session.runnerName != null) ...[
                 const SizedBox(height: AppSpacing.ml),
-                _RunnerCard(name: session.runnerName!),
+                _RunnerCard(name: session.runnerName!, orderId: session.orderId),
               ],
               const SizedBox(height: AppSpacing.ml),
             ],
@@ -1710,8 +1710,11 @@ class _MapPlaceholder extends StatelessWidget {
 }
 
 class _RunnerCard extends StatelessWidget {
-  const _RunnerCard({required this.name});
+  const _RunnerCard({required this.name, required this.orderId});
   final String name;
+  // Task 78: the real order — chat opens on it. Null only for a session
+  // that never got a backend order id, where there's nothing to chat on.
+  final String? orderId;
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(14),
@@ -1760,9 +1763,10 @@ class _RunnerCard extends StatelessWidget {
           color: OrderingColors.muted(context),
         ),
         IconButton(
-          onPressed: null,
+          onPressed: orderId == null ? null : () => context.push(AppRoutes.orderChat, extra: orderId),
           icon: const Icon(Icons.chat_bubble_outline_rounded),
-          color: OrderingColors.muted(context),
+          tooltip: 'Message your runner',
+          color: AppColors.primaryMaroon,
         ),
       ],
     ),

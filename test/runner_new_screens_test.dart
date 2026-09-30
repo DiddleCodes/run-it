@@ -14,6 +14,10 @@ import 'package:run_it/features/runner/presentation/runner_messages_screen.dart'
 import 'package:run_it/features/runner/presentation/runner_profile_screen.dart';
 import 'package:run_it/features/runner/presentation/runner_scan_screen.dart';
 import 'package:run_it/features/runner/presentation/runner_screens.dart';
+import 'package:run_it/features/chat/data/chat_realtime.dart';
+import 'package:run_it/features/chat/data/chat_repository.dart';
+
+import 'support/fake_chat.dart';
 
 class _FakeAuthController extends AuthController {
   _FakeAuthController(this._session);
@@ -156,27 +160,6 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
   });
 
-  testWidgets('Messages screen pins RUN-It Support at the top', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authControllerProvider.overrideWith(
-            () => _FakeAuthController(_runnerSession(runnerType: RunnerType.studentRunner)),
-          ),
-        ],
-        child: const MaterialApp(home: RunnerMessagesScreen()),
-      ),
-    );
-    await tester.pump();
-
-    expect(find.text('RUN-It Support'), findsOneWidget);
-    expect(find.byIcon(CupertinoIcons.shield_fill), findsOneWidget);
-
-    final supportY = tester.getTopLeft(find.text('RUN-It Support')).dy;
-    final otherThreadY = tester.getTopLeft(find.text('Tantalizers')).dy;
-    expect(supportY, lessThan(otherThreadY));
-  });
-
   group('Profile screen', () {
     testWidgets('shows the runner\'s name and KYC status, no Vehicle section for a student runner', (
       tester,
@@ -297,6 +280,9 @@ void main() {
               ),
               matchingRepositoryProvider.overrideWithValue(_FakeMatchingRepository([_job()])),
               ratingsRepositoryProvider.overrideWithValue(const _FakeRatingsRepository()),
+              // Task 78: Messages is real data now — keep it off the network.
+              chatRepositoryProvider.overrideWithValue(FakeChatRepository()),
+              chatRealtimeProvider.overrideWithValue(FakeChatRealtime()),
             ],
             child: MaterialApp(home: screen),
           ),

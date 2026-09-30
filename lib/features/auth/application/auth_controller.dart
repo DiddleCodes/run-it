@@ -534,6 +534,13 @@ class AuthController extends Notifier<AuthSession?> {
     final session = await _loadPersistedSession(user);
     if (session == null) throw const SessionRecoveryRequiredException();
     state = session;
+    // Same as [loginWithBiometric]: the passcode snapshot holds whatever
+    // KYC status this device last saw, which may predate an admin's
+    // decision — without this, an approved runner stays locked out of
+    // going online until something else happens to refresh it.
+    if (user.accountType == AccountType.runner) {
+      await refreshProfile();
+    }
     return true;
   }
 

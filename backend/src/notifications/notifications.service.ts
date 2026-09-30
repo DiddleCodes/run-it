@@ -40,15 +40,17 @@ export class NotificationsService {
   @OnEvent(NOTIFICATION_EVENT, { async: true })
   async handle(event: NotificationEvent): Promise<void> {
     try {
-      await this.prisma.notification.create({
-        data: {
-          userId: event.recipientUserId,
-          type: event.type,
-          title: event.title,
-          body: event.body,
-          data: (event.data ?? undefined) as Prisma.InputJsonValue | undefined,
-        },
-      });
+      if (event.persist !== false) {
+        await this.prisma.notification.create({
+          data: {
+            userId: event.recipientUserId,
+            type: event.type,
+            title: event.title,
+            body: event.body,
+            data: (event.data ?? undefined) as Prisma.InputJsonValue | undefined,
+          },
+        });
+      }
 
       // Every event type this task emits is mobile-relevant (order
       // lifecycle, suspend/reinstate) — see the brief. Queued rather than
