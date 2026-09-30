@@ -345,16 +345,39 @@ class ActiveDeliveryScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  ...active.orderItems.map(
-                    (item) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Text(
-                        item,
-                        style: Theme.of(context).textTheme.bodyMedium
-                            ?.copyWith(color: OrderingColors.text(context)),
+                  if (active.orderItems case final items?)
+                    ...items.map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Text(
+                          item,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: OrderingColors.text(context)),
+                        ),
                       ),
+                    )
+                  else if (active.itemsLoadFailed)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Couldn’t load the item list.',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: OrderingColors.muted(context)),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => ref.read(runnerControllerProvider.notifier).loadActiveOrderItems(),
+                          child: const Text('Try again'),
+                        ),
+                      ],
+                    )
+                  else
+                    Text(
+                      'Loading items…',
+                      style: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(color: OrderingColors.muted(context)),
                     ),
-                  ),
                 ],
               ),
             ),

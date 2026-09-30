@@ -1,5 +1,9 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../core/utils/order_reference.dart';
+
+export '../../../core/utils/order_reference.dart';
+
 /// Task 78: one message in an order's student <-> runner chat.
 @immutable
 class ChatMessage {
@@ -39,10 +43,6 @@ class ChatMessage {
   );
 }
 
-/// `#78523600` — the last 8 characters: app-placed order ids are
-/// `order-<micros>`, so the first 8 would be `ORDER-17…` on every order.
-String orderReference(String orderId) =>
-    '#${orderId.substring((orderId.length - 8).clamp(0, orderId.length)).toUpperCase()}';
 
 /// One order's chat, as `GET /orders/:id/messages` returns it.
 @immutable

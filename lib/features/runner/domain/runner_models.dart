@@ -61,16 +61,28 @@ class ActiveDelivery {
     required this.status,
     required this.orderItems,
     required this.orderNumber,
+    this.itemsLoadFailed = false,
   });
   final DeliveryJob job;
   final DeliveryStage status;
-  final List<String> orderItems;
+
+  /// The claimed order's real lines ("1 × Chicken Pie"), from
+  /// `GET /orders/:id` right after the claim. `null` while loading —
+  /// never placeholder items.
+  final List<String>? orderItems;
+
+  /// The short reference also shown in chat and to the restaurant.
   final String orderNumber;
-  ActiveDelivery copyWith({DeliveryStage? status}) => ActiveDelivery(
+
+  /// The item fetch failed; the screen offers a retry.
+  final bool itemsLoadFailed;
+
+  ActiveDelivery copyWith({DeliveryStage? status, List<String>? orderItems, bool? itemsLoadFailed}) => ActiveDelivery(
     job: job,
     status: status ?? this.status,
-    orderItems: orderItems,
+    orderItems: orderItems ?? this.orderItems,
     orderNumber: orderNumber,
+    itemsLoadFailed: itemsLoadFailed ?? this.itemsLoadFailed,
   );
 }
 

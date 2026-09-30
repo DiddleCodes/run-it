@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/campus_repository.dart';
 import '../../../core/network/escrow_repository.dart';
 import '../../../core/network/matching_repository.dart';
+import '../../../core/network/orders_repository.dart';
+import '../../../core/utils/order_reference.dart';
 
 export '../../../core/network/matching_repository.dart' show DispatchConnectionStatus;
 import '../../auth/application/auth_controller.dart';
@@ -225,15 +227,45 @@ class RunnerController extends Notifier<RunnerSession> {
         activeDeliveryId: job.id,
         isVerifiedRunner: state.status.isVerifiedRunner,
       ),
+      // The real order this claim won: its reference now, its items as
+      // soon as GET /orders/:id answers (the claim just made this runner a
+      // party to it). Accepting never waits on that fetch.
       activeDelivery: ActiveDelivery(
         job: job,
         status: DeliveryStage.accepted,
-        orderNumber: '#RI-2048',
-        orderItems: const ['1 × Signature jollof', '1 × Chilled malt'],
+        orderNumber: orderReference(job.id),
+        orderItems: null,
       ),
     );
     ref.read(availableJobsProvider.notifier).removeJob(job.id);
+    unawaited(loadActiveOrderItems());
     return AcceptOfferResult.accepted;
+  }
+
+  /// Fills in the active delivery's real item lines. Also the screen's
+  /// "Try again" when the first fetch failed.
+  Future<void> loadActiveOrderItems() async {
+    final active = state.activeDelivery;
+    final session = ref.read(authControllerProvider);
+    if (active == null || session == null) return;
+    if (active.itemsLoadFailed) state = state.copyWith(activeDelivery: active.copyWith(itemsLoadFailed: false));
+    try {
+      final order = await ref
+          .read(ordersRepositoryProvider)
+          .fetchOrderDetail(orderId: active.job.id, token: session.accessToken);
+      final current = state.activeDelivery;
+      if (current == null || current.job.id != active.job.id) return;
+      state = state.copyWith(
+        activeDelivery: current.copyWith(
+          orderItems: [for (final line in order.items) '${line.quantity} × ${line.name}'],
+          itemsLoadFailed: false,
+        ),
+      );
+    } catch (_) {
+      final current = state.activeDelivery;
+      if (current == null || current.job.id != active.job.id) return;
+      state = state.copyWith(activeDelivery: current.copyWith(itemsLoadFailed: true));
+    }
   }
 
   bool confirmPickup() {
