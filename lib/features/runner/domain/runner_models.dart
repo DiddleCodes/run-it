@@ -38,9 +38,12 @@ class DeliveryJob {
   final String eateryLocation;
   final String dropoffZone;
   final String dropoffLocation;
+
+  /// What the runner earns for this delivery, in naira (the backend's
+  /// `runnerShare`, a flat delivery pay — see RUNNER_DELIVERY_PAY).
   final int payoutAmount;
 
-  /// The order's full total (Task 21b) — a real, honest stand-in for the
+  /// The order's full total in naira (Task 21b) — a real, honest stand-in for the
   /// old fabricated distance/ETA stat, shown on the Available card instead.
   final int totalAmount;
 

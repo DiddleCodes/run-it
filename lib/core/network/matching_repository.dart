@@ -7,6 +7,12 @@ import '../../features/runner/domain/runner_models.dart';
 import 'api_client.dart';
 import 'api_config.dart';
 
+/// Backend money is integer kobo; app models are whole naira. Every amount
+/// the backend sends here is a whole number of naira (menu prices, the flat
+/// delivery pay and the service fee are all whole-naira by construction),
+/// so this is exact.
+int koboToNaira(int kobo) => (kobo / 100).round();
+
 final matchingRepositoryProvider = Provider<MatchingRepository>(
   (ref) => const MatchingRepository(),
 );
@@ -35,8 +41,11 @@ class MatchingRepository {
             eateryLocation: 'Student Centre, Main Walk',
             dropoffZone: (json['deliveryLocationLabel'] as String?) ?? 'Delivery address on file',
             dropoffLocation: (json['deliveryLocationLabel'] as String?) ?? 'Delivery address on file',
-            payoutAmount: json['payoutAmount'] as int,
-            totalAmount: json['totalAmount'] as int,
+            // The backend sends kobo (runnerShare, totalAmount); DeliveryJob
+            // holds naira like every other app model — converted here, once.
+            // Parsing kobo as naira showed a ₦1,445 order as ₦144500.
+            payoutAmount: koboToNaira(json['payoutAmount'] as int),
+            totalAmount: koboToNaira(json['totalAmount'] as int),
             isPayOnDelivery: json['isPayOnDelivery'] as bool? ?? false,
             offeredAt: DateTime.parse(json['createdAt'] as String),
           ),
