@@ -469,49 +469,27 @@ class _BrandHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: 40,
-          height: 40,
-          padding: const EdgeInsets.all(9),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppColors.primaryMaroon,
-            borderRadius: BorderRadius.circular(13),
-          ),
-          // The real run-it. brand mark, not a generic Material bag icon —
-          // matches the badge Task 5 already put on Home's header (Task
-          // "Welcome Back redesign" Part B brand-badge sweep).
-          child: ColorFiltered(
-            colorFilter: const ColorFilter.mode(
-              AppColors.onMaroon,
-              BlendMode.srcIn,
-            ),
-            child: Image.asset(
-              'assets/branding/run_it_mark.png',
-              fit: BoxFit.contain,
-            ),
+        // Task 76: the RUN iT app icon itself — this screen is compact, so
+        // the icon mark rather than the full wordmark.
+        ClipRRect(
+          borderRadius: BorderRadius.circular(11),
+          child: Image.asset(
+            'assets/branding/run_it_app_icon.png',
+            width: 44,
+            height: 44,
+            semanticLabel: 'Run-It',
           ),
         ),
         const SizedBox(width: 10),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Image.asset(
-              'assets/branding/run_it_wordmark_horizontal.png',
-              height: 20,
-              semanticLabel: 'Run-It',
+        Flexible(
+          child: Text(
+            'Need it, Run-It',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: AppColors.gold,
+              fontWeight: FontWeight.w600,
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Need it, Run-It',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: AppColors.gold,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     );

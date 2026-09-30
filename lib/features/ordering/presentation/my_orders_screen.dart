@@ -98,7 +98,7 @@ class _MyOrdersScreenState extends ConsumerState<MyOrdersScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Track, repeat or review your orders.',
+                    'Track, repeat or review your meals.',
                     style: Theme.of(
                       context,
                     ).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),

@@ -154,7 +154,7 @@ void main() {
       // Confirmation is a student action, never automatic.
       await tester.scrollUntilVisible(find.text("I've received my order"), 200);
       expect(find.text("I've received my order"), findsOneWidget);
-      expect(find.text('Enjoy!'), findsNothing);
+      expect(find.text('Enjoy your meal!'), findsNothing);
       // No time promises anywhere on the way.
       expect(find.textContaining('min'), findsNothing);
     },
@@ -215,7 +215,7 @@ void main() {
       await tester.tap(find.text('Skip'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Enjoy!'), findsOneWidget);
+      expect(find.text('Enjoy your meal!'), findsOneWidget);
       expect(find.text('We look forward to your next order.'), findsOneWidget);
       // The closing moment replaces live-tracking chrome, not adds to it.
       expect(find.text("I've received my order"), findsNothing);

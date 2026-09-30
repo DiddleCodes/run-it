@@ -20,7 +20,7 @@ class _OnboardingPage {
   });
 
   /// The headline is split so the final word/phrase can render in
-  /// [AppColors.accentRose] — e.g. "Campus essentials, delivered to " + "you."
+  /// [AppColors.accentRose] — e.g. "Campus meals, delivered to " + "you."
   final String headlinePrefix;
   final String headlineHighlight;
   final String body;
@@ -170,7 +170,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   late final _pages = [
     _OnboardingPage(
-      headlinePrefix: 'Campus essentials, delivered to ',
+      headlinePrefix: 'Campus meals, delivered to ',
       headlineHighlight: 'you.',
       body: 'Order from the spots you already know, brought to you by peers already heading your way.',
       visual: (context, parallax) => Transform.translate(

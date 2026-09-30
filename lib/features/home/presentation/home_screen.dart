@@ -107,7 +107,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'What you need, closer than you think.',
+                      'Good food. Closer than you think.',
                       style: textTheme.bodyMedium?.copyWith(
                         color: AppColors.mutedText,
                       ),
@@ -411,7 +411,7 @@ class _Search extends StatelessWidget {
             decoration: InputDecoration(
               isCollapsed: true,
               border: InputBorder.none,
-              hintText: 'Search stores, items, or cravings...',
+              hintText: 'Search meals, stores, or cravings...',
               hintStyle: Theme.of(context).textTheme.bodyMedium
                   ?.copyWith(color: AppColors.mutedText),
             ),

@@ -1273,7 +1273,7 @@ class _DeliveryPinCard extends StatelessWidget {
 /// rather than inventing a second checkmark animation for the same idea.
 enum _ClosingPhase { rating, thanks, message }
 
-/// The post-delivery closing flow (Task 10's "Enjoy!" moment,
+/// The post-delivery closing flow (Task 10's "Enjoy your meal!" moment,
 /// extended by Task 14 Part D): a star-rating prompt with a clear Skip
 /// option comes first, then — only on a real submission, never
 /// optimistically — a brief "Thanks for your feedback" confirmation,
@@ -1558,7 +1558,7 @@ class _EnjoyYourMealMessage extends StatelessWidget {
         const RouteLineReveal(size: 96),
         const SizedBox(height: AppSpacing.ml),
         Text(
-              'Enjoy!',
+              'Enjoy your meal!',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.headlineLarge
                   ?.copyWith(color: OrderingColors.text(context)),

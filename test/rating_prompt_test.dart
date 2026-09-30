@@ -141,7 +141,7 @@ void main() {
       // The brief confirmation auto-advances into the original closing
       // message after its own short delay.
       await tester.pump(const Duration(milliseconds: 950));
-      expect(find.text('Enjoy!'), findsOneWidget);
+      expect(find.text('Enjoy your meal!'), findsOneWidget);
       // Lets the "Thanks" widget's own one-shot entrance animation
       // (flutter_animate) resolve before teardown — it was disposed
       // mid-flight by the phase transition above.
@@ -178,7 +178,7 @@ void main() {
       await tester.tap(find.text('Skip'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Enjoy!'), findsOneWidget);
+      expect(find.text('Enjoy your meal!'), findsOneWidget);
       expect(repo.called, isFalse);
     });
 
@@ -199,7 +199,7 @@ void main() {
       expect(find.text('Thanks for your feedback!'), findsOneWidget);
 
       await tester.pump(const Duration(milliseconds: 950));
-      expect(find.text('Enjoy!'), findsOneWidget);
+      expect(find.text('Enjoy your meal!'), findsOneWidget);
       await tester.pump(const Duration(seconds: 1));
     });
 
