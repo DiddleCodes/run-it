@@ -37,7 +37,7 @@ class OrdersRepository {
     required String handoffPhotoUrl,
     required String token,
   }) async {
-    await client.post(
+    await client.postIdempotent(
       '/orders/$orderId/verify-pickup',
       token: token,
       body: {'code': code, 'handoffPhotoUrl': handoffPhotoUrl},
@@ -58,7 +58,7 @@ class OrdersRepository {
     int? amountCollectedKobo,
   }) async {
     try {
-      await client.post(
+      await client.postIdempotent(
         '/orders/$orderId/verify-delivery',
         token: token,
         body: {'code': code, 'amountCollectedKobo': ?amountCollectedKobo},

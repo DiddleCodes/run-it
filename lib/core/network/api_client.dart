@@ -70,6 +70,20 @@ class ApiClient {
     return _decode(response);
   }
 
+  /// A POST that's safe to send twice — the backend answers a repeat with
+  /// the same outcome rather than doing the thing again — so a
+  /// transport-level failure (timeout, dropped connection) is retried with
+  /// the same backoff as [get]. A real backend answer (any [ApiException])
+  /// is never retried. Only for endpoints proven idempotent:
+  /// - `/orders/:id/verify-pickup` and `/verify-delivery` (a repeat after
+  ///   success just confirms the current status);
+  /// - `/orders/:id/messages/read`;
+  /// - `/orders/:id/escrow/hold` with Checkout's per-visit order id (a
+  ///   repeat is a 409 before any money moves, which Checkout resolves by
+  ///   finding the order).
+  Future<dynamic> postIdempotent(String path, {Map<String, dynamic>? body, String? token}) =>
+      _withRetry(() => post(path, body: body, token: token));
+
   // Same no-auto-retry reasoning as post() — a PATCH/DELETE isn't proven
   // safe to blind-retry across this backend's endpoints in general.
   Future<dynamic> patch(

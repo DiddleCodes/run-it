@@ -45,14 +45,14 @@ final selectedVendorIdProvider = StateProvider<String?>((ref) => null);
 /// `GET /vendors/:id/menu` already returns both the vendor and its items
 /// together, so there's no reason for its two consumers to each trigger
 /// their own network call.
-final _selectedVendorWithMenuProvider = FutureProvider<VendorWithMenu?>((ref) async {
+final selectedVendorWithMenuProvider = FutureProvider<VendorWithMenu?>((ref) async {
   final vendorId = ref.watch(selectedVendorIdProvider);
   if (vendorId == null) return null;
   return ref.watch(vendorsRepositoryProvider).fetchMenu(vendorId);
 });
 
 final selectedEateryProvider = FutureProvider<Eatery?>((ref) async {
-  final withMenu = await ref.watch(_selectedVendorWithMenuProvider.future);
+  final withMenu = await ref.watch(selectedVendorWithMenuProvider.future);
   return withMenu?.vendor.toEatery();
 });
 
@@ -62,12 +62,12 @@ final selectedEateryProvider = FutureProvider<Eatery?>((ref) async {
 /// `MyVendorProfile.userId`'s own doc comment) instead of the fixed demo
 /// restaurant identity.
 final selectedVendorProfileProvider = FutureProvider<MyVendorProfile?>((ref) async {
-  final withMenu = await ref.watch(_selectedVendorWithMenuProvider.future);
+  final withMenu = await ref.watch(selectedVendorWithMenuProvider.future);
   return withMenu?.vendor;
 });
 
 final menuProvider = FutureProvider<List<MenuItem>>((ref) async {
-  final withMenu = await ref.watch(_selectedVendorWithMenuProvider.future);
+  final withMenu = await ref.watch(selectedVendorWithMenuProvider.future);
   if (withMenu == null) return const [];
   return withMenu.items.map((item) => item.toMenuItem(withMenu.vendor.id)).toList();
 });

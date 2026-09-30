@@ -53,6 +53,14 @@ class RunnerScanScreen extends ConsumerStatefulWidget {
   ConsumerState<RunnerScanScreen> createState() => _RunnerScanScreenState();
 }
 
+// After the automatic retries, a code check whose answer never arrived may
+// still have gone through server-side. Re-scanning is safe (the backend
+// just confirms the current status), but the runner shouldn't assume it
+// failed and, say, go back to the restaurant.
+const _unconfirmedScanMessage =
+    "Couldn't confirm the scan — your connection dropped. It may have already gone through: "
+    'check the order status before scanning again.';
+
 class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
   late final _controller = MobileScannerController();
   bool _handled = false;
@@ -215,7 +223,7 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
       return _showVerificationError(e.message);
     } catch (_) {
       return _showVerificationError(
-        "Couldn't reach the server. Check your connection and try again.",
+        _unconfirmedScanMessage,
       );
     }
   }
@@ -267,7 +275,7 @@ class _RunnerScanScreenState extends ConsumerState<RunnerScanScreen> {
       return _showVerificationError(e.message);
     } catch (_) {
       return _showVerificationError(
-        "Couldn't reach the server. Check your connection and try again.",
+        _unconfirmedScanMessage,
       );
     }
   }

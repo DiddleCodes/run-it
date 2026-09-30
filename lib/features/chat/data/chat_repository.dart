@@ -20,7 +20,7 @@ class ChatRepository {
       );
 
   Future<void> markRead({required String orderId, required String token}) =>
-      client.post('/orders/$orderId/messages/read', token: token);
+      client.postIdempotent('/orders/$orderId/messages/read', token: token);
 
   Future<List<ChatThread>> fetchThreads({required String token}) async => [
     for (final t in await client.get('/messages/threads', token: token) as List<dynamic>)

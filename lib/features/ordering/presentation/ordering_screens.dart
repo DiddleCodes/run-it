@@ -75,14 +75,18 @@ class _EateryMenuScreenState extends ConsumerState<EateryMenuScreen> {
     return Scaffold(
       body: eatery.when(
         loading: () => const _MenuScreenSkeleton(),
-        error: (_, _) =>
-            const Center(child: Text('Unable to load this eatery.')),
+        error: (_, _) => _MenuLoadError(
+          message: 'Unable to load this eatery.',
+          onRetry: () => ref.invalidate(selectedVendorWithMenuProvider),
+        ),
         data: (place) => place == null
             ? const _NoVendorsEmptyState()
             : menu.when(
                 loading: () => const _MenuScreenSkeleton(),
-                error: (_, _) =>
-                    const Center(child: Text('Unable to load this menu.')),
+                error: (_, _) => _MenuLoadError(
+                  message: 'Unable to load this menu.',
+                  onRetry: () => ref.invalidate(selectedVendorWithMenuProvider),
+                ),
                 data: (items) {
                   final categories = [
                     'All',
@@ -526,6 +530,34 @@ class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({super.key});
   @override
   ConsumerState<CheckoutScreen> createState() => _CheckoutScreenState();
+}
+
+/// The menu's load failure — with a way to try again, not a dead end.
+class _MenuLoadError extends StatelessWidget {
+  const _MenuLoadError({required this.message, required this.onRetry});
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: OrderingColors.muted(context)),
+            ),
+            const SizedBox(height: 12),
+            TextButton(onPressed: onRetry, child: const Text('Try again')),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 /// Whether an order id already has a real hold behind it, checked after a

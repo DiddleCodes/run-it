@@ -104,7 +104,9 @@ class EscrowRepository {
     // group-inflated total to send here (only to display it beforehand).
     String? orderType,
   }) async {
-    await client.post(
+    // Safe to retry: Checkout reuses one order id per visit, and a repeat
+    // hold for it is a 409 before any money moves (see postIdempotent).
+    await client.postIdempotent(
       '/orders/$orderId/escrow/hold',
       token: token,
       body: {

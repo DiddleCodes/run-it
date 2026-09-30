@@ -69,6 +69,9 @@ dependencies:
   # crash_reporting.dart's own doc comment for why).
   sentry_flutter: ^9.28.0
 
+  # Offline banner + reload-on-reconnect (core/network/connectivity.dart).
+  connectivity_plus: ^7.3.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

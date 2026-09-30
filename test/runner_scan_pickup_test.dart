@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -110,6 +112,21 @@ class _MismatchedPickupOrdersRepository extends OrdersRepository {
     required String token,
   }) async {
     throw const ApiException(400, "This isn't the order you accepted.");
+  }
+}
+
+/// The connection dropped and the automatic retries ran out — the pickup
+/// may or may not have been recorded server-side.
+class _UnreachablePickupOrdersRepository extends OrdersRepository {
+  const _UnreachablePickupOrdersRepository();
+  @override
+  Future<void> verifyPickup({
+    required String orderId,
+    required String code,
+    required String handoffPhotoUrl,
+    required String token,
+  }) async {
+    throw TimeoutException('no response');
   }
 }
 
@@ -254,6 +271,32 @@ void main() {
       // The scanner recovers, ready for another attempt.
       await tester.pump(const Duration(milliseconds: 1800));
       expect(find.text('Enter code'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'a pickup check lost to a dropped connection tells the runner it may already have gone through',
+    (tester) async {
+      _setPhoneViewport(tester);
+      await tester.pumpWidget(
+        _harness(
+          overrides: [
+            authControllerProvider.overrideWith(() => _FakeAuthController(_runnerSession())),
+            runnerControllerProvider.overrideWith(() => _AcceptedRunnerController()),
+            orderTrackingProvider.overrideWith(() => _OrderWithIdController()),
+            ordersRepositoryProvider.overrideWithValue(const _UnreachablePickupOrdersRepository()),
+            uploadsRepositoryProvider.overrideWithValue(_RecordingUploadsRepository()),
+          ],
+        ),
+      );
+      await tester.pump();
+
+      await _submitManualPickupCode(tester, '8678');
+      await tester.pump();
+
+      expect(find.textContaining('It may have already gone through'), findsWidgets);
+      expect(find.textContaining("Couldn't reach the server"), findsNothing);
+      await tester.pump(const Duration(seconds: 5));
     },
   );
 }

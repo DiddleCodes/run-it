@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/firebase/firebase_bootstrap.dart';
 import 'core/monitoring/crash_reporting.dart';
 import 'core/network/api_client.dart';
+import 'core/network/connectivity.dart';
 import 'core/notifications/push_notifications.dart';
 import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -64,14 +65,17 @@ class RunItApp extends ConsumerWidget {
     ref.watch(chatNoticeBannerProvider);
     // Picks a student's in-progress order back up after an app restart.
     ref.watch(activeOrderRestorerProvider);
+    // Reloads the main screens' data when the connection comes back.
+    ref.watch(reconnectRefresherProvider);
 
     return MaterialApp.router(
       title: 'Run-It',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       routerConfig: ref.watch(appRouterProvider),
-      builder: (context, child) =>
-          AppNotificationHost(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => OfflineBanner(
+        child: AppNotificationHost(child: child ?? const SizedBox.shrink()),
+      ),
     );
   }
 }
