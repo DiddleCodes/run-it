@@ -8,6 +8,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { runnerDisplayName } from '../src/orders/orders.service';
 import { OrderEscrowService } from '../src/order-escrow/order-escrow.service';
 import {
   createAlertsMock,
@@ -967,6 +968,81 @@ describe('OrderEscrowService.claim', () => {
     });
     expect(prisma.order.updateMany).not.toHaveBeenCalled();
     expect(matching.cancelPendingJobs).not.toHaveBeenCalled();
+  });
+
+  describe('push notifications on a successful claim', () => {
+    const claimedOrder = {
+      id: 'order-1790832731040039',
+      status: 'preparing',
+      vendorId: 'vendor-1',
+      studentUserId: 'student-1',
+    };
+
+    function winClaim(prisma: ReturnType<typeof createPrismaMock>) {
+      approveKyc(prisma);
+      prisma.orderEscrow.findUnique
+        .mockResolvedValueOnce({ ...unclaimedEscrow, orderId: claimedOrder.id })
+        .mockResolvedValueOnce({ ...unclaimedEscrow, orderId: claimedOrder.id, runnerUserId: 'runner-1' });
+      prisma.order.findUniqueOrThrow.mockResolvedValue(claimedOrder);
+      prisma.orderEscrow.updateMany.mockResolvedValue({ count: 1 });
+      prisma.order.updateMany.mockResolvedValue({ count: 1 });
+      prisma.vendor.findUnique.mockResolvedValue({ businessName: 'Golden Crust Bakery' });
+      prisma.user.findUnique.mockResolvedValue({ name: 'Tobi Adeyemi' });
+    }
+
+    it('confirms the claim to the runner and tells the student who is on it', async () => {
+      const { service, prisma, notifications } = makeService();
+      winClaim(prisma);
+
+      await service.claim(claimedOrder.id, runner);
+
+      expect(notifications.emit).toHaveBeenCalledWith({
+        type: 'runner_claim_confirmed',
+        recipientUserId: 'runner-1',
+        title: 'Job confirmed',
+        body: 'Order #31040039 is yours. Head to Golden Crust Bakery for pickup.',
+        data: { orderId: claimedOrder.id },
+      });
+      expect(notifications.emit).toHaveBeenCalledWith({
+        type: 'runner_assigned',
+        recipientUserId: 'student-1',
+        title: 'Runner assigned',
+        body: `${runnerDisplayName('Tobi Adeyemi')} is picking up your order from Golden Crust Bakery.`,
+        data: { orderId: claimedOrder.id },
+      });
+      expect(notifications.emit).toHaveBeenCalledTimes(2);
+    });
+
+    it('sends nothing when the claim is lost to another runner', async () => {
+      const { service, prisma, notifications } = makeService();
+      winClaim(prisma);
+      prisma.orderEscrow.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.claim(claimedOrder.id, runner)).rejects.toThrow(ConflictException);
+      expect(notifications.emit).not.toHaveBeenCalled();
+    });
+
+    it("sends nothing again for the same runner's retried claim", async () => {
+      const { service, prisma, notifications } = makeService();
+      approveKyc(prisma);
+      prisma.orderEscrow.findUnique.mockResolvedValue({ ...unclaimedEscrow, runnerUserId: 'runner-1' });
+
+      await service.claim(claimedOrder.id, runner);
+      expect(notifications.emit).not.toHaveBeenCalled();
+    });
+
+    it('still sends sensible copy if the names are missing', async () => {
+      const { service, prisma, notifications } = makeService();
+      winClaim(prisma);
+      prisma.vendor.findUnique.mockResolvedValue(null);
+      prisma.user.findUnique.mockResolvedValue({ name: null });
+
+      await service.claim(claimedOrder.id, runner);
+
+      expect(notifications.emit).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'runner_assigned', body: `${runnerDisplayName(null)} is picking up your order from the restaurant.` }),
+      );
+    });
   });
 });
 

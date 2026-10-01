@@ -16,6 +16,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { DeliveryProofDto } from './dto/delivery-proof.dto';
 import { ReportProblemDto } from './dto/report-problem.dto';
+import { runnerDisplayName } from '../common/display/runner-display-name';
+
+// Re-exported so existing imports from here keep working.
+export { runnerDisplayName };
 
 type VerificationKind = 'pickup' | 'delivery';
 
@@ -400,13 +404,4 @@ function codesMatch(submitted: string, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-// Task 73: "Chidi Okafor" -> "Chidi O.", "Chidi" -> "Chidi"; a runner with
-// no stored name (possible for older OTP signups) is still honestly "Your
-// runner" rather than an invented one.
-export function runnerDisplayName(name: string | null | undefined): string {
-  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return 'Your runner';
-  if (parts.length === 1) return parts[0];
-  return `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.`;
-}
 

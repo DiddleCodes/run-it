@@ -183,5 +183,49 @@ void main() {
     test('an account notice just opens the app', () {
       expect(pushDestination(const PushMessage(data: {'type': 'account_suspended'}), trackedOrderId: null), isNull);
     });
+
+    test("a runner's claim confirmation opens the delivery screen for the job in progress", () {
+      expect(
+        pushDestination(
+          const PushMessage(data: {'type': 'runner_claim_confirmed', 'orderId': 'o1'}),
+          trackedOrderId: null,
+          activeDeliveryOrderId: 'o1',
+        ),
+        AppRoutes.runnerDelivery,
+      );
+    });
+
+    test('a claim confirmation for a job not in progress here (e.g. after a restart) opens the jobs list', () {
+      expect(
+        pushDestination(
+          const PushMessage(data: {'type': 'runner_claim_confirmed', 'orderId': 'o1'}),
+          trackedOrderId: null,
+          activeDeliveryOrderId: null,
+        ),
+        AppRoutes.runnerJobs,
+      );
+    });
+
+    test("the student's 'runner assigned' opens live tracking for the tracked order, else its detail", () {
+      const assigned = PushMessage(data: {'type': 'runner_assigned', 'orderId': 'o1'});
+      expect(pushDestination(assigned, trackedOrderId: 'o1'), AppRoutes.orderTracking);
+      expect(pushDestination(assigned, trackedOrderId: null), AppRoutes.orderDetail);
+    });
+  });
+
+  test("'Runner assigned' arriving while the app is open shows as a banner", () async {
+    client.foreground.add(
+      const PushMessage(
+        title: 'Runner assigned',
+        body: 'Test R. is picking up your order from Golden Crust Bakery.',
+        data: {'type': 'runner_assigned', 'orderId': 'o1'},
+      ),
+    );
+    await settle();
+
+    expect(
+      container.read(appNotificationProvider).single.message,
+      'Runner assigned — Test R. is picking up your order from Golden Crust Bakery.',
+    );
   });
 }

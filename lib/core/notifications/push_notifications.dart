@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/auth/domain/auth_models.dart';
 import '../../features/ordering/application/order_tracking_controller.dart';
+import '../../features/runner/application/runner_controller.dart';
 import '../network/api_client.dart';
 import '../routing/app_router.dart';
 import '../widgets/app_notification.dart';
@@ -113,13 +114,22 @@ final deviceTokenRepositoryProvider = Provider<DeviceTokenRepository>((ref) => c
 /// the app. A restaurant's new order goes to its orders list; a student's
 /// order update goes to live tracking when it's the order being tracked on
 /// this device, otherwise to that order's detail; a chat message opens that
-/// order's chat.
-String? pushDestination(PushMessage message, {required String? trackedOrderId}) {
+/// order's chat. A runner's claim confirmation opens the delivery screen
+/// when that job is the one in progress on this device, otherwise their
+/// jobs. "Runner assigned" is a student order update like any other.
+String? pushDestination(
+  PushMessage message, {
+  required String? trackedOrderId,
+  String? activeDeliveryOrderId,
+}) {
   final orderId = message.orderId;
   if (message.type == 'order_placed') return AppRoutes.restaurantOrders;
   if (orderId == null) return null;
   // Task 78: a new chat message opens that order's chat.
   if (message.type == 'chat_message') return AppRoutes.orderChat;
+  if (message.type == 'runner_claim_confirmed') {
+    return orderId == activeDeliveryOrderId ? AppRoutes.runnerDelivery : AppRoutes.runnerJobs;
+  }
   return orderId == trackedOrderId ? AppRoutes.orderTracking : AppRoutes.orderDetail;
 }
 
@@ -250,10 +260,17 @@ class PushNotificationsController {
     _pendingOpen = null;
     _detachRouterListener();
     final trackedOrderId = ref.read(orderTrackingProvider).orderId;
-    final destination = pushDestination(message, trackedOrderId: trackedOrderId);
+    final destination = pushDestination(
+      message,
+      trackedOrderId: trackedOrderId,
+      activeDeliveryOrderId: ref.read(runnerControllerProvider).activeDelivery?.job.id,
+    );
     if (destination == null) return;
     if (destination == AppRoutes.orderDetail || destination == AppRoutes.orderChat) {
       unawaited(router.push(destination, extra: message.orderId));
+    } else if (destination == AppRoutes.runnerDelivery) {
+      // Pushed over the runner's tabs, the same way tapping the job does.
+      unawaited(router.push(destination));
     } else {
       router.go(destination);
     }

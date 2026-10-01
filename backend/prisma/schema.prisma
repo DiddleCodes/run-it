@@ -837,6 +837,11 @@ enum NotificationType {
   // the message itself is the record), so this value exists to type the
   // event, not to appear in anyone's notification feed.
   chat_message
+  // A runner's claim went through — to that runner, so a claim made just
+  // as the connection dropped is never left in doubt.
+  runner_claim_confirmed
+  // A runner claimed the student's order — to the student.
+  runner_assigned
 }
 
 model Notification {

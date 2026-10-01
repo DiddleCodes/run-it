@@ -17,6 +17,7 @@ import { AlertsService } from '../alerts/alerts.service';
 import { JwtPayload } from '../auth/jwt-payload.interface';
 import { MatchingService } from '../matching/matching.service';
 import { NotificationsEmitterService } from '../notifications/notifications-emitter.service';
+import { runnerDisplayName } from '../common/display/runner-display-name';
 import { PaystackService } from '../paystack/paystack.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { computeCommissionShares, computeServiceFeeKobo } from './commission.util';
@@ -382,8 +383,41 @@ export class OrderEscrowService {
     }
 
     await this.matching.cancelPendingJobs(orderId);
+    await this.notifyClaimed(order, runner.sub);
 
     return this.findByOrderId(orderId);
+  }
+
+  /**
+   * Both sides of a successful claim: the runner gets a confirmation (so a
+   * claim made as the connection dropped is never left in doubt), and the
+   * student learns who's bringing their order. Only after the claim is
+   * won — a lost race or a retried claim (the early return above) sends
+   * nothing. Best-effort, like every other emit: delivery problems are the
+   * notifications pipeline's to log, never a reason to fail the claim.
+   */
+  private async notifyClaimed(order: { id: string; vendorId: string; studentUserId: string }, runnerUserId: string) {
+    const [vendor, runnerUser] = await Promise.all([
+      this.prisma.vendor.findUnique({ where: { id: order.vendorId }, select: { businessName: true } }),
+      this.prisma.user.findUnique({ where: { id: runnerUserId }, select: { name: true } }),
+    ]);
+    const vendorName = vendor?.businessName ?? 'the restaurant';
+    const reference = orderReference(order.id);
+
+    this.notifications.emit({
+      type: 'runner_claim_confirmed',
+      recipientUserId: runnerUserId,
+      title: 'Job confirmed',
+      body: `Order ${reference} is yours. Head to ${vendorName} for pickup.`,
+      data: { orderId: order.id },
+    });
+    this.notifications.emit({
+      type: 'runner_assigned',
+      recipientUserId: order.studentUserId,
+      title: 'Runner assigned',
+      body: `${runnerDisplayName(runnerUser?.name)} is picking up your order from ${vendorName}.`,
+      data: { orderId: order.id },
+    });
   }
 
   async release(orderId: string): Promise<OrderEscrow> {
@@ -663,4 +697,9 @@ export class OrderEscrowService {
       payAtDeliveryEnabled: created.payAtDeliveryEnabled,
     };
   }
+}
+
+/** The short order reference both apps show ("#31040039"): the id's last 8 characters. */
+export function orderReference(orderId: string): string {
+  return `#${orderId.slice(-8).toUpperCase()}`;
 }
