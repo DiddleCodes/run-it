@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../core/utils/order_reference.dart';
+import '../../../core/utils/server_time.dart';
 
 export '../../../core/utils/order_reference.dart';
 
@@ -22,8 +23,8 @@ class ChatMessage {
     senderUserId: json['senderUserId'] as String,
     body: json['body'] as String,
     // The backend sends UTC; everything the user sees is local time.
-    createdAt: DateTime.parse(json['createdAt'] as String).toLocal(),
-    readAt: json['readAt'] == null ? null : DateTime.parse(json['readAt'] as String).toLocal(),
+    createdAt: parseServerTime(json['createdAt'] as String),
+    readAt: parseServerTimeOrNull(json['readAt']),
   );
 
   final String id;
@@ -105,7 +106,7 @@ class ChatThread {
     vendorName: json['vendorName'] as String,
     otherPartyName: json['otherPartyName'] as String,
     unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
-    lastActivityAt: DateTime.parse(json['lastActivityAt'] as String).toLocal(),
+    lastActivityAt: parseServerTime(json['lastActivityAt'] as String),
     lastMessage: json['lastMessage'] == null
         ? null
         : ChatMessage.fromJson(json['lastMessage'] as Map<String, dynamic>),
@@ -132,7 +133,7 @@ class AccountNotice {
   factory AccountNotice.fromJson(Map<String, dynamic> json) => AccountNotice(
     title: json['title'] as String,
     body: json['body'] as String,
-    createdAt: DateTime.parse(json['createdAt'] as String).toLocal(),
+    createdAt: parseServerTime(json['createdAt'] as String),
     unread: json['readAt'] == null,
   );
 

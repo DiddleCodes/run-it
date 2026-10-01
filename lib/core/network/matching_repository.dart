@@ -6,6 +6,7 @@ import 'package:socket_io_client/socket_io_client.dart' as socket_io;
 import '../../features/runner/domain/runner_models.dart';
 import 'api_client.dart';
 import 'api_config.dart';
+import '../utils/server_time.dart';
 
 /// Backend money is integer kobo; app models are whole naira. Every amount
 /// the backend sends here is a whole number of naira (menu prices, the flat
@@ -47,7 +48,7 @@ class MatchingRepository {
             payoutAmount: koboToNaira(json['payoutAmount'] as int),
             totalAmount: koboToNaira(json['totalAmount'] as int),
             isPayOnDelivery: json['isPayOnDelivery'] as bool? ?? false,
-            offeredAt: DateTime.parse(json['createdAt'] as String),
+            offeredAt: parseServerTime(json['createdAt'] as String),
           ),
         )
         .toList();

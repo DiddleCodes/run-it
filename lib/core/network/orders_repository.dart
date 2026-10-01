@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/ordering/domain/order_history_models.dart';
 import 'api_client.dart';
 import 'api_exception.dart';
+import '../utils/server_time.dart';
 
 final ordersRepositoryProvider = Provider<OrdersRepository>(
   (ref) => const OrdersRepository(),
@@ -175,7 +176,7 @@ class CashDebtEntry {
     amountOwedKobo: json['amountOwed'] as int,
     amountCollectedKobo: json['amountCollected'] as int,
     status: json['status'] as String,
-    createdAt: DateTime.parse(json['createdAt'] as String),
+    createdAt: parseServerTime(json['createdAt'] as String),
   );
 }
 

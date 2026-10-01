@@ -8,6 +8,7 @@ import '../../../core/network/api_config.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../auth/domain/auth_models.dart';
 import '../domain/chat_models.dart';
+import '../../../core/utils/server_time.dart';
 
 /// A `messages_read` event: [readerUserId] has seen everything the other
 /// party sent in [orderId] up to [readAt].
@@ -113,7 +114,7 @@ class SocketChatRealtime implements ChatRealtime {
           ChatReadReceipt(
             orderId: json['orderId'] as String,
             readerUserId: json['readerUserId'] as String,
-            readAt: DateTime.parse(json['readAt'] as String).toLocal(),
+            readAt: parseServerTime(json['readAt'] as String),
           ),
         );
       })

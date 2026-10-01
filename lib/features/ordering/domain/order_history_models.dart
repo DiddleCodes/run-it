@@ -1,4 +1,5 @@
 import 'order_decline.dart';
+import '../../../core/utils/server_time.dart';
 
 /// One line item on a real, backend-persisted order — shared by both the
 /// history list and the detail fetch (Task 46), same convention as the
@@ -94,7 +95,7 @@ class OrderHistoryEntry {
       items.map((line) => '${line.quantity}× ${line.name}').join(', ');
 
   static DateTime? _parseNullable(dynamic value) =>
-      value == null ? null : DateTime.parse(value as String);
+      parseServerTimeOrNull(value);
 
   factory OrderHistoryEntry.fromJson(Map<String, dynamic> json) =>
       OrderHistoryEntry(
@@ -107,7 +108,7 @@ class OrderHistoryEntry {
         items: (json['items'] as List)
             .map((e) => OrderHistoryItemLine.fromJson(e as Map<String, dynamic>))
             .toList(),
-        createdAt: DateTime.parse(json['createdAt'] as String),
+        createdAt: parseServerTime(json['createdAt'] as String),
         acceptedAt: _parseNullable(json['acceptedAt']),
         pickedUpAt: _parseNullable(json['pickedUpAt']),
         deliveredAt: _parseNullable(json['deliveredAt']),
@@ -128,13 +129,13 @@ class OrderHistoryEntry {
     'note': note,
     'deliveryLocationLabel': deliveryLocationLabel,
     'items': [for (final line in items) line.toJson()],
-    'createdAt': createdAt.toIso8601String(),
-    'acceptedAt': acceptedAt?.toIso8601String(),
-    'pickedUpAt': pickedUpAt?.toIso8601String(),
-    'deliveredAt': deliveredAt?.toIso8601String(),
-    'cancelledAt': cancelledAt?.toIso8601String(),
+    'createdAt': createdAt.toUtc().toIso8601String(),
+    'acceptedAt': acceptedAt?.toUtc().toIso8601String(),
+    'pickedUpAt': pickedUpAt?.toUtc().toIso8601String(),
+    'deliveredAt': deliveredAt?.toUtc().toIso8601String(),
+    'cancelledAt': cancelledAt?.toUtc().toIso8601String(),
     'paymentMethod': paymentMethod,
-    'declinedAt': declinedAt?.toIso8601String(),
+    'declinedAt': declinedAt?.toUtc().toIso8601String(),
     'declineReason': declineReason?.toJson,
     'declineReasonNote': declineReasonNote,
     'runnerName': runnerName,

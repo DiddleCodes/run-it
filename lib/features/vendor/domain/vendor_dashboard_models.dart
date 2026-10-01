@@ -1,4 +1,5 @@
 import '../../ordering/domain/order_decline.dart';
+import '../../../core/utils/server_time.dart';
 
 /// Task 12's Restaurant Dashboard order lifecycle — mirrors the backend's
 /// `OrderStatus` enum exactly (see `schema.prisma`'s own doc comment there
@@ -106,7 +107,7 @@ class RestaurantOrder {
     totalKobo: json['totalAmount'] as int,
     deliveryLocationLabel: json['deliveryLocationLabel'] as String?,
     note: json['note'] as String?,
-    createdAt: DateTime.parse(json['createdAt'] as String),
+    createdAt: parseServerTime(json['createdAt'] as String),
     items: (json['items'] as List)
         .map((e) => RestaurantOrderItem.fromJson(e as Map<String, dynamic>))
         .toList(),
@@ -349,8 +350,8 @@ class VendorMetrics {
   final List<VendorMetricsItem> mostOrderedItems;
 
   factory VendorMetrics.fromJson(Map<String, dynamic> json) => VendorMetrics(
-    from: DateTime.parse(json['from'] as String),
-    to: DateTime.parse(json['to'] as String),
+    from: parseServerTime(json['from'] as String),
+    to: parseServerTime(json['to'] as String),
     totalOrders: json['totalOrders'] as int,
     totalRevenueKobo: json['totalRevenue'] as int,
     mostOrderedItems: (json['mostOrderedItems'] as List)

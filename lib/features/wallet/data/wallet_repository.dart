@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
 import '../domain/wallet_models.dart';
+import '../../../core/utils/server_time.dart';
 
 final walletRepositoryProvider = Provider<WalletRepository>(
   (ref) => const WalletRepository(),
@@ -94,7 +95,7 @@ class WalletRepository {
       subtitle: subtitle,
       amount: (json['amount'] as int) ~/ 100,
       kind: json['type'] == 'credit' ? WalletTransactionKind.credit : WalletTransactionKind.debit,
-      occurredAt: DateTime.parse(json['createdAt'] as String),
+      occurredAt: parseServerTime(json['createdAt'] as String),
       status: json['status'] as String? ?? 'success',
     );
   }
