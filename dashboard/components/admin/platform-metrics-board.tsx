@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { StatCard } from "@/components/shared/stat-card";
 import { SkeletonBlock } from "@/components/shared/skeleton-block";
-import { formatKobo } from "@/lib/format";
+import { formatKobo, formatKoboCompact } from "@/lib/format";
 import { PlatformMetrics, adminClient } from "@/lib/api/admin-client";
 
 const RANGES = [
@@ -139,7 +139,7 @@ export function PlatformMetricsBoard({ initialData }: { initialData: PlatformMet
           <ResponsiveContainer width="100%" height={Math.max(220, metrics.categoryBreakdown.length * 34)}>
             <BarChart data={metrics.categoryBreakdown} layout="vertical" margin={{ left: 10, right: 10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
+              <XAxis type="number" tickFormatter={formatKoboCompact} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
               <YAxis type="category" dataKey="category" width={140} tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
               <Tooltip content={<ChartTooltip />} />
               <Bar dataKey="gmv" name="gmv" fill="#7A1636" radius={[0, 3, 3, 0]} />

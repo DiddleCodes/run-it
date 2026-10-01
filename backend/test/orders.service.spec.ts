@@ -187,7 +187,11 @@ describe('OrdersService.verifyDelivery — Task 47 Pay on Delivery', () => {
     expect(prisma.dispute.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { orderId: 'order-1' },
-        create: expect.objectContaining({ orderId: 'order-1' }),
+        create: expect.objectContaining({
+          orderId: 'order-1',
+          // Admins read this — naira, not raw kobo.
+          reason: 'Pay on Delivery cash mismatch — runner reported collecting ₦70.00, order total was ₦100.00',
+        }),
       }),
     );
   });

@@ -5,7 +5,7 @@ import { Column, DataTable } from "@/components/shared/data-table";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Drawer, Modal } from "@/components/shared/modal";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { formatDateTime, formatKobo } from "@/lib/format";
+import { formatDateTime, formatKobo, orderReference } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import {
   AdminApiError,
@@ -78,7 +78,7 @@ export function DisputesBoard({ initialData }: { initialData: AdminDisputeSummar
   const filtered = filter === "all" ? disputes : disputes.filter((d) => d.status === filter);
 
   const columns: Column<AdminDisputeSummary>[] = [
-    { key: "orderId", header: "Order", render: (d) => <span className="font-mono text-xs">{d.orderId.slice(0, 8)}</span> },
+    { key: "orderId", header: "Order", render: (d) => <span className="font-mono text-xs whitespace-nowrap">{orderReference(d.orderId)}</span> },
     { key: "reason", header: "Reason", render: (d) => <span className="text-sm">{d.reason}</span> },
     { key: "totalAmount", header: "Amount", render: (d) => formatKobo(d.order.totalAmount) },
     { key: "openedAt", header: "Opened", sortable: true, render: (d) => formatDateTime(d.openedAt) },
@@ -141,7 +141,7 @@ export function DisputesBoard({ initialData }: { initialData: AdminDisputeSummar
             setDetail(null);
           }
         }}
-        title={detail ? `Order ${detail.orderId.slice(0, 8)}` : ""}
+        title={detail ? `Order ${orderReference(detail.orderId)}` : ""}
       >
         {detailLoading && <p className="text-sm text-[var(--muted-foreground)]">Loading…</p>}
         {detail && !detailLoading && (
@@ -250,7 +250,7 @@ export function DisputesBoard({ initialData }: { initialData: AdminDisputeSummar
       <Modal
         open={!!resolving}
         onOpenChange={(open) => !open && setResolving(null)}
-        title={`Resolve order ${resolving?.orderId.slice(0, 8) ?? ""}`}
+        title={`Resolve order ${resolving ? orderReference(resolving.orderId) : ""}`}
         footer={
           <button
             onClick={() => setConfirmResolve(true)}

@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { formatKobo } from "@/lib/format";
 import type { IncomingOrdersResponse, Metrics, MenuItem, Vendor } from "@/lib/api/vendor-client";
+import { Banknote, Clock, ShoppingBag, UtensilsCrossed } from "lucide-react";
 
 export default async function RestaurantOverviewPage() {
   const token = await getSessionToken();
@@ -27,10 +28,10 @@ export default async function RestaurantOverviewPage() {
     <>
       <PageHeader title="Overview" subtitle="Your restaurant's activity at a glance." breadcrumb="Restaurant" />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={<span />} label="Today's orders" value={metrics.totalOrders} accent="burgundy" />
-        <StatCard icon={<span />} label="Today's revenue" value={formatKobo(metrics.totalRevenue)} accent="gold" />
-        <StatCard icon={<span />} label="Open orders" value={incoming.total} accent="blue" />
-        <StatCard icon={<span />} label="Menu items live" value={`${availableCount} / ${menu.items.length}`} accent="green" />
+        <StatCard icon={<ShoppingBag size={16} />} label="Today's orders" value={metrics.totalOrders} accent="burgundy" />
+        <StatCard icon={<Banknote size={16} />} label="Today's revenue" value={formatKobo(metrics.totalRevenue)} accent="gold" />
+        <StatCard icon={<Clock size={16} />} label="Open orders" value={incoming.total} accent="blue" />
+        <StatCard icon={<UtensilsCrossed size={16} />} label="Menu items live" value={`${availableCount} / ${menu.items.length}`} accent="green" />
       </div>
       <p className="text-sm text-[var(--muted-foreground)] mt-6">Figures reflect today so far. See Metrics for a date-range view.</p>
     </>

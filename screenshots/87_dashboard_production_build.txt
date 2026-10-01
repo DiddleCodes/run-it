@@ -1,0 +1,48 @@
+> dashboard@0.1.0 build
+> next build
+▲ Next.js 16.3.3 (Turbopack)
+✓ Running next.config.ts took 490ms
+- Experiments (use with caution):
+  · clientTraceMetadata
+  Creating an optimized production build ...
+✓ Compiled successfully in 1433ms
+  Running next.config.js provided runAfterProductionCompile ...
+✓ Completed runAfterProductionCompile in 1080ms
+  Running TypeScript ...
+  Finished TypeScript in 1985ms ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/25) ...
+  Generating static pages using 7 workers (6/25) 
+  Generating static pages using 7 workers (12/25) 
+  Generating static pages using 7 workers (18/25) 
+✓ Generating static pages using 7 workers (25/25) in 283ms
+  Finalizing page optimization ...
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /admin/campuses
+├ ƒ /admin/disputes
+├ ƒ /admin/overview
+├ ƒ /admin/platform-metrics
+├ ƒ /admin/reconciliation
+├ ƒ /admin/runner-kyc
+├ ƒ /admin/users
+├ ƒ /admin/vendor-review
+├ ƒ /api/auth/forgot-password
+├ ƒ /api/auth/login
+├ ƒ /api/auth/logout
+├ ƒ /api/auth/reset-password
+├ ƒ /api/proxy/[...path]
+├ ○ /component-library
+├ ○ /forgot-password
+├ ○ /icon.png
+├ ○ /login
+├ ○ /reset-password
+├ ƒ /restaurant/menu
+├ ƒ /restaurant/metrics
+├ ƒ /restaurant/orders
+├ ƒ /restaurant/overview
+└ ƒ /restaurant/profile
+ƒ Proxy (Middleware)
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand

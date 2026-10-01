@@ -274,7 +274,7 @@ function CampusFormFields({
           placeholder="student.ui.edu.ng, ui.edu.ng"
           className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
         />
-        <p className="text-xs text-[var(--muted-foreground)]">Comma-separated. A student's signup email must match one of these exactly.</p>
+        <p className="text-xs text-[var(--muted-foreground)]">Comma-separated. A student&apos;s signup email must match one of these exactly.</p>
       </div>
     </div>
   );

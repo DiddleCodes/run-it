@@ -7,6 +7,15 @@ import * as Sentry from '@sentry/nextjs';
 // throw there — an ordinary backend error response is forwarded as a
 // normal NextResponse, not thrown, so it correctly never reaches this).
 export async function register() {
+  // A production server without these can't reach the backend or verify a
+  // single session — refuse to start rather than fail every request.
+  if (process.env.NODE_ENV === 'production') {
+    const missing = ['BACKEND_URL', 'JWT_SECRET'].filter((name) => !process.env[name]);
+    if (missing.length > 0) {
+      throw new Error(`Missing required environment variables: ${missing.join(', ')} (see dashboard/README.md → Production).`);
+    }
+  }
+
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     await import('./sentry.server.config');
   }

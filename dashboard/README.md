@@ -38,7 +38,7 @@ npm run start:dev      # http://localhost:3000
 
 # 2. Dashboard (from repo root, separate terminal)
 cd dashboard
-cp .env.local.example .env.local   # BACKEND_URL + JWT_SECRET (must match backend/.env)
+cp .env.example .env.local   # BACKEND_URL + JWT_SECRET (must match backend/.env)
 npm install
 npm run dev             # http://localhost:3001
 ```
@@ -96,15 +96,40 @@ Logout (`POST /api/auth/logout`) just clears the cookie.
   `AlertDialog`), `EmptyState`, `SkeletonBlock`, plus a `toast` helper over Sonner.
   Rebuilt cleanly against the real session/typed props rather than copy-pasted from
   the Figma Make prototype this app's visual design is based on.
-- `/component-library` — full showcase of the above, for design review. The only
-  page in this app that uses illustrative demo data (clearly labeled as such in its
-  source) — every other page either shows real data or an honest loading/empty
-  state, never a fabricated number.
+- `/component-library` — full showcase of the above, for design review, with
+  illustrative sample data. Development only: it 404s in a production build and
+  isn't linked from the nav there.
 
-## What's real vs. not-yet-wired in this task
+## Production
 
-Real: login, logout, forgot/reset password, session verification, role guards
-(middleware + layout), `GET /auth/me`. Not yet wired (Task 13b/13c): Orders, Menu,
-Metrics, Vendor Review, Disputes, Platform Metrics, Reconciliation, and Users pages
-are real, role-guarded routes rendering an honest "coming in a later task" empty
-state — not mocked tables standing in for a real API call.
+`npm run build` then `npm run start` (port 3001; put it behind the host's HTTPS).
+Nothing here is deployed yet — this is the checklist for when the backend is live
+on Railway and a domain is connected.
+
+### Environment variables
+
+| Variable | Required | When | Value |
+|---|---|---|---|
+| `BACKEND_URL` | yes | runtime | The production backend's HTTPS URL, e.g. `https://api.<domain>` (no trailing slash). Server-only. |
+| `JWT_SECRET` | yes | runtime | Exactly the production backend's `JWT_SECRET` — the new production secret, not the dev one. |
+| `NEXT_PUBLIC_SENTRY_DSN` | no | **build** | Sentry DSN for the dashboard. Baked in by `next build`, so set it before building. |
+| `NODE_ENV` | — | — | `next build`/`next start` set `production` themselves. |
+
+The server refuses to start in production if `BACKEND_URL` or `JWT_SECRET` is
+missing (`instrumentation.ts`), instead of failing every request.
+
+### On the backend, for the dashboard
+
+| Backend variable | Set to |
+|---|---|
+| `DASHBOARD_ORIGIN` | The dashboard's public origin, e.g. `https://dashboard.<domain>` (CORS). |
+| `DASHBOARD_URL` | Same origin — password-reset emails link to `<DASHBOARD_URL>/reset-password`. |
+| `JWT_SECRET` | The same value as the dashboard's. |
+
+### Before the first real sign-in
+
+- Create the real admin account(s) on the production database — don't run
+  `prisma:seed` there (it creates the `@runit.dev` dev accounts with a published
+  password).
+- Sign in once as admin and once as a restaurant against production and check the
+  session cookie is `Secure` (it is whenever `NODE_ENV=production`).

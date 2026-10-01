@@ -56,9 +56,7 @@ export function Sidebar({ role, collapsed, onToggle }: SidebarProps) {
           })}
         </ul>
 
-        {/* Task 37: dev-only reference, never linked for real production users
-            — the page itself stays reachable by direct URL if a developer
-            needs it there too, this just keeps it out of the nav real users see. */}
+        {/* Task 37: dev-only reference — the page itself 404s in production. */}
         {!collapsed && process.env.NODE_ENV !== "production" && (
           <>
             <div className="h-px bg-white/5 mx-4 my-4" />

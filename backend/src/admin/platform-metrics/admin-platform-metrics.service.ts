@@ -26,7 +26,13 @@ export class AdminPlatformMetricsService {
       this.prisma.order.aggregate({ where: orderWhere, _sum: { totalAmount: true } }),
       this.prisma.vendor.count({ where: { status: 'active' } }),
       this.prisma.order.groupBy({ by: ['runnerUserId'], where: { ...orderWhere, runnerUserId: { not: null } } }),
-      this.prisma.orderEscrow.aggregate({ where: { createdAt: { gte: from, lte: to } }, _sum: { platformFee: true } }),
+      // The fee is only earned on the same orders GMV counts — a cancelled
+      // or refunded order's escrow still records the fee it would have
+      // taken, which once put "revenue" above GMV.
+      this.prisma.orderEscrow.aggregate({
+        where: { order: orderWhere, status: { not: 'refunded' as const } },
+        _sum: { platformFee: true },
+      }),
       // groupBy can't reach across the Order -> Vendor relation to group
       // by Vendor.category directly, so the one real per-category
       // breakdown the data supports is built here instead: fetch each

@@ -66,4 +66,21 @@ describe('AdminPlatformMetricsService.metrics', () => {
 
     expect(result.takeRatePct).toBe(0);
   });
+  it('counts platform revenue only from the orders GMV counts — never a cancelled or refunded one', async () => {
+    const { service, prisma } = makeService();
+    prisma.order.count.mockResolvedValue(1);
+    prisma.order.aggregate.mockResolvedValue({ _sum: { totalAmount: 144_500 } });
+    prisma.vendor.count.mockResolvedValue(1);
+    prisma.order.groupBy.mockResolvedValue([]);
+    prisma.orderEscrow.aggregate.mockResolvedValue({ _sum: { platformFee: 4_500 } });
+    prisma.order.findMany.mockResolvedValue([]);
+
+    await service.metrics({ from: '2026-09-01T00:00:00.000Z', to: '2026-10-01T00:00:00.000Z' });
+
+    const orderWhere = prisma.order.aggregate.mock.calls[0][0].where;
+    expect(prisma.orderEscrow.aggregate).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { order: orderWhere, status: { not: 'refunded' } } }),
+    );
+    expect(orderWhere.status).toEqual({ not: 'cancelled' });
+  });
 });

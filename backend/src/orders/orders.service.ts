@@ -16,6 +16,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { DeliveryProofDto } from './dto/delivery-proof.dto';
 import { ReportProblemDto } from './dto/report-problem.dto';
+import { formatKobo } from '../common/display/money';
 import { runnerDisplayName } from '../common/display/runner-display-name';
 
 // Re-exported so existing imports from here keep working.
@@ -337,7 +338,7 @@ export class OrdersService {
           where: { orderId: order.id },
           create: {
             orderId: order.id,
-            reason: `Pay on Delivery cash mismatch — runner reported collecting ${amountCollectedKobo} kobo, order total was ${order.totalAmount} kobo`,
+            reason: `Pay on Delivery cash mismatch — runner reported collecting ${formatKobo(amountCollectedKobo)}, order total was ${formatKobo(order.totalAmount)}`,
           },
           update: {},
         });

@@ -7,12 +7,6 @@ interface TopBarProps {
   user: { name: string | null; email: string | null; accountType: string };
 }
 
-const demoNotifications = [
-  { text: "Order #A-1042 has been waiting 12 min", time: "2m ago", dot: "bg-amber-400" },
-  { text: "New vendor application from Spice Garden", time: "18m ago", dot: "bg-blue-400" },
-  { text: "Reconciliation flagged 2 stuck escrows", time: "1h ago", dot: "bg-[#7A1636]" },
-];
-
 export function TopBar({ user }: TopBarProps) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -35,18 +29,6 @@ export function TopBar({ user }: TopBarProps) {
 
   return (
     <header className="glass-bar h-14 flex items-center px-5 border-b border-black/5 flex-shrink-0 gap-4 sticky top-0 z-30">
-      <div className="relative flex-1 max-w-xs">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]">
-          <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M9.5 9.5l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-        <input
-          type="text"
-          placeholder="Search…"
-          className="w-full pl-8 pr-3 py-1.5 text-sm bg-black/5 rounded-lg border border-transparent focus:border-[var(--primary)] focus:bg-white outline-none transition-all placeholder:text-[var(--muted-foreground)]"
-        />
-      </div>
-
       <div className="ml-auto flex items-center gap-1">
         <div className="relative">
           <button
@@ -54,28 +36,24 @@ export function TopBar({ user }: TopBarProps) {
               setNotifOpen((p) => !p);
               setMenuOpen(false);
             }}
+            aria-label="Notifications"
             className="relative p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-black/5 transition-colors"
           >
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
               <path d="M9 2a5 5 0 00-5 5v3l-1.5 2.5h13L14 10V7a5 5 0 00-5-5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
               <path d="M7.5 15a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#D99A18]" />
           </button>
           {notifOpen && (
             <div className="absolute right-0 top-10 w-72 bg-card border border-[var(--border)] rounded-xl shadow-xl z-50 overflow-hidden">
               <div className="px-4 py-3 border-b border-[var(--border)]">
                 <p className="text-sm font-semibold">Notifications</p>
               </div>
-              {demoNotifications.map((n, i) => (
-                <div key={i} className="flex gap-3 px-4 py-3 hover:bg-[var(--secondary)] transition-colors cursor-pointer border-b border-[var(--border)] last:border-0">
-                  <span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${n.dot}`} />
-                  <div>
-                    <p className="text-sm text-[var(--foreground)]">{n.text}</p>
-                    <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5">{n.time}</p>
-                  </div>
-                </div>
-              ))}
+              {/* No notification feed exists yet — say so rather than show made-up alerts. */}
+              <div className="px-4 py-6 text-center">
+                <p className="text-sm text-[var(--foreground)]">No notifications yet</p>
+                <p className="text-[11px] text-[var(--muted-foreground)] mt-1">Order and dispute alerts are coming soon.</p>
+              </div>
             </div>
           )}
         </div>
