@@ -6,6 +6,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/cache/cached_data_note.dart';
+import '../../../core/cache/cached_fetch.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/demo_identity_service.dart';
 import '../../../core/network/escrow_repository.dart';
@@ -1975,6 +1977,12 @@ class _EateryHero extends StatelessWidget {
             style: Theme.of(context).textTheme.labelMedium
                 ?.copyWith(color: Colors.white.withValues(alpha: .72)),
           ),
+        // Shown only while this is the saved copy of the menu.
+        CachedDataNote(
+          cacheKey: CacheKeys.menu(eatery.id),
+          padding: const EdgeInsets.only(top: 10),
+          color: Colors.white.withValues(alpha: .72),
+        ),
       ],
     ),
   );

@@ -8,6 +8,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/cache/cached_data_note.dart';
+import '../../../core/cache/cached_fetch.dart';
 import '../../../core/network/campus_repository.dart';
 import '../../../core/network/vendors_repository.dart';
 import '../../../core/routing/app_router.dart';
@@ -83,6 +85,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final category = ref.watch(vendorCategoryFilterProvider);
     final search = ref.watch(vendorSearchQueryProvider);
     final filters = ref.watch(vendorFiltersProvider);
+    final userId = ref.watch(authControllerProvider.select((session) => session?.user.id));
     final categoriesAsync = ref.watch(vendorCategoriesProvider);
     final vendorsAsync = ref.watch(campusEateriesProvider);
     return Scaffold(
@@ -180,21 +183,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 28, AppSpacing.lg, 12),
               sliver: SliverToBoxAdapter(
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(
-                        'Popular around campus',
-                        style: textTheme.titleLarge?.copyWith(
-                          color: AppColors.inkText,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Popular around campus',
+                            style: textTheme.titleLarge?.copyWith(
+                              color: AppColors.inkText,
+                            ),
+                          ),
                         ),
-                      ),
+                        if (vendorsAsync.isLoading && vendorsAsync.hasValue)
+                          const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryMaroon),
+                          ),
+                      ],
                     ),
-                    if (vendorsAsync.isLoading && vendorsAsync.hasValue)
-                      const SizedBox.square(
-                        dimension: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryMaroon),
-                      ),
+                    // Only the plain campus list is ever the saved copy.
+                    CachedDataNote(
+                      cacheKey: userId != null && category == null && search.trim().isEmpty && filters.isDefault
+                          ? CacheKeys.vendors(userId)
+                          : null,
+                      padding: const EdgeInsets.only(top: 4),
+                    ),
                   ],
                 ),
               ),
@@ -258,6 +273,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _refresh() async {
+    final userId = ref.read(authControllerProvider)?.user.id;
+    final cacheSession = ref.read(cacheSessionProvider)..forceNetwork(CacheKeys.categories);
+    if (userId != null) cacheSession.forceNetwork(CacheKeys.vendors(userId));
     try {
       await Future.wait([
         ref.refresh(campusEateriesProvider.future),

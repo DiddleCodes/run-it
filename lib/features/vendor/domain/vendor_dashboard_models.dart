@@ -202,6 +202,20 @@ class MyVendorProfile {
     ratingCount: json['ratingCount'] as int? ?? 0,
     matchingItems: [for (final name in json['matchingItems'] as List<dynamic>? ?? const []) name as String],
   );
+
+  /// The same shape [fromJson] reads — for the local cache.
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'businessName': businessName,
+    'category': category,
+    'description': description,
+    'logoUrl': logoUrl,
+    'userId': userId,
+    'payAtDeliveryEnabled': payAtDeliveryEnabled,
+    'averageRating': averageRating,
+    'ratingCount': ratingCount,
+    'matchingItems': matchingItems,
+  };
 }
 
 /// One entry from the backend's controlled vendor-category vocabulary
@@ -217,6 +231,8 @@ class VendorCategoryOption {
 
   factory VendorCategoryOption.fromJson(Map<String, dynamic> json) =>
       VendorCategoryOption(slug: json['slug'] as String, label: json['label'] as String);
+
+  Map<String, dynamic> toJson() => {'slug': slug, 'label': label};
 }
 
 class VendorsPage {
@@ -253,6 +269,11 @@ class VendorWithMenu {
     vendor: MyVendorProfile.fromJson(json['vendor'] as Map<String, dynamic>),
     items: (json['items'] as List).map((e) => VendorMenuItem.fromJson(e as Map<String, dynamic>)).toList(),
   );
+
+  Map<String, dynamic> toJson() => {
+    'vendor': vendor.toJson(),
+    'items': [for (final item in items) item.toJson()],
+  };
 }
 
 class VendorMenuItem {
@@ -287,6 +308,17 @@ class VendorMenuItem {
     isAvailable: json['isAvailable'] as bool,
     isMainMeal: json['isMainMeal'] as bool? ?? false,
   );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'description': description,
+    'price': priceKobo,
+    'photoUrl': photoUrl,
+    'category': category,
+    'isAvailable': isAvailable,
+    'isMainMeal': isMainMeal,
+  };
 }
 
 class VendorMetricsItem {

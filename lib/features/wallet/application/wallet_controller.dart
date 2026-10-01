@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/cache/cached_fetch.dart';
+import '../../../core/cache/cached_sources.dart';
 import '../../auth/application/auth_controller.dart';
 import '../data/wallet_repository.dart';
 import '../domain/wallet_models.dart';
@@ -14,14 +16,16 @@ class WalletBalanceController extends AsyncNotifier<int> {
   Future<int> build() async {
     final session = ref.watch(authControllerProvider);
     if (session == null) return 0;
-    final repository = ref.watch(walletRepositoryProvider);
-    return repository.getBalance(userId: session.user.id, token: session.accessToken);
+    ref.watch(walletRepositoryProvider);
+    return cachedFetch<int>(ref, walletBalanceSource(ref, session));
   }
 
   /// Re-fetches from the backend and waits for the new value — used after
   /// a top-up so the caller can read the real, settled balance rather than
   /// guessing at what it should now be.
   Future<int> refresh() async {
+    final session = ref.read(authControllerProvider);
+    if (session != null) ref.read(cacheSessionProvider).forceNetwork(CacheKeys.wallet(session.user.id));
     ref.invalidateSelf();
     return future;
   }

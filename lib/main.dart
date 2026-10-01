@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_ce_flutter/hive_ce_flutter.dart';
+import 'core/cache/cached_fetch.dart';
+import 'core/cache/local_cache.dart';
 import 'core/firebase/firebase_bootstrap.dart';
 import 'core/monitoring/crash_reporting.dart';
 import 'core/network/api_client.dart';
@@ -38,9 +41,26 @@ Future<void> main() async {
       // Task 75: after the binding exists, before the app (and anything
       // that may touch Firebase) starts.
       await initializeFirebase();
-      runApp(const ProviderScope(child: RunItApp()));
+      runApp(
+        ProviderScope(
+          overrides: [localCacheProvider.overrideWithValue(await _openLocalCache())],
+          child: const RunItApp(),
+        ),
+      );
     },
   );
+}
+
+/// The saved copy of browsing data (core/cache/). If the box can't be
+/// opened, the app still runs — it just has nothing saved to show offline.
+Future<LocalCache> _openLocalCache() async {
+  try {
+    await Hive.initFlutter();
+    return await HiveLocalCache.open();
+  } catch (error, stack) {
+    debugPrint('Local cache unavailable: $error\n$stack');
+    return MemoryLocalCache();
+  }
 }
 
 class RunItApp extends ConsumerWidget {
@@ -67,6 +87,8 @@ class RunItApp extends ConsumerWidget {
     ref.watch(activeOrderRestorerProvider);
     // Reloads the main screens' data when the connection comes back.
     ref.watch(reconnectRefresherProvider);
+    // Clears the saved browsing data on an explicit "Log out".
+    ref.watch(cacheLifecycleProvider);
 
     return MaterialApp.router(
       title: 'Run-It',

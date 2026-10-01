@@ -19,6 +19,8 @@ class OrderHistoryItemLine {
         quantity: json['quantity'] as int,
         priceKobo: json['priceKobo'] as int,
       );
+
+  Map<String, dynamic> toJson() => {'name': name, 'quantity': quantity, 'priceKobo': priceKobo};
 }
 
 /// A real, backend-persisted order — Task 46 replaces the old hardcoded
@@ -74,8 +76,8 @@ class OrderHistoryEntry {
   bool get isDeclined => declinedAt != null;
 
   /// Task 73: the real claimed runner's display name ("Chidi O."), null
-  /// until a runner has actually claimed the order. Only the detail
-  /// endpoint (GET /orders/:orderId) carries it.
+  /// until a runner has actually claimed the order. Both the list and the
+  /// detail endpoint carry it.
   final String? runnerName;
 
   /// Whether cancelling this order moved money back to the student — false
@@ -116,6 +118,27 @@ class OrderHistoryEntry {
         declineReasonNote: json['declineReasonNote'] as String?,
         runnerName: json['runnerName'] as String?,
       );
+
+  /// The same shape [fromJson] reads — for the local cache.
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'status': status,
+    'vendorName': vendorName,
+    'totalAmount': totalKobo,
+    'note': note,
+    'deliveryLocationLabel': deliveryLocationLabel,
+    'items': [for (final line in items) line.toJson()],
+    'createdAt': createdAt.toIso8601String(),
+    'acceptedAt': acceptedAt?.toIso8601String(),
+    'pickedUpAt': pickedUpAt?.toIso8601String(),
+    'deliveredAt': deliveredAt?.toIso8601String(),
+    'cancelledAt': cancelledAt?.toIso8601String(),
+    'paymentMethod': paymentMethod,
+    'declinedAt': declinedAt?.toIso8601String(),
+    'declineReason': declineReason?.toJson,
+    'declineReasonNote': declineReasonNote,
+    'runnerName': runnerName,
+  };
 }
 
 class OrderHistoryPage {

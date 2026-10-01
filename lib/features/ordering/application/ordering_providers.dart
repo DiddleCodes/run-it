@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/cache/cached_fetch.dart';
+import '../../../core/cache/cached_sources.dart';
 import '../../../core/network/campus_repository.dart';
 import '../../../core/network/vendors_repository.dart';
 import '../../auth/application/auth_controller.dart';
@@ -31,8 +33,16 @@ final campusEateriesProvider = FutureProvider<List<Eatery>>((ref) async {
   final category = ref.watch(vendorCategoryFilterProvider);
   final search = ref.watch(vendorSearchQueryProvider).trim();
   final filters = ref.watch(vendorFiltersProvider);
-  final token = ref.watch(authControllerProvider)?.accessToken;
-  if (token == null) return const [];
+  final session = ref.watch(authControllerProvider);
+  if (session == null) return const [];
+  final token = session.accessToken;
+  // The plain campus list is what's saved for opening the app offline;
+  // searches and filters always ask the network.
+  if (category == null && search.isEmpty && filters.isDefault) {
+    ref.watch(vendorsRepositoryProvider);
+    final vendors = await cachedFetch<List<MyVendorProfile>>(ref, vendorListSource(ref, session));
+    return vendors.map((vendor) => vendor.toEatery()).toList();
+  }
   final page = await ref.watch(vendorsRepositoryProvider).listVendors(
     category: category,
     search: search.isEmpty ? null : search,
@@ -56,7 +66,8 @@ final selectedVendorIdProvider = StateProvider<String?>((ref) => null);
 final selectedVendorWithMenuProvider = FutureProvider<VendorWithMenu?>((ref) async {
   final vendorId = ref.watch(selectedVendorIdProvider);
   if (vendorId == null) return null;
-  return ref.watch(vendorsRepositoryProvider).fetchMenu(vendorId);
+  ref.watch(vendorsRepositoryProvider);
+  return cachedFetch<VendorWithMenu>(ref, menuSource(ref, vendorId));
 });
 
 final selectedEateryProvider = FutureProvider<Eatery?>((ref) async {

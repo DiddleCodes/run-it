@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/cache/cached_data_note.dart';
+import '../../../core/cache/cached_fetch.dart';
+import '../../../core/cache/cached_sources.dart';
 import '../../../core/network/orders_repository.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_colors.dart';
@@ -28,16 +31,16 @@ class OrderHistoryController extends AsyncNotifier<List<OrderHistoryEntry>> {
   Future<List<OrderHistoryEntry>> build() async {
     final session = ref.watch(authControllerProvider);
     if (session == null) return const [];
-    final page = await ref
-        .watch(ordersRepositoryProvider)
-        .fetchOrderHistory(token: session.accessToken);
-    return page.items;
+    ref.watch(ordersRepositoryProvider);
+    return cachedFetch<List<OrderHistoryEntry>>(ref, orderHistorySource(ref, session));
   }
 
   /// Re-fetches from the backend — called after a successful cancellation
   /// so the just-cancelled order shows up in the Cancelled tab without
   /// waiting for some unrelated rebuild to happen to trigger it.
   Future<void> refresh() async {
+    final session = ref.read(authControllerProvider);
+    if (session != null) ref.read(cacheSessionProvider).forceNetwork(CacheKeys.orders(session.user.id));
     ref.invalidateSelf();
     await future;
   }
@@ -79,6 +82,7 @@ class _MyOrdersScreenState extends ConsumerState<MyOrdersScreen> {
       if (isDeclined && wasDeclined != true) ref.read(orderHistoryProvider.notifier).refresh();
     });
     final history = ref.watch(orderHistoryProvider);
+    final userId = ref.watch(authControllerProvider.select((session) => session?.user.id));
     // Every order still in progress server-side that isn't the one already
     // being tracked on this device — e.g. after an app restart, or a
     // checkout whose confirmation was lost. It went through; it belongs here.
@@ -109,6 +113,10 @@ class _MyOrdersScreenState extends ConsumerState<MyOrdersScreen> {
                     style: Theme.of(
                       context,
                     ).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
+                  ),
+                  CachedDataNote(
+                    cacheKey: userId == null ? null : CacheKeys.orders(userId),
+                    padding: const EdgeInsets.only(top: 6),
                   ),
                 ],
               ),

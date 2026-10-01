@@ -13,6 +13,7 @@ import '../../features/ordering/application/ordering_providers.dart';
 import '../../features/ordering/presentation/my_orders_screen.dart';
 import '../../features/runner/application/runner_controller.dart';
 import '../../features/wallet/application/wallet_controller.dart';
+import '../cache/cached_sources.dart';
 import '../theme/app_colors.dart';
 import 'vendors_repository.dart';
 
@@ -65,23 +66,37 @@ final isOnlineProvider = NotifierProvider<OnlineStatus, bool>(OnlineStatus.new);
 final reconnectRefresherProvider = Provider<void>((ref) {
   ref.listen<bool>(isOnlineProvider, (wasOnline, online) {
     if (wasOnline != false || !online) return;
-    ref
-      ..invalidate(campusEateriesProvider)
-      ..invalidate(vendorCategoriesProvider)
-      ..invalidate(selectedVendorWithMenuProvider)
-      ..invalidate(orderHistoryProvider)
-      ..invalidate(walletBalanceProvider)
-      ..invalidate(chatThreadsProvider)
-      ..invalidate(accountNoticesProvider)
-      ..invalidate(availableJobsProvider);
-    unawaited(ref.read(orderTrackingProvider.notifier).refreshFromServer());
-    // An order that couldn't be restored at sign-in (no connection then).
-    final session = ref.read(authControllerProvider);
-    if (session != null && session.user.accountType == AccountType.student) {
-      unawaited(restoreActiveOrder(ref, session));
-    }
+    unawaited(_refreshAfterReconnect(ref));
   });
 });
+
+Future<void> _refreshAfterReconnect(Ref ref) async {
+  final session = ref.read(authControllerProvider);
+  // Every saved copy first — screens that aren't open included — so the
+  // invalidations below pick the fresh data up instead of fetching again.
+  if (session != null) {
+    try {
+      await refreshAllCached(ref, session);
+    } catch (_) {
+      // Best-effort: each screen still refreshes itself below.
+    }
+  }
+  ref
+    ..invalidate(campusEateriesProvider)
+    ..invalidate(vendorCategoriesProvider)
+    ..invalidate(selectedVendorWithMenuProvider)
+    ..invalidate(orderHistoryProvider)
+    ..invalidate(walletBalanceProvider)
+    ..invalidate(chatThreadsProvider)
+    ..invalidate(accountNoticesProvider)
+    ..invalidate(availableJobsProvider);
+  unawaited(ref.read(orderTrackingProvider.notifier).refreshFromServer());
+  // An order that couldn't be restored at sign-in (no connection then).
+  final current = ref.read(authControllerProvider);
+  if (current != null && current.user.accountType == AccountType.student) {
+    unawaited(restoreActiveOrder(ref, current));
+  }
+}
 
 /// A persistent strip above every screen while there's no connection —
 /// the app shows what it already loaded rather than failing silently.

@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../cache/cached_fetch.dart';
+import '../cache/cached_sources.dart';
 import '../../features/ordering/domain/order_decline.dart';
 import '../../features/vendor/domain/vendor_dashboard_models.dart';
 import 'api_client.dart';
@@ -12,7 +14,7 @@ final vendorsRepositoryProvider = Provider<VendorsRepository>(
 /// (like `banksProvider`) it's fetched once per provider container rather
 /// than re-fetched on every rebuild.
 final vendorCategoriesProvider = FutureProvider<List<VendorCategoryOption>>(
-  (ref) => ref.read(vendorsRepositoryProvider).fetchCategories(),
+  (ref) => cachedFetch<List<VendorCategoryOption>>(ref, vendorCategoriesSource(ref)),
 );
 
 /// Real backend calls against `/vendors/me/*` (Task 9/11/12) — the

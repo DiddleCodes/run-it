@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/cache/cached_data_note.dart';
+import '../../../core/cache/cached_fetch.dart';
 import '../../../core/network/api_config.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/routing/app_router.dart';
@@ -64,6 +66,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   @override
   Widget build(BuildContext context) {
     final balanceAsync = ref.watch(walletBalanceProvider);
+    final userId = ref.watch(authControllerProvider.select((session) => session?.user.id));
     final transactionsAsync = ref.watch(walletTransactionsProvider);
     final balance = balanceAsync.valueOrNull ?? 0;
     final transactions = transactionsAsync.valueOrNull ?? const <WalletTransaction>[];
@@ -115,6 +118,12 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                         onToggleHidden: () => setState(() => _balanceHidden = !_balanceHidden),
                         onAddFunds: _openAddFunds,
                         onWithdraw: _openWithdraw,
+                      ),
+                      // The saved balance, shown while offline — never
+                      // what a payment checks (the backend does that).
+                      CachedDataNote(
+                        cacheKey: userId == null ? null : CacheKeys.wallet(userId),
+                        padding: const EdgeInsets.only(top: AppSpacing.sm),
                       ),
                       if (balanceAsync.hasError)
                         Padding(
@@ -213,6 +222,13 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                 padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, 32),
                 sliver: transactionsAsync.isLoading && !transactionsAsync.hasValue
                     ? const SliverToBoxAdapter(child: SkeletonList(count: 4))
+                    // A failed load (e.g. offline) isn't "no transactions".
+                    // Transactions aren't saved for offline use — they're
+                    // payment history, left to the live ledger.
+                    : transactionsAsync.hasError && !transactionsAsync.hasValue
+                    ? const SliverToBoxAdapter(
+                        child: _EmptyTransactions(message: "Couldn't load your transactions. Pull down to try again."),
+                      )
                     : transactions.isEmpty
                     ? const SliverToBoxAdapter(child: _EmptyTransactions())
                     : SliverList.builder(
@@ -663,7 +679,8 @@ String _formatWhen(DateTime time) {
 }
 
 class _EmptyTransactions extends StatelessWidget {
-  const _EmptyTransactions();
+  const _EmptyTransactions({this.message = 'No transactions yet.'});
+  final String message;
 
   @override
   Widget build(BuildContext context) {
@@ -671,7 +688,8 @@ class _EmptyTransactions extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
       child: Center(
         child: Text(
-          'No transactions yet.',
+          message,
+          textAlign: TextAlign.center,
           style: Theme.of(
             context,
           ).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
