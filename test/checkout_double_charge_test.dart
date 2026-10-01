@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show SocketException;
 
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:run_it/core/network/api_exception.dart';
+import 'package:run_it/core/network/connectivity.dart';
 import 'package:run_it/core/network/demo_identity_service.dart';
 import 'package:run_it/core/network/escrow_repository.dart';
 import 'package:run_it/core/network/orders_repository.dart';
@@ -269,6 +271,62 @@ void main() {
       expect(session.total, 1445);
     });
 
+    test('a restart while the backend is unreachable keeps trying until the order is back', () async {
+      final backend = _Backend()..charges.add('order-1');
+      final orders = _FlakyHistoryOrders(backend, [backend.order('order-1', status: 'preparing', runnerName: 'Test R.')])
+        ..failuresLeft = 2;
+      final container = ProviderContainer(
+        overrides: [
+          authControllerProvider.overrideWith(_FakeAuthController.new),
+          ordersRepositoryProvider.overrideWithValue(orders),
+          restoreRetryDelaysProvider.overrideWithValue(const [Duration.zero, Duration.zero, Duration.zero]),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      container.read(activeOrderRestorerProvider);
+      for (var i = 0; i < 10; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(orders.historyCalls, 3);
+      expect(container.read(orderTrackingProvider).orderId, 'order-1');
+      expect(container.read(orderTrackingProvider).runnerName, 'Test R.');
+    });
+
+    test('out of retries at sign-in, coming back online still restores the order', () async {
+      final backend = _Backend()..charges.add('order-1');
+      final orders = _FlakyHistoryOrders(backend, [backend.order('order-1', status: 'preparing', runnerName: 'Test R.')])
+        ..failuresLeft = 99;
+      final connectivity = _FakeConnectivity(false);
+      final container = ProviderContainer(
+        overrides: [
+          authControllerProvider.overrideWith(_FakeAuthController.new),
+          ordersRepositoryProvider.overrideWithValue(orders),
+          restoreRetryDelaysProvider.overrideWithValue(const [Duration.zero]),
+          connectivitySourceProvider.overrideWithValue(connectivity),
+        ],
+      );
+      addTearDown(container.dispose);
+      container
+        ..read(reconnectRefresherProvider)
+        ..read(activeOrderRestorerProvider)
+        ..read(isOnlineProvider);
+      for (var i = 0; i < 10; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(orders.historyCalls, 2);
+      expect(container.read(orderTrackingProvider).orderId, isNull);
+
+      orders.failuresLeft = 0;
+      connectivity.set(true);
+      for (var i = 0; i < 10; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(container.read(orderTrackingProvider).orderId, 'order-1');
+    });
+
     testWidgets('My Orders → Active lists an in-progress order from the server, with chat once a runner is on it', (
       tester,
     ) async {
@@ -314,4 +372,37 @@ class _HistoryOrders extends _Orders {
   @override
   Future<OrderHistoryPage> fetchOrderHistory({int page = 1, int limit = 20, required String token}) async =>
       OrderHistoryPage(items: history, total: history.length, page: page, limit: limit);
+}
+
+/// Order history that fails with a dropped connection [failuresLeft] times.
+class _FlakyHistoryOrders extends _HistoryOrders {
+  _FlakyHistoryOrders(super.backend, super.history);
+  var failuresLeft = 0;
+  var historyCalls = 0;
+
+  @override
+  Future<OrderHistoryPage> fetchOrderHistory({int page = 1, int limit = 20, required String token}) async {
+    historyCalls++;
+    if (failuresLeft > 0) {
+      failuresLeft--;
+      throw const SocketException('unreachable');
+    }
+    return super.fetchOrderHistory(page: page, limit: limit, token: token);
+  }
+}
+
+class _FakeConnectivity implements ConnectivitySource {
+  _FakeConnectivity(this.online);
+  bool online;
+  final _changes = StreamController<bool>.broadcast();
+
+  void set(bool value) {
+    online = value;
+    _changes.add(value);
+  }
+
+  @override
+  Future<bool> isOnline() async => online;
+  @override
+  Stream<bool> get onlineChanges => _changes.stream;
 }

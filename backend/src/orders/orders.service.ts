@@ -262,7 +262,7 @@ export class OrdersService {
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
-        include: { vendor: true, items: true },
+        include: { vendor: true, items: true, runnerUser: { select: { name: true } } },
       }),
       this.prisma.order.count({ where }),
     ]);
@@ -285,6 +285,9 @@ export class OrdersService {
         pickedUpAt: order.pickedUpAt,
         deliveredAt: order.deliveredAt,
         cancelledAt: order.cancelledAt,
+        // Same display name as getOrderForViewer — lets My Orders offer an
+        // in-progress order's chat without first opening its detail.
+        runnerName: order.runnerUserId ? runnerDisplayName(order.runnerUser?.name) : null,
         // Task 61: lets a cancelled/declined order say honestly whether money
         // was refunded (wallet) or never taken (Pay on Delivery).
         paymentMethod: order.paymentMethod,

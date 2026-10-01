@@ -422,8 +422,26 @@ describe('OrdersService.getOrderHistoryForStudent', () => {
         pickedUpAt: new Date('2026-01-01T10:20:00.000Z'),
         deliveredAt: new Date('2026-01-01T10:35:00.000Z'),
         cancelledAt: null,
+        runnerName: null,
       },
     ]);
+  });
+
+  it('names the assigned runner the same way the order detail does, so My Orders can offer the chat', async () => {
+    const { service, prisma } = makeService();
+    prisma.order.findMany.mockResolvedValue([
+      historyOrder({ status: 'preparing', runnerUserId: 'runner-1', runnerUser: { name: 'Tobi Adeyemi' } }),
+      historyOrder({ id: 'order-2', status: 'placed', runnerUserId: null, runnerUser: null }),
+    ]);
+    prisma.order.count.mockResolvedValue(2);
+
+    const result = await service.getOrderHistoryForStudent('student-1', 1, 20);
+
+    expect(prisma.order.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ include: expect.objectContaining({ runnerUser: { select: { name: true } } }) }),
+    );
+    expect(result.items[0].runnerName).toBe(runnerDisplayName('Tobi Adeyemi'));
+    expect(result.items[1].runnerName).toBeNull();
   });
 
   it('includes cancelled orders in the same list, with cancelledAt set and no delivery timestamps', async () => {

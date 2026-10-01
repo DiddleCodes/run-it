@@ -4,7 +4,10 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/auth/application/auth_controller.dart';
+import '../../features/auth/domain/auth_models.dart';
 import '../../features/chat/application/chat_controllers.dart';
+import '../../features/ordering/application/active_order_restorer.dart';
 import '../../features/ordering/application/order_tracking_controller.dart';
 import '../../features/ordering/application/ordering_providers.dart';
 import '../../features/ordering/presentation/my_orders_screen.dart';
@@ -72,6 +75,11 @@ final reconnectRefresherProvider = Provider<void>((ref) {
       ..invalidate(accountNoticesProvider)
       ..invalidate(availableJobsProvider);
     unawaited(ref.read(orderTrackingProvider.notifier).refreshFromServer());
+    // An order that couldn't be restored at sign-in (no connection then).
+    final session = ref.read(authControllerProvider);
+    if (session != null && session.user.accountType == AccountType.student) {
+      unawaited(restoreActiveOrder(ref, session));
+    }
   });
 });
 
