@@ -46,9 +46,10 @@ class WalletRepository {
     );
   }
 
-  Future<int> getBalance({required String userId, required String token}) async {
+  /// Naira, kobo kept (a runner's earnings needn't be whole naira).
+  Future<num> getBalance({required String userId, required String token}) async {
     final json = await client.get('/wallet/$userId/balance', token: token) as Map<String, dynamic>;
-    return (json['balanceKobo'] as int) ~/ 100;
+    return (json['balanceKobo'] as int) / 100;
   }
 
   Future<List<WalletTransaction>> getTransactions({
@@ -93,7 +94,7 @@ class WalletRepository {
       id: json['id'] as String,
       title: title,
       subtitle: subtitle,
-      amount: (json['amount'] as int) ~/ 100,
+      amount: (json['amount'] as int) / 100,
       kind: json['type'] == 'credit' ? WalletTransactionKind.credit : WalletTransactionKind.debit,
       occurredAt: parseServerTime(json['createdAt'] as String),
       status: json['status'] as String? ?? 'success',

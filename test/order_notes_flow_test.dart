@@ -145,7 +145,7 @@ void main() {
       await tester.tap(find.text('Signature jollof'));
       await tester.pumpAndSettle();
       expect(find.text('Add a note'), findsNothing);
-      await tester.tap(find.text('Add to Basket — ₦3100'));
+      await tester.tap(find.text('Add to Basket — ₦3,100.00'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.textContaining('View Basket'));

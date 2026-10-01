@@ -1703,7 +1703,7 @@ class _DeclinedOrder extends StatelessWidget {
             ),
             child: Text(
               info.refundedKobo > 0
-                  ? 'Your ${naira(info.refundedKobo ~/ 100)} has been refunded to your RUN IT wallet.'
+                  ? 'Your ${formatKobo(info.refundedKobo)} has been refunded to your RUN IT wallet.'
                   : "You haven't been charged for this order.",
               style: Theme.of(
                 context,
@@ -2320,7 +2320,7 @@ class _Breakdown extends StatelessWidget {
         PriceRow(label: 'Packaging', amount: pricing.packagingTotal),
         PriceRow(
           label: isGroupOrder
-              ? 'Delivery (incl. ₦${PricingService.groupOrderSurcharge} Group Order)'
+              ? 'Delivery (incl. ${naira(PricingService.groupOrderSurcharge)} Group Order)'
               : 'Delivery',
           amount: pricing.deliveryFee,
         ),
@@ -2372,7 +2372,7 @@ class _GroupOrderToggle extends StatelessWidget {
         ),
         subtitle: Text(
           'Ordering for a group? Fit up to ${PricingService.groupMainMealCap} main meals '
-          '(instead of ${PricingService.standardMainMealCap}) in one delivery for a flat +₦${PricingService.groupOrderSurcharge}.',
+          '(instead of ${PricingService.standardMainMealCap}) in one delivery for a flat +${naira(PricingService.groupOrderSurcharge)}.',
           style: Theme.of(context).textTheme.labelSmall?.copyWith(color: OrderingColors.muted(context), height: 1.3),
         ),
       ),
@@ -2401,7 +2401,7 @@ class _GroupOrderBadge extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: Text(
-            'Group Order is on — up to ${PricingService.groupMainMealCap} main meals, +₦$surcharge delivery.',
+            'Group Order is on — up to ${PricingService.groupMainMealCap} main meals, +${naira(surcharge)} delivery.',
             style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.inkText, height: 1.3),
           ),
         ),

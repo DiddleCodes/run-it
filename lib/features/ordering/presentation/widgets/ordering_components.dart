@@ -6,7 +6,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_spacing.dart';
 
-String naira(int value) => '₦${value.toString()}';
+import '../../../../core/utils/money.dart';
+
+export '../../../../core/utils/money.dart' show formatKobo, naira;
 
 /// Thin, context-taking accessors over the app's one (cream) palette —
 /// kept as static methods rather than inlining `AppColors.x` at every call
@@ -259,6 +261,9 @@ class _TactileAddPillState extends State<_TactileAddPill> {
   }
 }
 
+/// One line of a price breakdown (Basket, Checkout, the tracking summary):
+/// bold label on the left, the amount flush right with tabular digits so
+/// every row's amounts line up like a receipt. [emphasized] is the Total.
 class PriceRow extends StatelessWidget {
   const PriceRow({
     super.key,
@@ -267,45 +272,47 @@ class PriceRow extends StatelessWidget {
     this.emphasized = false,
   });
   final String label;
-  final int amount;
+
+  /// Naira.
+  final num amount;
   final bool emphasized;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 5),
-    child: Row(
-      children: [
-        Flexible(
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style:
-                (emphasized
-                        ? Theme.of(context).textTheme.titleLarge
-                        : Theme.of(context).textTheme.bodyMedium)
-                    ?.copyWith(
-                      color: emphasized
-                          ? OrderingColors.text(context)
-                          : OrderingColors.muted(context),
-                      fontSize: emphasized ? 17 : null,
-                    ),
-          ),
-        ),
-        const Spacer(),
-        Text(
-          naira(amount),
-          style:
-              (emphasized
-                      ? Theme.of(context).textTheme.titleLarge
-                      : Theme.of(context).textTheme.bodyMedium)
-                  ?.copyWith(
-                    color: OrderingColors.text(context),
-                    fontWeight: emphasized ? FontWeight.w700 : FontWeight.w500,
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final base = (emphasized ? textTheme.titleLarge : textTheme.bodyMedium)?.copyWith(
+      color: OrderingColors.text(context),
+      fontSize: emphasized ? 17 : null,
+      fontWeight: emphasized ? FontWeight.w800 : FontWeight.w600,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            Expanded(
+              child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: base),
+            ),
+            const SizedBox(width: 12),
+            // Shrinks to fit rather than overflow at large text sizes.
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.6),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  naira(amount),
+                  style: base?.copyWith(
+                    fontWeight: emphasized ? FontWeight.w800 : FontWeight.w500,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 /// Task 10 performance audit: no screen in this app loads a real remote

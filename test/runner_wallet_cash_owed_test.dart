@@ -98,7 +98,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.text('₦450 owed to RUN-It'), findsOneWidget);
+    expect(find.text('₦450.00 owed to RUN-It'), findsOneWidget);
   });
 
   testWidgets('shows nothing extra for a runner with no outstanding debt', (tester) async {

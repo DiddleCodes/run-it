@@ -282,7 +282,7 @@ void main() {
 
       await tester.tap(find.text('Top rated'));
       await tester.tap(find.text('★ 4.5+'));
-      await tester.tap(find.text('₦1000'));
+      await tester.tap(find.text('₦1,000.00'));
       await tester.pump();
       // Nothing refetched yet — only on "Show results".
       expect(repository.filterCalls.last, (null, null, null));
@@ -303,7 +303,7 @@ void main() {
       expect(tester.testTextInput.isVisible, isTrue);
 
       await openFilters(tester);
-      await tester.tap(find.text('₦1000'));
+      await tester.tap(find.text('₦1,000.00'));
       await showResults(tester);
 
       expect(tester.testTextInput.isVisible, isFalse);

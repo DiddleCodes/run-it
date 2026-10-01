@@ -142,7 +142,7 @@ class _OrderDetailBody extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        naira(line.priceKobo * line.quantity ~/ 100),
+                        formatKobo(line.priceKobo * line.quantity),
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.inkText),
                       ),
                     ],
@@ -159,7 +159,7 @@ class _OrderDetailBody extends StatelessWidget {
                   ),
                   const Spacer(),
                   Text(
-                    naira(order.totalKobo ~/ 100),
+                    formatKobo(order.totalKobo),
                     style: Theme.of(
                       context,
                     ).textTheme.titleLarge?.copyWith(color: AppColors.inkText, fontSize: 17, fontWeight: FontWeight.w700),
@@ -284,7 +284,7 @@ class _CancelledSummary extends StatelessWidget {
                   borderRadius: BorderRadius.circular(AppRadius.pill),
                 ),
                 child: Text(
-                  order.wasPrepaid ? '${naira(order.totalKobo ~/ 100)} refunded' : "You weren't charged",
+                  order.wasPrepaid ? '${formatKobo(order.totalKobo)} refunded' : "You weren't charged",
                   style: Theme.of(
                     context,
                   ).textTheme.labelSmall?.copyWith(color: AppColors.success, fontWeight: FontWeight.w600),

@@ -12,7 +12,7 @@ import '../../auth/application/auth_controller.dart';
 import '../../auth/domain/auth_models.dart';
 import '../../ordering/application/order_tracking_controller.dart';
 import '../../ordering/presentation/my_orders_screen.dart' show orderHistoryProvider;
-import '../../ordering/presentation/widgets/ordering_components.dart' show naira;
+import '../../../core/utils/money.dart';
 
 /// Deterministic per-user demo rating — there's no ratings concept for a
 /// student in this data model yet, so this varies sensibly between users

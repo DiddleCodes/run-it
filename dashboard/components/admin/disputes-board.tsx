@@ -178,12 +178,12 @@ export function DisputesBoard({ initialData }: { initialData: AdminDisputeSummar
                 {detail.order.items.map((item) => (
                   <div key={item.id} className="flex items-center justify-between text-sm">
                     <span>{item.nameSnapshot} ×{item.quantity}</span>
-                    <span className="font-medium">{formatKobo(item.priceSnapshot * item.quantity)}</span>
+                    <span className="font-medium tabular-nums">{formatKobo(item.priceSnapshot * item.quantity)}</span>
                   </div>
                 ))}
                 <div className="flex items-center justify-between pt-1 border-t border-[var(--border)]">
                   <span className="text-sm font-semibold">Total</span>
-                  <span className="text-base font-bold text-[var(--primary)]">{formatKobo(detail.order.totalAmount)}</span>
+                  <span className="text-base font-bold tabular-nums text-[var(--primary)]">{formatKobo(detail.order.totalAmount)}</span>
                 </div>
               </div>
             </div>

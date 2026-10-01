@@ -90,7 +90,7 @@ class _FakeVendorsRepository extends VendorsRepository {
 const _groupTitle = 'Ordering for a group? 👀';
 const _groupBody =
     'Solo orders are limited to 2 main meals. Switch to Group Order to add up to 4 meals in one delivery, '
-    'for just ₦150 extra.';
+    'for just ₦150.00 extra.';
 
 Future<ProviderContainer> _pumpBasket(WidgetTester tester, {required int mains, int drinks = 0}) async {
   final router = GoRouter(
@@ -150,10 +150,10 @@ void main() {
       expect(_quantity(container, 'jollof'), 3);
       expect(container.read(checkoutFormProvider).isGroupOrder, isTrue);
       await tester.scrollUntilVisible(find.text('Items'), 200, scrollable: find.byType(Scrollable).first);
-      expect(find.textContaining('incl. ₦150 Group Order'), findsOneWidget);
+      expect(find.textContaining('incl. ₦150.00 Group Order'), findsOneWidget);
       // Task 70: its own line — 5% of ₦9,300 food = ₦465.
       expect(find.text('Service fee (5%)'), findsOneWidget);
-      expect(find.text('₦465'), findsOneWidget);
+      expect(find.text('₦465.00'), findsOneWidget);
     });
 
     testWidgets('group: a 5th main meal is blocked, pointing to a second order', (tester) async {
@@ -190,7 +190,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Switch back to a solo order?'), findsOneWidget);
-      expect(find.textContaining('won’t pay the ₦150 Group Order extra'), findsOneWidget);
+      expect(find.textContaining('won’t pay the ₦150.00 Group Order extra'), findsOneWidget);
       await tester.tap(find.text('Switch to solo'));
       await tester.pumpAndSettle();
 

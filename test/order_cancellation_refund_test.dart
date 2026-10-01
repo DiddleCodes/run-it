@@ -193,7 +193,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Tantalizers'), findsOneWidget);
-      expect(find.textContaining('+₦3600'), findsOneWidget);
+      expect(find.textContaining('+₦3,600.00'), findsOneWidget);
       expect(find.text('Refunded'), findsOneWidget);
 
       // The order-tracking session is genuinely cleared, not left dangling.

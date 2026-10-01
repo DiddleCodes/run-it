@@ -114,7 +114,7 @@ void main() {
       await tester.tap(find.text('Past'));
       await tester.pump();
       expect(find.text('Tantalizers'), findsOneWidget);
-      expect(find.text('₦3200'), findsOneWidget);
+      expect(find.text('₦3,200.00'), findsOneWidget);
 
       await tester.tap(find.text('Tantalizers'));
       await tester.pumpAndSettle();
@@ -153,7 +153,7 @@ void main() {
 
       expect(find.text('Order cancelled'), findsOneWidget);
       expect(find.textContaining('Jan 6, 9:05 AM'), findsOneWidget);
-      expect(find.text('₦2800 refunded'), findsOneWidget);
+      expect(find.text('₦2,800.00 refunded'), findsOneWidget);
       // No lifecycle stepper for a cancelled order — it never reached
       // "delivered" and shouldn't be shown as if it were mid-progress.
       expect(find.textContaining('Picked Up'), findsNothing);

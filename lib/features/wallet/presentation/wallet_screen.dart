@@ -254,7 +254,8 @@ class _BalanceCard extends StatefulWidget {
     required this.onAddFunds,
     required this.onWithdraw,
   });
-  final int balance;
+  /// Naira, kobo included.
+  final num balance;
   final bool loading;
   final bool hidden;
   final VoidCallback onToggleHidden;
@@ -274,8 +275,8 @@ class _BalanceCardState extends State<_BalanceCard> with TickerProviderStateMixi
   /// while a count animation is mid-flight. `null` until the first real
   /// (non-loading) value lands, so that arrival is never itself treated as
   /// a "change" to animate away from 0.
-  int? _lastKnownBalance;
-  int _displayedBalance = 0;
+  num? _lastKnownBalance;
+  num _displayedBalance = 0;
 
   @override
   void initState() {
@@ -324,11 +325,12 @@ class _BalanceCardState extends State<_BalanceCard> with TickerProviderStateMixi
       end: to.toDouble(),
     ).chain(CurveTween(curve: AppMotion.emphasized)).animate(_countController);
     late final VoidCallback listener;
-    listener = () => setState(() => _displayedBalance = count.value.round());
+    listener = () => setState(() => _displayedBalance = count.value);
     count.addListener(listener);
     _countController.forward(from: 0).whenComplete(() {
       count.removeListener(listener);
       if (!mounted) return;
+      setState(() => _displayedBalance = to);
       // Lands the moment the count settles on the real new balance — a
       // real-money moment gets the same weight PrimaryButton gives every
       // tap, not something louder or quieter.
@@ -487,7 +489,7 @@ class _ReferralBanner extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Get ₦500 bonus',
+                    'Get ${naira(500)} bonus',
                     style: Theme.of(context).textTheme.labelLarge
                         ?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w700),
                   ),
@@ -540,7 +542,7 @@ class _CashOwedBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${naira(totalOwedKobo ~/ 100)} owed to RUN-It',
+                  '${formatKobo(totalOwedKobo)} owed to RUN-It',
                   style: Theme.of(context).textTheme.labelLarge
                       ?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w700),
                 ),
@@ -736,7 +738,7 @@ class _AmountSheetState extends ConsumerState<_AmountSheet> {
   int? _selectedAmount;
   final _customController = TextEditingController();
   _AmountSheetPhase _phase = _AmountSheetPhase.form;
-  int? _resolvedAmount;
+  num? _resolvedAmount;
   String? _errorMessage;
   bool _stillProcessing = false;
   bool _withdrawalFailed = false;
@@ -849,7 +851,7 @@ class _AmountSheetState extends ConsumerState<_AmountSheet> {
   /// or `null` if it hasn't by the time polling gives up — a timeout, not a
   /// failure: the webhook may still land after this sheet is closed, and a
   /// later Wallet screen visit will simply show the real settled balance.
-  Future<int?> _pollUntilBalanceIncreases({required int? before}) async {
+  Future<num?> _pollUntilBalanceIncreases({required num? before}) async {
     for (var attempt = 0; attempt < _balancePollAttempts; attempt++) {
       await Future<void>.delayed(_balancePollInterval);
       if (!mounted) return null;
@@ -1165,7 +1167,7 @@ class _ConfirmationState extends StatelessWidget {
     this.failed = false,
     required this.onDone,
   });
-  final int amount;
+  final num amount;
   final bool isWithdraw;
 
   /// True when polling gave up before the balance actually moved — the

@@ -8,7 +8,7 @@ import '../../auth/application/auth_controller.dart';
 import '../../wallet/application/wallet_controller.dart';
 import '../domain/order_history_models.dart';
 import '../domain/ordering_models.dart';
-import '../presentation/widgets/ordering_components.dart' show naira;
+import '../../../core/utils/money.dart';
 
 /// Task 61: what the student needs to see once the restaurant declined
 /// the live order — straight from the real backend order, never inferred.
@@ -24,7 +24,7 @@ class DeclinedOrderInfo {
   final int refundedKobo;
 
   String get message => refundedKobo > 0
-      ? '$vendorName declined your order: $reason. Your ${naira(refundedKobo ~/ 100)} has been refunded to your RUN IT wallet.'
+      ? '$vendorName declined your order: $reason. Your ${formatKobo(refundedKobo)} has been refunded to your RUN IT wallet.'
       : "$vendorName declined your order: $reason. You haven't been charged for it.";
 }
 

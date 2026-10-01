@@ -387,7 +387,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 50));
 
-        expect(find.text('₦8450'), findsOneWidget);
+        expect(find.text('₦8,450.00'), findsOneWidget);
 
         await tester.tap(find.text('Add Funds').first);
         await tester.pumpAndSettle();
@@ -425,7 +425,7 @@ void main() {
         expect(find.text('Add a bank account to withdraw'), findsOneWidget);
         expect(find.text('Add bank account'), findsOneWidget);
         // No amount chips shown until a bank account exists.
-        expect(find.text('₦500'), findsNothing);
+        expect(find.text('₦500.00'), findsNothing);
       },
     );
 
@@ -453,7 +453,7 @@ void main() {
         // The real confirmed account is shown, not a stub message.
         expect(find.text('Sent to •••• 6789 — GTBank.'), findsOneWidget);
 
-        await tester.tap(find.text('₦500'));
+        await tester.tap(find.text('₦500.00'));
         await tester.pump();
         await tester.tap(find.byKey(const Key('walletAmountSheetConfirm')));
         await tester.pump(); // launchingCheckout
@@ -462,7 +462,7 @@ void main() {
 
         expect(repository.capturedUserId, 'student-1');
         expect(repository.capturedAmountNaira, 500);
-        expect(find.text('₦500 withdrawn'), findsOneWidget);
+        expect(find.text('₦500.00 withdrawn'), findsOneWidget);
       },
     );
 
@@ -500,12 +500,12 @@ void main() {
 
         // The real fetched starting balance shows instantly — no count-up
         // from 0 on first load.
-        expect(find.text('₦8450'), findsOneWidget);
+        expect(find.text('₦8,450.00'), findsOneWidget);
         expect(hapticCalls, isEmpty);
 
         await tester.tap(find.text('Withdraw'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('₦500'));
+        await tester.tap(find.text('₦500.00'));
         await tester.pump();
         await tester.tap(find.byKey(const Key('walletAmountSheetConfirm')));
         // The button tap itself fires PrimaryButton's own haptic — clear it
@@ -518,8 +518,8 @@ void main() {
         // finish settling on the real new value.
         await tester.pumpAndSettle(const Duration(milliseconds: 50));
 
-        expect(find.text('₦7950'), findsOneWidget);
-        expect(find.text('₦8450'), findsNothing);
+        expect(find.text('₦7,950.00'), findsOneWidget);
+        expect(find.text('₦8,450.00'), findsNothing);
         expect(hapticCalls, ['HapticFeedbackType.lightImpact']);
       },
     );
@@ -543,7 +543,7 @@ void main() {
 
         await tester.tap(find.text('Withdraw'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('₦500'));
+        await tester.tap(find.text('₦500.00'));
         await tester.pump();
         await tester.tap(find.byKey(const Key('walletAmountSheetConfirm')));
         await tester.pump();
@@ -579,7 +579,7 @@ void main() {
         await tester.enterText(find.byType(TextField), '20000');
         await tester.pump();
 
-        expect(find.text("That's more than your ₦8450 balance."), findsOneWidget);
+        expect(find.text("That's more than your ₦8,450.00 balance."), findsOneWidget);
         final button = tester.widget<PrimaryButton>(find.byKey(const Key('walletAmountSheetConfirm')));
         expect(button.onPressed, isNull);
         expect(repository.capturedAmountNaira, isNull);

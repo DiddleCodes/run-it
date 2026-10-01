@@ -250,7 +250,7 @@ void main() {
             overrides: [
               authControllerProvider.overrideWith(() => _FakeAuthController(_studentSession())),
               basketProvider.overrideWith(() => _SeededBasket('jollof')), // ₦3,100 — under the cap
-              walletBalanceProvider.overrideWith(() => _EmptyWallet()), // ₦0
+              walletBalanceProvider.overrideWith(() => _EmptyWallet()), // ₦0.00
               demoIdentityServiceProvider.overrideWithValue(const _FakeDemoIdentityService()),
               escrowRepositoryProvider.overrideWithValue(escrow),
               ..._vendorOverrides(payAtDeliveryEnabled: true),

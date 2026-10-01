@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/skeleton.dart';
-import '../../ordering/presentation/widgets/ordering_components.dart' show naira;
+import '../../../core/utils/money.dart';
 import '../application/restaurant_metrics_controller.dart';
 import '../domain/vendor_dashboard_models.dart';
 
@@ -120,7 +120,7 @@ class _MetricsBody extends StatelessWidget {
               child: _StatCard(
                 icon: Icons.payments_rounded,
                 label: 'Revenue',
-                value: naira(metrics.totalRevenueKobo ~/ 100),
+                value: formatKobo(metrics.totalRevenueKobo),
               ),
             ),
           ],
@@ -220,7 +220,7 @@ class _RankedItemBar extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Text(
-                naira(item.revenueKobo ~/ 100),
+                formatKobo(item.revenueKobo),
                 style: Theme.of(
                   context,
                 ).textTheme.labelMedium?.copyWith(color: AppColors.accentForestDeep, fontWeight: FontWeight.w700),

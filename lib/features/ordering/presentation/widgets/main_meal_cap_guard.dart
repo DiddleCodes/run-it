@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/ordering_providers.dart';
 import '../../domain/ordering_models.dart';
+import '../../../../core/utils/money.dart';
 import '../../domain/pricing_service.dart';
 
 /// Task 70: the one place every "add more of this" path (Menu's quick add,
@@ -44,7 +45,7 @@ Future<bool> confirmMainMealIncrease(
         content: Text(
           'Solo orders are limited to ${PricingService.standardMainMealCap} main meals. '
           'Switch to Group Order to add up to ${PricingService.groupMainMealCap} meals in one delivery, '
-          'for just ₦${PricingService.groupOrderSurcharge} extra.',
+          'for just ${naira(PricingService.groupOrderSurcharge)} extra.',
         ),
         actions: [
           TextButton(
@@ -105,7 +106,7 @@ Future<void> offerSoloIfGroupUnneeded(
       title: const Text('Switch back to a solo order?'),
       content: Text(
         'You’re down to $now main meal${now == 1 ? '' : 's'} — a solo order covers up to '
-        '${PricingService.standardMainMealCap}, so you won’t pay the ₦${PricingService.groupOrderSurcharge} '
+        '${PricingService.standardMainMealCap}, so you won’t pay the ${naira(PricingService.groupOrderSurcharge)} '
         'Group Order extra.',
       ),
       actions: [

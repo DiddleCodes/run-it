@@ -16,7 +16,7 @@ import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/skeleton.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../auth/presentation/widgets/validated_field.dart';
-import '../../ordering/presentation/widgets/ordering_components.dart' show naira;
+import '../../../core/utils/money.dart';
 import '../application/restaurant_menu_controller.dart';
 import '../domain/vendor_dashboard_models.dart';
 
@@ -196,7 +196,7 @@ class _MenuItemRowState extends ConsumerState<_MenuItemRow> {
                   Row(
                     children: [
                       Text(
-                        naira(item.priceKobo ~/ 100),
+                        formatKobo(item.priceKobo),
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
                       ),
                       if (item.isMainMeal) ...[

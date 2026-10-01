@@ -84,10 +84,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
 
-    expect(find.text('₦200'), findsOneWidget);
-    expect(find.text('₦1445'), findsOneWidget);
-    expect(find.text('₦20000'), findsNothing);
-    expect(find.text('₦144500'), findsNothing);
+    expect(find.text('₦200.00'), findsOneWidget);
+    expect(find.text('₦1,445.00'), findsOneWidget);
+    expect(find.text('₦20,000.00'), findsNothing);
+    expect(find.text('₦144,500.00'), findsNothing);
   });
 
   testWidgets('runner Home active card and the Earnings screen show the same real amounts', (tester) async {
@@ -120,13 +120,13 @@ void main() {
     }
 
     await pump(const RunnerHomeScreen());
-    expect(find.text('₦200'), findsWidgets); // PAYOUT, and today's earnings
-    expect(find.text('₦1445'), findsOneWidget); // ORDER TOTAL
+    expect(find.text('₦200.00'), findsWidgets); // PAYOUT, and today's earnings
+    expect(find.text('₦1,445.00'), findsOneWidget); // ORDER TOTAL
     expect(find.textContaining('20000'), findsNothing);
     expect(find.textContaining('144500'), findsNothing);
 
     await pump(const EarningsScreen());
-    expect(find.text('₦200'), findsWidgets);
+    expect(find.text('₦200.00'), findsWidgets);
     expect(find.textContaining('20000'), findsNothing);
   });
 }

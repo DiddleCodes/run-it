@@ -11,19 +11,20 @@ import '../domain/wallet_models.dart';
 /// the Task 8b payments backend's ledger, not local mock state. `null`
 /// session (not yet signed in) resolves to 0 rather than an error; there's
 /// nothing to fetch yet.
-class WalletBalanceController extends AsyncNotifier<int> {
+/// Naira, kobo included (₦1,444.50 is 1444.5).
+class WalletBalanceController extends AsyncNotifier<num> {
   @override
-  Future<int> build() async {
+  Future<num> build() async {
     final session = ref.watch(authControllerProvider);
     if (session == null) return 0;
     ref.watch(walletRepositoryProvider);
-    return cachedFetch<int>(ref, walletBalanceSource(ref, session));
+    return cachedFetch<num>(ref, walletBalanceSource(ref, session));
   }
 
   /// Re-fetches from the backend and waits for the new value — used after
   /// a top-up so the caller can read the real, settled balance rather than
   /// guessing at what it should now be.
-  Future<int> refresh() async {
+  Future<num> refresh() async {
     final session = ref.read(authControllerProvider);
     if (session != null) ref.read(cacheSessionProvider).forceNetwork(CacheKeys.wallet(session.user.id));
     ref.invalidateSelf();
@@ -31,7 +32,7 @@ class WalletBalanceController extends AsyncNotifier<int> {
   }
 }
 
-final walletBalanceProvider = AsyncNotifierProvider<WalletBalanceController, int>(
+final walletBalanceProvider = AsyncNotifierProvider<WalletBalanceController, num>(
   WalletBalanceController.new,
 );
 

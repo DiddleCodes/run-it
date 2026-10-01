@@ -4,7 +4,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/primary_button.dart';
-import '../../ordering/presentation/widgets/ordering_components.dart' show naira;
+import '../../../core/utils/money.dart';
 
 /// Task 47: the runner's "mark as paid" confirmation for a Pay on Delivery
 /// order — pushed before `verify-delivery` is ever called for one (see
@@ -91,7 +91,7 @@ class _CashCollectionScreenState extends State<CashCollectionScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      naira(widget.orderTotalKobo ~/ 100),
+                      formatKobo(widget.orderTotalKobo),
                       style: Theme.of(context).textTheme.displayLarge?.copyWith(color: AppColors.inkText, fontSize: 32),
                     ),
                   ],
@@ -100,7 +100,7 @@ class _CashCollectionScreenState extends State<CashCollectionScreen> {
               const SizedBox(height: AppSpacing.xl),
               if (!_reportingMismatch) ...[
                 PrimaryButton(
-                  label: 'Collected ${naira(widget.orderTotalKobo ~/ 100)} — mark as paid',
+                  label: 'Collected ${formatKobo(widget.orderTotalKobo)} — mark as paid',
                   onPressed: _confirmExact,
                 ),
                 const SizedBox(height: AppSpacing.md),

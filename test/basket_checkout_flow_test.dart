@@ -277,7 +277,7 @@ void main() {
               ), // ₦3,100
               walletBalanceProvider.overrideWith(
                 () => _LowBalanceWallet(),
-              ), // ₦100
+              ), // ₦100.00
               ..._vendorOverrides,
             ],
             child: MaterialApp.router(routerConfig: router),
@@ -294,7 +294,7 @@ void main() {
 
         await tester.tap(find.text('Add funds to your wallet'));
         await tester.pumpAndSettle();
-        expect(find.text('₦100'), findsOneWidget); // now on the Wallet screen
+        expect(find.text('₦100.00'), findsOneWidget); // now on the Wallet screen
       },
     );
 
@@ -534,12 +534,12 @@ void main() {
         // Group Order yet, it's just over the standard cap. The breakdown
         // sits below the fold, so scroll it into view first.
         await tester.scrollUntilVisible(find.text('Items'), 200, scrollable: find.byType(Scrollable).first);
-        expect(find.textContaining('₦500'), findsWidgets);
+        expect(find.textContaining('₦500.00'), findsWidgets);
       },
     );
 
     testWidgets(
-      'tapping Switch on the cap notice enables Group Order, raises the cap, unblocks checkout, and shows the ₦650 fee',
+      'tapping Switch on the cap notice enables Group Order, raises the cap, unblocks checkout, and shows the ₦650.00 fee',
       (tester) async {
         await tester.pumpWidget(harness(const BasketScreen(), mainMealQuantity: 3));
         await tester.pump();
@@ -561,8 +561,8 @@ void main() {
         // final "Place order" tap. The breakdown sits below the fold, so
         // scroll it into view first.
         await tester.scrollUntilVisible(find.text('Items'), 200, scrollable: find.byType(Scrollable).first);
-        expect(find.textContaining('₦650'), findsWidgets);
-        expect(find.textContaining('incl. ₦150 Group Order'), findsOneWidget);
+        expect(find.textContaining('₦650.00'), findsWidgets);
+        expect(find.textContaining('incl. ₦150.00 Group Order'), findsOneWidget);
       },
     );
 
@@ -596,8 +596,8 @@ void main() {
       final button = tester.widget<PrimaryButton>(find.byType(PrimaryButton));
       expect(button.onPressed, isNotNull);
       await tester.scrollUntilVisible(find.text('Items'), 200, scrollable: find.byType(Scrollable).first);
-      expect(find.textContaining('₦500'), findsWidgets);
-      expect(find.textContaining('₦650'), findsNothing);
+      expect(find.textContaining('₦500.00'), findsWidgets);
+      expect(find.textContaining('₦650.00'), findsNothing);
     });
 
     testWidgets('removing a line item from an over-cap basket works exactly as it already did', (tester) async {

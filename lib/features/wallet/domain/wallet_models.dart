@@ -17,7 +17,8 @@ class WalletTransaction {
   final String id;
   final String title;
   final String subtitle;
-  final int amount;
+  /// Naira, kobo kept.
+  final num amount;
   final WalletTransactionKind kind;
   final DateTime occurredAt;
 

@@ -471,7 +471,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('₦3555'), findsOneWidget);
+    expect(find.text('₦3,555.00'), findsOneWidget);
     expect(find.text('Last updated 9:41 AM'), findsOneWidget);
     expect(find.textContaining("Couldn't load your transactions"), findsOneWidget);
     expect(find.text('No transactions yet.'), findsNothing);

@@ -223,13 +223,13 @@ export function OrdersBoard({ initialData }: { initialData: IncomingOrdersRespon
                       <span className="text-sm text-[var(--foreground)]">
                         {item.nameSnapshot} ×{item.quantity}
                       </span>
-                      <span className="text-sm font-medium">{formatKobo(item.priceSnapshot * item.quantity)}</span>
+                      <span className="text-sm font-medium tabular-nums">{formatKobo(item.priceSnapshot * item.quantity)}</span>
                     </div>
                   </div>
                 ))}
                 <div className="flex items-center justify-between pt-1">
                   <span className="text-sm font-semibold">Total</span>
-                  <span className="text-base font-bold text-[var(--primary)]">{formatKobo(selected.totalAmount)}</span>
+                  <span className="text-base font-bold tabular-nums text-[var(--primary)]">{formatKobo(selected.totalAmount)}</span>
                 </div>
               </div>
             </div>
@@ -239,20 +239,20 @@ export function OrdersBoard({ initialData }: { initialData: IncomingOrdersRespon
                 <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] mb-2">Your payout</p>
                 <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] text-sm">
                   <div className="flex items-center justify-between px-3 py-2">
-                    <span className="text-[var(--muted-foreground)]">Food subtotal</span>
-                    <span className="text-[var(--foreground)]">{formatKobo(selected.escrow.foodSubtotal)}</span>
+                    <span className="font-semibold text-[var(--muted-foreground)]">Food subtotal</span>
+                    <span className="tabular-nums text-[var(--foreground)]">{formatKobo(selected.escrow.foodSubtotal)}</span>
                   </div>
                   <div className="flex items-center justify-between px-3 py-2">
-                    <span className="text-[var(--muted-foreground)]">Commission (15%)</span>
-                    <span className="text-[var(--foreground)]">−{formatKobo(selected.escrow.restaurantCommission)}</span>
+                    <span className="font-semibold text-[var(--muted-foreground)]">Commission (15%)</span>
+                    <span className="tabular-nums text-[var(--foreground)]">−{formatKobo(selected.escrow.restaurantCommission)}</span>
                   </div>
                   <div className="flex items-center justify-between px-3 py-2">
-                    <span className="text-[var(--muted-foreground)]">Platform Service Fee</span>
-                    <span className="text-[var(--foreground)]">−{formatKobo(selected.escrow.restaurantPlatformFee)}</span>
+                    <span className="font-semibold text-[var(--muted-foreground)]">Platform Service Fee</span>
+                    <span className="tabular-nums text-[var(--foreground)]">−{formatKobo(selected.escrow.restaurantPlatformFee)}</span>
                   </div>
                   <div className="flex items-center justify-between px-3 py-2 bg-[var(--secondary)] rounded-b-xl">
-                    <span className="font-semibold text-[var(--foreground)]">Net payout</span>
-                    <span className="font-bold text-[var(--primary)]">{formatKobo(selected.escrow.restaurantShare)}</span>
+                    <span className="font-bold text-[var(--foreground)]">Net payout</span>
+                    <span className="text-base font-extrabold tabular-nums text-[var(--primary)]">{formatKobo(selected.escrow.restaurantShare)}</span>
                   </div>
                 </div>
               </div>

@@ -8,7 +8,7 @@ import '../../../core/widgets/app_notification.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/skeleton.dart';
 import '../../ordering/domain/order_decline.dart';
-import '../../ordering/presentation/widgets/ordering_components.dart' show naira;
+import '../../../core/utils/money.dart';
 import '../application/restaurant_orders_controller.dart';
 import '../domain/vendor_dashboard_models.dart';
 
@@ -197,7 +197,7 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
           Row(
             children: [
               Text(
-                naira(order.totalKobo ~/ 100),
+                formatKobo(order.totalKobo),
                 style: Theme.of(
                   context,
                 ).textTheme.titleLarge?.copyWith(color: AppColors.inkText, fontSize: 17, fontWeight: FontWeight.w700),

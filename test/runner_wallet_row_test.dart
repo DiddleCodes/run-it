@@ -122,7 +122,7 @@ void main() {
 
       // Landed on the real WalletScreen — same widget StudentShell uses,
       // now rendering a runner's real backend-fetched balance.
-      expect(find.text('₦3500'), findsOneWidget);
+      expect(find.text('₦3,500.00'), findsOneWidget);
       await tester.dragUntilVisible(
         find.text('Delivery earnings'),
         find.byType(CustomScrollView),

@@ -472,7 +472,7 @@ class _InProgressOrderCardState extends ConsumerState<_InProgressOrderCard> {
                 ),
               ),
               Text(
-                naira(order.totalKobo ~/ 100),
+                formatKobo(order.totalKobo),
                 style: Theme.of(context).textTheme.labelLarge
                     ?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w700),
               ),
@@ -659,7 +659,7 @@ class _PastOrdersTab extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      naira(entry.totalKobo ~/ 100),
+                      formatKobo(entry.totalKobo),
                       style: Theme.of(context).textTheme.labelLarge
                           ?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w700),
                     ),
@@ -738,7 +738,7 @@ class _CancelledOrdersTab extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      entry.wasPrepaid ? '+${naira(entry.totalKobo ~/ 100)}' : 'Not charged',
+                      entry.wasPrepaid ? '+${formatKobo(entry.totalKobo)}' : 'Not charged',
                       style: Theme.of(context).textTheme.labelLarge
                           ?.copyWith(color: AppColors.success, fontWeight: FontWeight.w700),
                     ),

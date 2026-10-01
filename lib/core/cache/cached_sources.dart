@@ -53,11 +53,11 @@ CachedSource<List<OrderHistoryEntry>> orderHistorySource(Ref ref, AuthSession se
 
 /// The balance shown on screen — display only. Paying never reads this:
 /// the backend checks the real balance when it holds the money.
-CachedSource<int> walletBalanceSource(Ref ref, AuthSession session) => CachedSource(
+CachedSource<num> walletBalanceSource(Ref ref, AuthSession session) => CachedSource(
   key: CacheKeys.wallet(session.user.id),
   fetch: () => ref.read(walletRepositoryProvider).getBalance(userId: session.user.id, token: session.accessToken),
   encode: (balance) => balance,
-  decode: (json) => json! as int,
+  decode: (json) => json! as num,
 );
 
 /// Brings every saved copy for [session] up to date — including menus and

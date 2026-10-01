@@ -6,7 +6,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../ordering/application/ordering_providers.dart';
 import '../../ordering/domain/vendor_filters.dart';
-import '../../ordering/presentation/widgets/ordering_components.dart' show naira;
+import '../../../core/utils/money.dart';
 
 /// Opens the Home filter sheet. Choices only apply on "Show results", so
 /// the list doesn't refetch on every tap.
