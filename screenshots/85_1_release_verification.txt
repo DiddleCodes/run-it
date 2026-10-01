@@ -1,0 +1,20 @@
+# Task 85.1 — signed release build verification (Thu Oct  1 20:56:06 WAT 2026)
+
+$ apksigner verify --print-certs app-release.apk
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): false
+Signer #1 certificate DN: CN=RUN-It, O=RUN-It, L=Lagos, C=NG
+Signer #1 certificate SHA-256 digest: e8e078270d62d1ec688259e015c0eb8fdf70aac7f853b614adf004dad95abe8b
+
+$ aapt2 dump badging app-release.apk | grep package
+package: name='com.runit.run_it' versionCode='1' versionName='1.0.0' platformBuildVersionName='17' platformBuildVersionCode='37' compileSdkVersion='37' compileSdkVersionCodename='17'
+
+# Installed on emulator Medium_Phone (fresh: uninstall + install)
+$ adb shell dumpsys package com.runit.run_it | grep pkgFlags
+    versionName=1.0.0
+    pkgFlags=[ HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP ]
+      firstInstallTime=2026-10-01 20:49:03
+$ adb shell run-as com.runit.run_it id
+run-as: package not debuggable: com.runit.run_it
