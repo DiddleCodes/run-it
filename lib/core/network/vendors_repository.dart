@@ -80,6 +80,9 @@ class VendorsRepository {
   Future<VendorsPage> listVendors({
     String? category,
     String? search,
+    String? sort,
+    double? minRating,
+    int? maxPriceKobo,
     int page = 1,
     int limit = 20,
     required String token,
@@ -89,6 +92,9 @@ class VendorsRepository {
       'limit': '$limit',
       if (category != null && category.isNotEmpty) 'category': category,
       if (search != null && search.isNotEmpty) 'search': search,
+      'sort': ?sort,
+      if (minRating != null) 'minRating': '$minRating',
+      if (maxPriceKobo != null) 'maxPriceKobo': '$maxPriceKobo',
     };
     final path = Uri(path: '/vendors', queryParameters: query).toString();
     final json = await client.get(path, token: token) as Map<String, dynamic>;

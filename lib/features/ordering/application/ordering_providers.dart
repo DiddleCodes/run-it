@@ -6,6 +6,7 @@ import '../../auth/application/auth_controller.dart';
 import '../../vendor/domain/vendor_dashboard_models.dart';
 import '../data/vendor_menu_mapping.dart';
 import '../domain/ordering_models.dart';
+import '../domain/vendor_filters.dart';
 
 /// The category chip currently selected on the Home screen's vendor list —
 /// `null` means "All". Kept as app-wide state (rather than local widget
@@ -18,6 +19,9 @@ final vendorCategoryFilterProvider = StateProvider<String?>((ref) => null);
 /// wasteful and would spam `GET /vendors`.
 final vendorSearchQueryProvider = StateProvider<String>((ref) => '');
 
+/// The Home filter sheet's sort/rating/price choices.
+final vendorFiltersProvider = StateProvider<VendorFilters>((ref) => const VendorFilters());
+
 /// Every active vendor matching the current category/search filters (Task
 /// 14) — backs the Home screen's "Popular around campus" list and (via
 /// [availableJobsProvider] in the runner feature) the runner's job-preview
@@ -26,11 +30,15 @@ final vendorSearchQueryProvider = StateProvider<String>((ref) => '');
 final campusEateriesProvider = FutureProvider<List<Eatery>>((ref) async {
   final category = ref.watch(vendorCategoryFilterProvider);
   final search = ref.watch(vendorSearchQueryProvider).trim();
+  final filters = ref.watch(vendorFiltersProvider);
   final token = ref.watch(authControllerProvider)?.accessToken;
   if (token == null) return const [];
   final page = await ref.watch(vendorsRepositoryProvider).listVendors(
     category: category,
     search: search.isEmpty ? null : search,
+    sort: filters.sort == VendorSort.name ? null : filters.sort.apiValue,
+    minRating: filters.minRating,
+    maxPriceKobo: filters.maxPriceNaira == null ? null : filters.maxPriceNaira! * 100,
     token: token,
   );
   return page.items.map((vendor) => vendor.toEatery()).toList();

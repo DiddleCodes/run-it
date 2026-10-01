@@ -153,6 +153,7 @@ class MyVendorProfile {
     this.payAtDeliveryEnabled = false,
     this.averageRating,
     this.ratingCount = 0,
+    this.matchingItems = const [],
   });
   final String id;
   final String businessName;
@@ -184,6 +185,11 @@ class MyVendorProfile {
   // everywhere a real one isn't known yet.
   final String? userId;
 
+  // Only from a `GET /vendors?search=` result: the names of this vendor's
+  // menu items the search matched (empty when only its own name or
+  // description did).
+  final List<String> matchingItems;
+
   factory MyVendorProfile.fromJson(Map<String, dynamic> json) => MyVendorProfile(
     id: json['id'] as String,
     businessName: json['businessName'] as String,
@@ -194,6 +200,7 @@ class MyVendorProfile {
     payAtDeliveryEnabled: json['payAtDeliveryEnabled'] as bool? ?? false,
     averageRating: (json['averageRating'] as num?)?.toDouble(),
     ratingCount: json['ratingCount'] as int? ?? 0,
+    matchingItems: [for (final name in json['matchingItems'] as List<dynamic>? ?? const []) name as String],
   );
 }
 

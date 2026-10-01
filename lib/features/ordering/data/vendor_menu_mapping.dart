@@ -16,6 +16,7 @@ extension VendorToEatery on MyVendorProfile {
     // until then, same "no fabricated number" rule this field's own doc
     // comment already established.
     rating: averageRating,
+    matchingItems: matchingItems,
   );
 }
 

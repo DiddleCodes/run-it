@@ -131,24 +131,44 @@ export class VendorsService {
       return { items: [], total: 0, page, limit };
     }
 
+    // A search also finds vendors by what they sell ("puff" -> the bakery
+    // with Puff Puff), not just by their own name/description. Only
+    // available items count, and with a price filter the matching item
+    // must also be within it.
+    const itemMatch = search
+      ? {
+          name: { contains: search, mode: 'insensitive' as const },
+          isAvailable: true,
+          ...(query.maxPriceKobo ? { price: { lte: query.maxPriceKobo } } : {}),
+        }
+      : null;
+
     const where = {
       status: 'active' as const,
       user: { campusId },
       ...(query.category ? { category: { equals: query.category, mode: 'insensitive' as const } } : {}),
-      ...(search
+      ...(itemMatch
         ? {
             OR: [
               { businessName: { contains: search, mode: 'insensitive' as const } },
               { description: { contains: search, mode: 'insensitive' as const } },
+              { menuItems: { some: itemMatch } },
             ],
           }
         : {}),
+      ...(query.minRating != null ? { averageRating: { gte: query.minRating } } : {}),
+      ...(query.maxPriceKobo
+        ? { menuItems: { some: { price: { lte: query.maxPriceKobo }, isAvailable: true } } }
+        : {}),
     };
 
-    const [items, total] = await Promise.all([
+    const [vendors, total] = await Promise.all([
       this.prisma.vendor.findMany({
         where,
-        orderBy: { businessName: 'asc' },
+        orderBy:
+          query.sort === 'rating'
+            ? [{ averageRating: { sort: 'desc' as const, nulls: 'last' as const } }, { businessName: 'asc' as const }]
+            : { businessName: 'asc' },
         skip: (page - 1) * limit,
         take: limit,
         select: {
@@ -161,10 +181,21 @@ export class VendorsService {
           // wherever a student browses vendors, not fabricated.
           averageRating: true,
           ratingCount: true,
+          ...(itemMatch
+            ? { menuItems: { where: itemMatch, select: { name: true }, orderBy: { name: 'asc' as const }, take: 3 } }
+            : {}),
         },
       }),
       this.prisma.vendor.count({ where }),
     ]);
+
+    // matchingItems: which of the vendor's items the search hit, so the
+    // app can say why a store showed up. Empty when there's no search or
+    // only the store's own name/description matched.
+    const items = vendors.map(({ menuItems, ...vendor }: (typeof vendors)[number] & { menuItems?: { name: string }[] }) => ({
+      ...vendor,
+      matchingItems: (menuItems ?? []).map((item) => item.name),
+    }));
 
     return { items, total, page, limit };
   }

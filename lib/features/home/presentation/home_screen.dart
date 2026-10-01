@@ -19,9 +19,11 @@ import '../../../core/widgets/app_notification.dart';
 import '../../../core/widgets/carousel_dots.dart';
 import '../../../core/widgets/route_line.dart';
 import '../../../core/widgets/skeleton.dart';
+import 'vendor_filter_sheet.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../ordering/application/ordering_providers.dart';
 import '../../ordering/domain/ordering_models.dart';
+import '../../ordering/domain/vendor_filters.dart';
 import '../../ordering/presentation/widgets/ordering_components.dart' show MenuImagePlaceholder;
 
 /// Task 14/15: the backend's controlled category vocabulary (`GET
@@ -80,6 +82,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final textTheme = Theme.of(context).textTheme;
     final category = ref.watch(vendorCategoryFilterProvider);
     final search = ref.watch(vendorSearchQueryProvider);
+    final filters = ref.watch(vendorFiltersProvider);
     final categoriesAsync = ref.watch(vendorCategoriesProvider);
     final vendorsAsync = ref.watch(campusEateriesProvider);
     return Scaffold(
@@ -128,8 +131,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: _Search(
                   controller: _searchController,
                   onChanged: _onSearchChanged,
-                  onFilterTap: () =>
-                      _notify(context, 'Filters are coming soon.'),
+                  activeFilters: filters.activeCount,
+                  onFilterTap: () => showVendorFilterSheet(context),
                 ),
               ),
             ),
@@ -208,7 +211,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   loading: () => const _VendorRowSkeleton(),
                   error: (_, _) => const _VendorsErrorState(),
                   data: (vendors) => vendors.isEmpty
-                      ? _NoVendorsState(hasSearch: search.trim().isNotEmpty, hasCategory: category != null)
+                      ? _NoVendorsState(
+                          hasSearch: search.trim().isNotEmpty,
+                          hasCategory: category != null,
+                          hasFilters: !filters.isDefault,
+                          onClearFilters: () =>
+                              ref.read(vendorFiltersProvider.notifier).state = const VendorFilters(),
+                        )
                       // A horizontal ListView needs a bounded cross-axis
                       // height from its parent — which used to be a
                       // hardcoded SizedBox, the exact anti-pattern behind
@@ -419,10 +428,18 @@ class _AvatarButton extends StatelessWidget {
 }
 
 class _Search extends StatelessWidget {
-  const _Search({required this.controller, required this.onChanged, required this.onFilterTap});
+  const _Search({
+    required this.controller,
+    required this.onChanged,
+    required this.onFilterTap,
+    this.activeFilters = 0,
+  });
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
   final VoidCallback onFilterTap;
+  // Filters in effect — shown as a count on the icon so a filtered list
+  // is never mistaken for everything on campus.
+  final int activeFilters;
   @override
   Widget build(BuildContext context) => Container(
     height: 54,
@@ -461,15 +478,40 @@ class _Search extends StatelessWidget {
             ),
           ),
         ),
-        InkWell(
-          onTap: onFilterTap,
-          customBorder: const CircleBorder(),
-          child: const Padding(
-            padding: EdgeInsets.all(4),
-            child: Icon(
-              CupertinoIcons.slider_horizontal_3,
-              size: 19,
-              color: AppColors.primaryMaroon,
+        Semantics(
+          button: true,
+          label: activeFilters == 0 ? 'Filters' : 'Filters, $activeFilters on',
+          child: InkWell(
+            onTap: onFilterTap,
+            customBorder: const CircleBorder(),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(
+                    CupertinoIcons.slider_horizontal_3,
+                    size: 19,
+                    color: AppColors.primaryMaroon,
+                  ),
+                  if (activeFilters > 0)
+                    Positioned(
+                      right: -7,
+                      top: -7,
+                      child: Container(
+                        width: 15,
+                        height: 15,
+                        alignment: Alignment.center,
+                        decoration: const BoxDecoration(color: AppColors.primaryMaroon, shape: BoxShape.circle),
+                        child: Text(
+                          '$activeFilters',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: AppColors.onMaroon, fontSize: 9, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -854,7 +896,18 @@ class _Vendor extends StatelessWidget {
             ],
           ],
         ),
-        if (vendor.blurb != null) ...[
+        // A search that matched a dish says so, instead of the blurb —
+        // otherwise "jollof" turning up a bakery would look like a bug.
+        if (vendor.matchingItems.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Has ${vendor.matchingItems.join(', ')}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: AppColors.primaryMaroon, fontWeight: FontWeight.w600),
+          ),
+        ] else if (vendor.blurb != null) ...[
           const SizedBox(height: 4),
           Text(
             vendor.blurb!,
@@ -925,13 +978,22 @@ class _VendorsErrorState extends StatelessWidget {
 /// generic message would leave a student guessing whether to try a
 /// different word or a different filter.
 class _NoVendorsState extends StatelessWidget {
-  const _NoVendorsState({required this.hasSearch, required this.hasCategory});
+  const _NoVendorsState({
+    required this.hasSearch,
+    required this.hasCategory,
+    this.hasFilters = false,
+    this.onClearFilters,
+  });
   final bool hasSearch;
   final bool hasCategory;
+  final bool hasFilters;
+  final VoidCallback? onClearFilters;
   @override
   Widget build(BuildContext context) {
     final message = hasSearch
         ? 'No vendors found for your search.'
+        : hasFilters
+        ? 'No vendors match these filters.'
         : hasCategory
         ? 'No vendors in this category yet.'
         : 'No vendors around campus yet.';
@@ -946,6 +1008,12 @@ class _NoVendorsState extends StatelessWidget {
             message,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
           ),
+          if (hasFilters && onClearFilters != null)
+            TextButton(
+              onPressed: onClearFilters,
+              style: TextButton.styleFrom(foregroundColor: AppColors.primaryMaroon, padding: EdgeInsets.zero),
+              child: const Text('Clear filters'),
+            ),
         ],
       ),
     );

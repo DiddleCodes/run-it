@@ -20,6 +20,7 @@ class Eatery {
     this.rating,
     this.prepTimeMinutes,
     this.isOpen = true,
+    this.matchingItems = const [],
   });
 
   final String id;
@@ -40,6 +41,9 @@ class Eatery {
   // simply always true for real data. Item-level `isAvailable` (real) is
   // what actually gates ordering, not this.
   final bool isOpen;
+  // From a search: the vendor's menu items that matched, so the card can
+  // say why it's here ("Has Puff Puff (6pc)").
+  final List<String> matchingItems;
 }
 
 class MenuItem {

@@ -75,7 +75,7 @@ class _FlakyVendors extends VendorsRepository {
   }
 
   @override
-  Future<VendorsPage> listVendors({String? category, String? search, int page = 1, int limit = 20, required String token}) async {
+  Future<VendorsPage> listVendors({String? category, String? search, String? sort, double? minRating, int? maxPriceKobo, int page = 1, int limit = 20, required String token}) async {
     listCalls++;
     if (!online) throw const SocketException('offline');
     return VendorsPage(items: const [], total: 0, page: page, limit: limit);

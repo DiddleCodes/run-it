@@ -186,7 +186,7 @@ class _FakeVendorsRepository extends VendorsRepository {
   @override
   Future<VendorsPage> listVendors({
     String? category,
-    String? search,
+    String? search, String? sort, double? minRating, int? maxPriceKobo,
     int page = 1,
     int limit = 20,
     String? token,

@@ -315,11 +315,12 @@ describe('VendorsService.listVendors', () => {
     );
   });
 
-  it('searches business name and description case-insensitively', async () => {
+  it('searches business name, description and available menu item names case-insensitively', async () => {
     const { service, prisma } = makeService();
 
     await service.listVendors({ search: 'jollof' }, 'campus-1');
 
+    const itemMatch = { name: { contains: 'jollof', mode: 'insensitive' }, isAvailable: true };
     expect(prisma.vendor.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
@@ -328,10 +329,92 @@ describe('VendorsService.listVendors', () => {
           OR: [
             { businessName: { contains: 'jollof', mode: 'insensitive' } },
             { description: { contains: 'jollof', mode: 'insensitive' } },
+            { menuItems: { some: itemMatch } },
           ],
+        },
+        select: expect.objectContaining({
+          menuItems: { where: itemMatch, select: { name: true }, orderBy: { name: 'asc' }, take: 3 },
+        }),
+      }),
+    );
+  });
+
+  it('says which menu items a search matched ("puff" finds the bakery via Puff Puff)', async () => {
+    const { service, prisma } = makeService();
+    prisma.vendor.findMany.mockResolvedValue([
+      { id: 'golden', businessName: 'Golden Crust Bakery', menuItems: [{ name: 'Puff Puff (6pc)' }] },
+      { id: 'puffy', businessName: 'Puffy Bites', menuItems: [] },
+    ]);
+    prisma.vendor.count.mockResolvedValue(2);
+
+    const result = await service.listVendors({ search: 'puff' }, 'campus-1');
+
+    expect(result.items).toEqual([
+      { id: 'golden', businessName: 'Golden Crust Bakery', matchingItems: ['Puff Puff (6pc)'] },
+      { id: 'puffy', businessName: 'Puffy Bites', matchingItems: [] },
+    ]);
+  });
+
+  it('never asks for menu items when there is no search', async () => {
+    const { service, prisma } = makeService();
+
+    await service.listVendors({}, 'campus-1');
+
+    expect(prisma.vendor.findMany.mock.calls[0][0].select).not.toHaveProperty('menuItems');
+  });
+
+  it('filters by minimum rating (unrated vendors never match)', async () => {
+    const { service, prisma } = makeService();
+
+    await service.listVendors({ minRating: 4 }, 'campus-1');
+
+    expect(prisma.vendor.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { status: 'active', user: { campusId: 'campus-1' }, averageRating: { gte: 4 } },
+      }),
+    );
+  });
+
+  it('filters to vendors with an available item at or under a price', async () => {
+    const { service, prisma } = makeService();
+
+    await service.listVendors({ maxPriceKobo: 100000 }, 'campus-1');
+
+    expect(prisma.vendor.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          status: 'active',
+          user: { campusId: 'campus-1' },
+          menuItems: { some: { price: { lte: 100000 }, isAvailable: true } },
         },
       }),
     );
+  });
+
+  it('with a search and a price, the matching item must itself be within the price', async () => {
+    const { service, prisma } = makeService();
+
+    await service.listVendors({ search: 'pie', maxPriceKobo: 100000 }, 'campus-1');
+
+    const where = prisma.vendor.findMany.mock.calls[0][0].where;
+    expect(where.OR[2]).toEqual({
+      menuItems: {
+        some: { name: { contains: 'pie', mode: 'insensitive' }, isAvailable: true, price: { lte: 100000 } },
+      },
+    });
+  });
+
+  it('sorts A–Z by default and best-rated first (unrated last) when asked', async () => {
+    const { service, prisma } = makeService();
+
+    await service.listVendors({}, 'campus-1');
+    await service.listVendors({ sort: 'rating' }, 'campus-1');
+
+    expect(prisma.vendor.findMany.mock.calls[0][0].orderBy).toEqual({ businessName: 'asc' });
+    expect(prisma.vendor.findMany.mock.calls[1][0].orderBy).toEqual([
+      { averageRating: { sort: 'desc', nulls: 'last' } },
+      { businessName: 'asc' },
+    ]);
   });
 
   it('paginates with a default page size and reports the real total', async () => {
@@ -342,7 +425,7 @@ describe('VendorsService.listVendors', () => {
     const result = await service.listVendors({ page: 2, limit: 10 }, 'campus-1');
 
     expect(prisma.vendor.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 10, take: 10 }));
-    expect(result).toEqual({ items: [{ id: 'vendor-1' }], total: 33, page: 2, limit: 10 });
+    expect(result).toEqual({ items: [{ id: 'vendor-1', matchingItems: [] }], total: 33, page: 2, limit: 10 });
   });
 
   // Task 26: the real enforcement — no campus, no results. Never falls
