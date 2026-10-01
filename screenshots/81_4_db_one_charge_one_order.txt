@@ -1,0 +1,3 @@
+wallet balance kobo: 355500
+ txn debit 144500 success escrow_hold_order-1790832731040039
+ order order-1790832731040039 placed 144500 escrow held

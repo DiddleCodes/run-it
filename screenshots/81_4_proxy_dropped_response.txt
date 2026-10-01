@@ -1,0 +1,3 @@
+proxy up
+06:32:14 hold request forwarded; its response will be DROPPED
+06:32:14 backend answered the hold (b'HTTP/1.1 201 Cr'...) - dropping it, closing the client connection
