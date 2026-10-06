@@ -465,7 +465,7 @@ export class OrderEscrowService {
           amountKobo: escrow.restaurantShare,
           recipientCode: restaurantPayout.paystackRecipientCode,
           reference,
-          reason: `RUN-It order ${orderId} — restaurant payout`,
+          reason: `Bridgit order ${orderId} — restaurant payout`,
         });
         escrow = await this.prisma.orderEscrow.update({
           where: { id: escrow.id },

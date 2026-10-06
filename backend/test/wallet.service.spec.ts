@@ -55,7 +55,8 @@ describe('WalletService.initiateWithdrawal', () => {
       }),
     );
     expect(paystack.initiateTransfer).toHaveBeenCalledWith(
-      expect.objectContaining({ amountKobo: 3_000, recipientCode: 'RCP_u1' }),
+      // The reason reaches the user's bank statement.
+      expect.objectContaining({ amountKobo: 3_000, recipientCode: 'RCP_u1', reason: 'Bridgit wallet withdrawal' }),
     );
     expect(result.status).toBe('pending');
   });

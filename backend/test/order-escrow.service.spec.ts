@@ -1129,7 +1129,13 @@ describe('OrderEscrowService.release', () => {
     // The restaurant leg is completely untouched — still a real Paystack
     // transfer, still the only leg that ever calls it.
     expect(paystack.initiateTransfer).toHaveBeenCalledWith(
-      expect.objectContaining({ amountKobo: 7_000, recipientCode: 'RCP_restaurant', reference: 'escrow_esc1_restaurant' }),
+      expect.objectContaining({
+        amountKobo: 7_000,
+        recipientCode: 'RCP_restaurant',
+        reference: 'escrow_esc1_restaurant',
+        // Shows on the restaurant's bank statement.
+        reason: 'Bridgit order order-1 — restaurant payout',
+      }),
     );
     expect(paystack.initiateTransfer).toHaveBeenCalledTimes(1);
 

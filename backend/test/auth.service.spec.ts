@@ -165,6 +165,9 @@ describe('AuthService.requestPasswordReset', () => {
     expect(email.send).toHaveBeenCalledTimes(1);
     const emailArgs = email.send.mock.calls[0][0];
     expect(emailArgs.to).toBe('admin@runit.dev');
+    expect(emailArgs.subject).toBe('Reset your Bridgit password');
+    expect(emailArgs.text).toContain('Reset your Bridgit password:');
+    expect(emailArgs.html).toContain('Reset your Bridgit password</h2>');
     expect(emailArgs.html).toContain('https://dashboard.runit.app/reset-password?token=');
     expect(emailArgs.text).toContain('https://dashboard.runit.app/reset-password?token=');
   });
@@ -298,6 +301,9 @@ describe('AuthService.requestOtp', () => {
     const emailArgs = email.send.mock.calls[0][0];
     expect(emailArgs.to).toBe('student@runit.dev');
     expect(emailArgs.html).not.toContain('undefined');
+    expect(emailArgs.subject).toBe('Your Bridgit verification code');
+    expect(emailArgs.text).toMatch(/^Your Bridgit verification code is \d{6}\./);
+    expect(emailArgs.html).toContain('Bridgit verification code</h2>');
     expect(logSpy).not.toHaveBeenCalled();
     expect(logLogSpy).not.toHaveBeenCalled();
   });

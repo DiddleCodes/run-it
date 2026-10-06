@@ -131,7 +131,7 @@ export class WalletService {
         amountKobo: dto.amountKobo,
         recipientCode: payoutAccount.paystackRecipientCode,
         reference,
-        reason: 'RUN-It wallet withdrawal',
+        reason: 'Bridgit wallet withdrawal',
       });
     } catch (err) {
       // The root Paystack error was already captured to Sentry inside

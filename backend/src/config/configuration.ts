@@ -110,7 +110,7 @@ export default () => ({
     // above — see EmailService's doc comment.
     apiKey: process.env.BREVO_API_KEY,
     senderEmail: process.env.BREVO_SENDER_EMAIL,
-    senderName: process.env.BREVO_SENDER_NAME ?? 'RUN-It',
+    senderName: process.env.BREVO_SENDER_NAME ?? 'Bridgit',
   },
 
   // Task 67: platform-wide launch switches — the single place a whole

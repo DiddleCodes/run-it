@@ -125,9 +125,9 @@ export class AuthService {
     // unconditional plaintext log for runners.
     const sent = await this.email.send({
       to: contact,
-      subject: 'Your RUN-It verification code',
+      subject: 'Your Bridgit verification code',
       html: this.otpEmailHtml(code),
-      text: `Your RUN-It verification code is ${code}. It expires in ${OTP_TTL_MINUTES} minutes. If you didn't request this, you can safely ignore this email.`,
+      text: `Your Bridgit verification code is ${code}. It expires in ${OTP_TTL_MINUTES} minutes. If you didn't request this, you can safely ignore this email.`,
     });
 
     if (!sent && this.config.get<string>('nodeEnv') !== 'production') {
@@ -147,7 +147,7 @@ export class AuthService {
   private otpEmailHtml(code: string): string {
     return `
       <div style="font-family: -apple-system, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #1a1a1a;">
-        <h2 style="margin: 0 0 16px;">RUN-It verification code</h2>
+        <h2 style="margin: 0 0 16px;">Bridgit verification code</h2>
         <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.5;">Enter this code in the app to continue:</p>
         <p style="margin: 0 0 24px; font-size: 32px; font-weight: 700; letter-spacing: 8px; text-align: center;">${code}</p>
         <p style="margin: 0 0 8px; font-size: 14px; color: #555;">This code expires in ${OTP_TTL_MINUTES} minutes.</p>
@@ -375,9 +375,9 @@ export class AuthService {
     const resetLink = `${this.config.get<string>('dashboardUrl')}/reset-password?token=${rawToken}`;
     const sent = await this.email.send({
       to: email,
-      subject: 'Reset your RUN-It password',
+      subject: 'Reset your Bridgit password',
       html: this.resetPasswordEmailHtml(resetLink),
-      text: `Reset your RUN-It password: ${resetLink} (expires in ${RESET_TOKEN_TTL_MINUTES} minutes). If you didn't request this, you can safely ignore this email.`,
+      text: `Reset your Bridgit password: ${resetLink} (expires in ${RESET_TOKEN_TTL_MINUTES} minutes). If you didn't request this, you can safely ignore this email.`,
     });
 
     if (!sent && this.config.get<string>('nodeEnv') !== 'production') {
@@ -394,7 +394,7 @@ export class AuthService {
   private resetPasswordEmailHtml(resetLink: string): string {
     return `
       <div style="font-family: -apple-system, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #1a1a1a;">
-        <h2 style="margin: 0 0 16px;">Reset your RUN-It password</h2>
+        <h2 style="margin: 0 0 16px;">Reset your Bridgit password</h2>
         <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.5;">Click the button below to choose a new password:</p>
         <p style="margin: 0 0 24px; text-align: center;">
           <a href="${resetLink}" style="display: inline-block; padding: 12px 28px; background: #7A1636; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">Reset password</a>

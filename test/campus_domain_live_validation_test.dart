@@ -51,7 +51,7 @@ void main() {
       (tester) async {
         const message =
             'We don\'t recognize "gmail.com" as a registered campus email domain. '
-            'RUN-It is currently only available to students at supported schools.';
+            'Bridgit is currently only available to students at supported schools.';
         final repo = _FakeCampusRepository(
           (email) async => const CampusEmailCheck(valid: false, message: message),
         );

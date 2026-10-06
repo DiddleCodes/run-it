@@ -9,7 +9,7 @@ function makeService(configValues: Record<string, unknown> = {}) {
   const config = createConfigMock({
     'brevo.apiKey': 'test-api-key',
     'brevo.senderEmail': 'otp@runit.dev',
-    'brevo.senderName': 'RUN-It',
+    'brevo.senderName': 'Bridgit',
     ...configValues,
   });
   return { service: new EmailService(config as any), config };
@@ -50,7 +50,7 @@ describe('EmailService.send', () => {
     expect(mockedAxios.post).toHaveBeenCalledWith(
       'https://api.brevo.com/v3/smtp/email',
       expect.objectContaining({
-        sender: { name: 'RUN-It', email: 'otp@runit.dev' },
+        sender: { name: 'Bridgit', email: 'otp@runit.dev' },
         to: [{ email: 'student@runit.dev' }],
         subject: 'Your code',
       }),

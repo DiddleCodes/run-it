@@ -28,7 +28,7 @@ describe('CampusService.checkEmail', () => {
 
     expect(result.valid).toBe(false);
     expect(result.message).toContain('gmail.com');
-    expect(result.message).toContain('RUN-It');
+    expect(result.message).toContain('Bridgit is currently only available to students at supported schools');
   });
 
   it('reports no match for a malformed address, rather than throwing', async () => {

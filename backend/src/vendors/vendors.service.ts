@@ -395,7 +395,7 @@ export class VendorsService {
       recipientUserId: order.studentUserId,
       title: 'Order declined',
       body: walletPaid
-        ? `${vendor.businessName} declined your order — "${reasonText}". Your ${formatNaira(escrow.grossAmount)} has been refunded to your RUN IT wallet.`
+        ? `${vendor.businessName} declined your order — "${reasonText}". Your ${formatNaira(escrow.grossAmount)} has been refunded to your Bridgit wallet.`
         : `${vendor.businessName} declined your order — "${reasonText}". You haven't been charged for it.`,
       data: { orderId, reason: dto.reason, refunded: String(walletPaid) },
     });

@@ -699,7 +699,7 @@ describe('VendorsService.declineOrder (Task 61)', () => {
       type: 'order_declined',
       recipientUserId: 'student-1',
       title: 'Order declined',
-      body: 'Spice Garden declined your order — "Out of stock". Your ₦2,500 has been refunded to your RUN IT wallet.',
+      body: 'Spice Garden declined your order — "Out of stock". Your ₦2,500 has been refunded to your Bridgit wallet.',
       data: { orderId: 'order-1', reason: 'out_of_stock', refunded: 'true' },
     });
   });

@@ -50,7 +50,7 @@ export class CampusService {
 
     if (!match) {
       throw new UnprocessableEntityException(
-        `We don't recognize "${domain}" as a registered campus email domain. RUN-It is currently only available to students at supported schools — contact support if your school should be added.`,
+        `We don't recognize "${domain}" as a registered campus email domain. Bridgit is currently only available to students at supported schools — contact support if your school should be added.`,
       );
     }
 
