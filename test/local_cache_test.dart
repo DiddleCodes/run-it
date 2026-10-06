@@ -24,7 +24,12 @@ import 'package:run_it/features/wallet/domain/wallet_models.dart';
 import 'package:run_it/features/wallet/presentation/wallet_screen.dart';
 
 const _userId = 'student-1';
-final _savedAt = DateTime(2026, 10, 1, 9, 41);
+// Today at 9:41 — "Last updated" shows just the time for a copy saved
+// today, so a fixed date would start failing the day after it was written.
+final _savedAt = () {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day, 9, 41);
+}();
 
 class _FakeAuthController extends AuthController {
   @override
