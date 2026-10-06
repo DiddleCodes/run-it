@@ -63,7 +63,7 @@ export default function ComponentLibraryPage() {
         <div className="bg-card rounded-[var(--radius)] border border-[var(--border)] p-6 space-y-4">
           <div>
             <p className="text-xs text-[var(--muted-foreground)] mb-1">Fraunces — Page header</p>
-            <h1 className="font-fraunces text-3xl font-semibold text-[var(--foreground)]">RUN-It Campus Delivery</h1>
+            <h1 className="font-fraunces text-3xl font-semibold text-[var(--foreground)]">Bridgit Campus Delivery</h1>
           </div>
           <div>
             <p className="text-xs text-[var(--muted-foreground)] mb-1">Inter — Body text</p>

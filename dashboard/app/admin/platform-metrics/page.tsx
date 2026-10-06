@@ -10,7 +10,7 @@ export default async function PlatformMetricsPage() {
 
   return (
     <>
-      <PageHeader title="Platform Metrics" subtitle="GMV, order volume, and take rate across RUN-It." breadcrumb="Admin" />
+      <PageHeader title="Platform Metrics" subtitle="GMV, order volume, and take rate across Bridgit." breadcrumb="Admin" />
       <PlatformMetricsBoard initialData={initialData} />
     </>
   );

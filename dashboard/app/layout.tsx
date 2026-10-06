@@ -17,8 +17,8 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "RUN-It Dashboard",
-  description: "RUN-It Campus Delivery — Internal Portal",
+  title: "Bridgit Dashboard",
+  description: "Bridgit Campus Delivery — Internal Portal",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
