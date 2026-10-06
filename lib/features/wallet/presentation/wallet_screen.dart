@@ -542,7 +542,7 @@ class _CashOwedBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${formatKobo(totalOwedKobo)} owed to RUN-It',
+                  '${formatKobo(totalOwedKobo)} owed to Bridgit',
                   style: Theme.of(context).textTheme.labelLarge
                       ?.copyWith(color: AppColors.inkText, fontWeight: FontWeight.w700),
                 ),

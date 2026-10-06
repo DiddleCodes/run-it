@@ -24,7 +24,7 @@ class DeclinedOrderInfo {
   final int refundedKobo;
 
   String get message => refundedKobo > 0
-      ? '$vendorName declined your order: $reason. Your ${formatKobo(refundedKobo)} has been refunded to your RUN IT wallet.'
+      ? '$vendorName declined your order: $reason. Your ${formatKobo(refundedKobo)} has been refunded to your Bridgit wallet.'
       : "$vendorName declined your order: $reason. You haven't been charged for it.";
 }
 

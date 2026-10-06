@@ -411,7 +411,7 @@ class _PlusBanner extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'RUN-It Plus',
+                    'Bridgit Plus',
                     style: Theme.of(context).textTheme.labelLarge
                         ?.copyWith(color: AppColors.onMaroon, fontWeight: FontWeight.w700),
                   ),

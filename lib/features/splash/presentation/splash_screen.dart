@@ -92,7 +92,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                   height: 18,
                   child: Center(
                     child: Text(
-                      'NEED IT, RUN-IT',
+                      'NEED IT, BRIDGIT',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: AppColors.mutedText,
                         letterSpacing: 2.4,

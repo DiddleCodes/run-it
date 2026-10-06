@@ -809,7 +809,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           const _SectionLabel(label: 'PAYMENT'),
           _PaymentOption(
             icon: Icons.account_balance_wallet_outlined,
-            title: 'RUN IT Wallet',
+            title: 'Bridgit Wallet',
             subtitle:
                 'Balance ${naira(wallet)}${walletInsufficient ? ' · Not enough for this order' : ''}',
             selected: form.paymentMethod == PaymentMethod.wallet,
@@ -1021,7 +1021,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog.adaptive(
         title: const Text('Cancel this order?'),
-        content: const Text("You'll get a full refund to your RUN-It Wallet."),
+        content: const Text("You'll get a full refund to your Bridgit Wallet."),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
@@ -1703,7 +1703,7 @@ class _DeclinedOrder extends StatelessWidget {
             ),
             child: Text(
               info.refundedKobo > 0
-                  ? 'Your ${formatKobo(info.refundedKobo)} has been refunded to your RUN IT wallet.'
+                  ? 'Your ${formatKobo(info.refundedKobo)} has been refunded to your Bridgit wallet.'
                   : "You haven't been charged for this order.",
               style: Theme.of(
                 context,

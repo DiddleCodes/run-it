@@ -69,7 +69,7 @@ class RunItPlusScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       Text(
-                        'RUN-It Plus',
+                        'Bridgit Plus',
                         style: Theme.of(context).textTheme.headlineLarge
                             ?.copyWith(color: AppColors.inkText),
                       ),

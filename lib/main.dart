@@ -91,7 +91,7 @@ class RunItApp extends ConsumerWidget {
     ref.watch(cacheLifecycleProvider);
 
     return MaterialApp.router(
-      title: 'Run-It',
+      title: 'Bridgit',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       routerConfig: ref.watch(appRouterProvider),

@@ -148,11 +148,11 @@ void main() {
       expect(find.text('Order declined'), findsOneWidget);
       expect(find.text("Spice Garden couldn't take your order."), findsOneWidget);
       expect(find.text('Reason: Out of stock'), findsOneWidget);
-      expect(find.text('Your ₦2,500.00 has been refunded to your RUN IT wallet.'), findsOneWidget);
+      expect(find.text('Your ₦2,500.00 has been refunded to your Bridgit wallet.'), findsOneWidget);
       // The app-level notification carries the same honest message.
       expect(
         find.text(
-          'Spice Garden declined your order: Out of stock. Your ₦2,500.00 has been refunded to your RUN IT wallet.',
+          'Spice Garden declined your order: Out of stock. Your ₦2,500.00 has been refunded to your Bridgit wallet.',
         ),
         findsOneWidget,
       );

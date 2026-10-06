@@ -478,13 +478,13 @@ class _BrandHeader extends StatelessWidget {
             'assets/branding/run_it_app_icon.png',
             width: 44,
             height: 44,
-            semanticLabel: 'Run-It',
+            semanticLabel: 'Bridgit',
           ),
         ),
         const SizedBox(width: 10),
         Flexible(
           child: Text(
-            'Need it, Run-It',
+            'Need it, Bridgit',
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
               color: AppColors.gold,
               fontWeight: FontWeight.w600,

@@ -588,7 +588,7 @@ void main() {
   });
 
   group('Profile screen', () {
-    testWidgets('shows the student identity card and RUN-It Plus banner', (
+    testWidgets('shows the student identity card and Bridgit Plus banner', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -599,7 +599,7 @@ void main() {
       expect(find.text('Ayanfe O.'), findsOneWidget);
       expect(find.text('ayanfe@student.ui.edu.ng'), findsOneWidget);
       expect(find.text('Student'), findsOneWidget);
-      expect(find.text('RUN-It Plus'), findsOneWidget);
+      expect(find.text('Bridgit Plus'), findsOneWidget);
     });
 
     // Task 38: the bell used to carry a hardcoded `badge: true` red dot

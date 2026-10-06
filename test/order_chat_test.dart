@@ -188,7 +188,7 @@ void main() {
       expect(find.text('Which gate?'), findsOneWidget);
       expect(find.text('2'), findsOneWidget);
       expect(find.text('You: Left it at reception'), findsOneWidget);
-      expect(find.text('RUN-It Support'), findsNothing); // the old fake pinned thread is gone
+      expect(find.text('Bridgit Support'), findsNothing); // the old fake pinned thread is gone
     });
 
     testWidgets('tapping a thread opens that order’s chat', (tester) async {

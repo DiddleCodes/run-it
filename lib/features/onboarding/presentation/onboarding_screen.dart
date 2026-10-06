@@ -182,7 +182,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           Image.asset('assets/branding/run_it_wordmark_horizontal_on_dark.png', height: 32),
           const SizedBox(height: 10),
           Text(
-            'Need it, Run-It',
+            'Need it, Bridgit',
             style: Theme.of(context).textTheme.bodyMedium
                 ?.copyWith(color: AppColors.onMaroon.withValues(alpha: .65)),
           ),
@@ -264,7 +264,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               ),
                               const SizedBox(width: 10),
                               Text(
-                                'Need it, Run-It',
+                                'Need it, Bridgit',
                                 style: Theme.of(context).textTheme.labelSmall
                                     ?.copyWith(
                                       color: AppColors.onMaroon.withValues(

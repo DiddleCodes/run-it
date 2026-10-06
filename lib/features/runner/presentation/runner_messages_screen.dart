@@ -476,7 +476,7 @@ class _SupportPointer extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'RUN-It Support',
+              'Bridgit Support',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(color: AppColors.inkText),
             ),
             const SizedBox(height: 6),

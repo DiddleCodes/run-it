@@ -252,7 +252,7 @@ class RunnerProfileScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'RUN-It',
+              'Bridgit',
               style: Theme.of(context).textTheme.headlineMedium
                   ?.copyWith(color: AppColors.inkText),
             ),

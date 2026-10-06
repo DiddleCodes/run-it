@@ -256,7 +256,7 @@ class _HeroSection extends StatelessWidget {
                   children: [
                     const TextSpan(text: 'How will you\nuse '),
                     TextSpan(
-                      text: 'RUN-It?',
+                      text: 'Bridgit?',
                       style: TextStyle(color: AppColors.primaryMaroon),
                     ),
                   ],

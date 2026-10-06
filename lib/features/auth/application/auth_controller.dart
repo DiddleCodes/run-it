@@ -366,7 +366,7 @@ class AuthController extends Notifier<AuthSession?> {
   Future<bool> loginWithBiometric() async {
     final stored = await _secureStorage.read(key: _biometricUserKey);
     if (stored == null) return false;
-    final ok = await _authenticateBiometric('Sign in to RUN-It');
+    final ok = await _authenticateBiometric('Sign in to Bridgit');
     if (!ok) return false;
     final user = _decodeUser(jsonDecode(stored) as Map<String, dynamic>);
     final session = await _loadPersistedSession(user);

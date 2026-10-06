@@ -195,7 +195,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 1200));
 
-      expect(find.text('RUN IT Wallet'), findsOneWidget);
+      expect(find.text('Bridgit Wallet'), findsOneWidget);
       expect(find.text('Pay on Delivery'), findsNothing);
       expect(find.text('Pay cash when your order arrives.'), findsNothing);
       expect(find.text('This restaurant requires payment before delivery.'), findsNothing);
@@ -219,7 +219,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 1200));
 
-      expect(find.text('RUN IT Wallet'), findsOneWidget);
+      expect(find.text('Bridgit Wallet'), findsOneWidget);
       expect(find.text('Pay on Delivery'), findsNothing);
     });
 
@@ -308,7 +308,7 @@ void main() {
         // notification, hence two matches: the option's own subtitle plus
         // the toast), same as the Card/Bank stub option.
         expect(find.text('This restaurant requires payment before delivery.'), findsWidgets);
-        expect(find.text('RUN IT Wallet'), findsOneWidget);
+        expect(find.text('Bridgit Wallet'), findsOneWidget);
       },
     );
 
