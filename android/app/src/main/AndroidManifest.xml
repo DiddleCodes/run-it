@@ -16,7 +16,7 @@
     <uses-feature android:name="android.hardware.location" android:required="false"/>
     <uses-feature android:name="android.hardware.location.gps" android:required="false"/>
     <application
-        android:label="Run-It"
+        android:label="Bridgit"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
