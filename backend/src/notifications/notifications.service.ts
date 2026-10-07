@@ -4,7 +4,12 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { Queue } from 'bullmq';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { NOTIFICATION_EVENT, NotificationEvent } from './notification-event';
+import {
+  NOTIFICATION_EVENT,
+  NotificationEvent,
+  ORDER_RESTAURANT_NOTIFICATION_EVENT,
+  OrderRestaurantNotificationEvent,
+} from './notification-event';
 import { FCM_PUSH_QUEUE } from './notifications.constants';
 import { FcmPushJob } from './fcm.processor';
 import { NotificationsGateway } from './notifications.gateway';
@@ -83,6 +88,21 @@ export class NotificationsService {
     }
   }
 
+  @OnEvent(ORDER_RESTAURANT_NOTIFICATION_EVENT, { async: true })
+  async handleForOrderRestaurant(event: OrderRestaurantNotificationEvent): Promise<void> {
+    const { orderId, ...rest } = event;
+    try {
+      const order = await this.prisma.order.findUnique({ where: { id: orderId }, select: { vendor: { select: { userId: true } } } });
+      if (!order) {
+        this.logger.warn(`${event.type} for unknown order ${orderId} — no restaurant to notify`);
+        return;
+      }
+      await this.handle({ ...rest, recipientUserId: order.vendor.userId, data: { ...rest.data, orderId } });
+    } catch (err) {
+      this.logger.error(`Failed to resolve the restaurant for ${event.type} on order ${orderId}: ${(err as Error).message}`);
+    }
+  }
+
   // Upsert-by-token, not by (userId, platform): a token is only ever valid
   // for the app instance that generated it, so re-registering the same
   // token always means "this token belongs here now" — including the case
@@ -103,7 +123,7 @@ export class NotificationsService {
     const page = query.page ?? 1;
     const limit = Math.min(query.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
 
-    const [items, total] = await Promise.all([
+    const [items, total, unreadCount] = await Promise.all([
       this.prisma.notification.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
@@ -111,9 +131,10 @@ export class NotificationsService {
         take: limit,
       }),
       this.prisma.notification.count({ where: { userId } }),
+      this.prisma.notification.count({ where: { userId, readAt: null } }),
     ]);
 
-    return { items, total, page, limit };
+    return { items, total, unreadCount, page, limit };
   }
 
   async markRead(userId: string, id: string) {
@@ -122,5 +143,13 @@ export class NotificationsService {
     if (notification.readAt) return notification;
 
     return this.prisma.notification.update({ where: { id }, data: { readAt: new Date() } });
+  }
+
+  async markAllRead(userId: string): Promise<{ updated: number }> {
+    const { count } = await this.prisma.notification.updateMany({
+      where: { userId, readAt: null },
+      data: { readAt: new Date() },
+    });
+    return { updated: count };
   }
 }

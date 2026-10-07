@@ -18,6 +18,7 @@ abstract final class CacheKeys {
   static const menuPrefix = 'menu/';
   static String orders(String userId) => '$userId/orders';
   static String wallet(String userId) => '$userId/wallet';
+  static String notifications(String userId) => '$userId/notifications';
 }
 
 /// Keys whose screen is currently showing the saved copy rather than live

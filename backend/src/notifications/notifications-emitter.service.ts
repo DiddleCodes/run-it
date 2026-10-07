@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { NOTIFICATION_EVENT, NotificationEvent } from './notification-event';
+import {
+  NOTIFICATION_EVENT,
+  NotificationEvent,
+  ORDER_RESTAURANT_NOTIFICATION_EVENT,
+  OrderRestaurantNotificationEvent,
+} from './notification-event';
 
 // Thin typed wrapper around EventEmitter2 so trigger-point services (order
 // escrow, vendors, orders, admin users) depend on one small interface
@@ -15,5 +20,10 @@ export class NotificationsEmitterService {
 
   emit(event: NotificationEvent): void {
     this.events.emit(NOTIFICATION_EVENT, event);
+  }
+
+  /** For callers that know the order but not which user runs its restaurant. */
+  emitToOrderRestaurant(event: OrderRestaurantNotificationEvent): void {
+    this.events.emit(ORDER_RESTAURANT_NOTIFICATION_EVENT, event);
   }
 }

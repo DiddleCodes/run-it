@@ -471,7 +471,7 @@ describe('OrdersService.getOrderHistoryForStudent', () => {
 // Task 30: the real student-facing "report a problem" entry point.
 describe('OrdersService.reportProblem', () => {
   it('creates a real Dispute for the ordering student, with the reason and optional photo', async () => {
-    const { service, prisma } = makeService();
+    const { service, prisma, notifications } = makeService();
     prisma.order.findUnique.mockResolvedValue({ ...baseOrder });
     prisma.dispute.findUnique.mockResolvedValue(null);
     prisma.dispute.create.mockResolvedValue({ id: 'dispute-1', orderId: 'order-1', status: 'open' });
@@ -488,6 +488,9 @@ describe('OrdersService.reportProblem', () => {
         reporterPhotoUrl: 'https://cdn.example.com/dispute-report/test.jpg',
       },
     });
+    expect(notifications.emitToOrderRestaurant).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'dispute_opened', orderId: 'order-1' }),
+    );
   });
 
   it('works with no photo at all — it is optional', async () => {

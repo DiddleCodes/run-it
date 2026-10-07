@@ -38,6 +38,7 @@ import '../../features/vendor/presentation/restaurant_profile_screen.dart';
 import '../../features/vendor/presentation/restaurant_profile_setup_screen.dart';
 import '../../features/vendor/presentation/vendor_application_screen.dart';
 import '../../features/wallet/presentation/wallet_screen.dart';
+import '../../features/notifications/presentation/notifications_screen.dart';
 import '../widgets/app_nav_shell.dart';
 
 /// Where a user who just finished OTP verification belongs — used by the
@@ -111,6 +112,7 @@ abstract class AppRoutes {
   // Task 46: pushed with `extra: orderId` (String) — same convention as
   // [menu]'s vendorId, not a path parameter.
   static const orderDetail = '/order-detail';
+  static const notifications = '/notifications';
   // Task 78: an order's student <-> runner chat, pushed with `extra: orderId`
   // (String), same convention as [orderDetail]. Shared by both sides.
   static const orderChat = '/order-chat';
@@ -179,6 +181,7 @@ abstract class AppRoutes {
   /// up, so a restaurant account (which has neither) can be kept off both.
   static const _studentShellRoutes = {
     home,
+    notifications,
     studentOrders,
     studentWallet,
     studentProfile,
@@ -397,6 +400,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Task 46: pushed on top (not shell-wrapped) from a Past/Cancelled
       // row — `extra` is the real order id, same convention as [menu]'s
       // vendorId.
+      GoRoute(
+        path: AppRoutes.notifications,
+        builder: (context, state) => const NotificationsScreen(),
+      ),
       GoRoute(
         path: AppRoutes.orderDetail,
         builder: (context, state) => OrderDetailScreen(orderId: state.extra as String),

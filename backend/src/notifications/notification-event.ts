@@ -7,6 +7,9 @@ import { NotificationType } from '@prisma/client';
 // and a new emit() call at its trigger point.
 export const NOTIFICATION_EVENT = 'notification' as const;
 
+/** A notification for whichever restaurant owns [orderId] — resolved by NotificationsService. */
+export const ORDER_RESTAURANT_NOTIFICATION_EVENT = 'notification.order-restaurant' as const;
+
 // Deliberately generic: every emitter resolves its own title/body copy (it
 // has the domain context — order id, vendor name, etc. — that
 // NotificationsService doesn't) and hands over a fully-formed event.
@@ -26,3 +29,5 @@ export interface NotificationEvent {
   // that would only clutter the notification feed. Defaults to true.
   persist?: boolean;
 }
+
+export type OrderRestaurantNotificationEvent = Omit<NotificationEvent, 'recipientUserId'> & { orderId: string };

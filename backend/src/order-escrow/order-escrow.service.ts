@@ -17,6 +17,7 @@ import { AlertsService } from '../alerts/alerts.service';
 import { JwtPayload } from '../auth/jwt-payload.interface';
 import { MatchingService } from '../matching/matching.service';
 import { NotificationsEmitterService } from '../notifications/notifications-emitter.service';
+import { orderReference } from '../common/display/order-reference';
 import { runnerDisplayName } from '../common/display/runner-display-name';
 import { PaystackService } from '../paystack/paystack.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -308,7 +309,7 @@ export class OrderEscrowService {
       type: 'order_placed',
       recipientUserId: dto.restaurantUserId,
       title: 'New order received',
-      body: `You have a new order (${orderId}) waiting to be accepted.`,
+      body: `Order ${orderReference(orderId)} is waiting for you to accept it.`,
       data: { orderId, vendorId },
     });
 
@@ -588,7 +589,12 @@ export class OrderEscrowService {
   // order the kitchen already started) and its own extra order fields.
   async refund(
     orderId: string,
-    options: { requireOrderStatus?: OrderStatus; orderData?: Prisma.OrderUpdateManyMutationInput } = {},
+    options: {
+      requireOrderStatus?: OrderStatus;
+      orderData?: Prisma.OrderUpdateManyMutationInput;
+      // False only for the restaurant's own decline — it doesn't need telling.
+      notifyRestaurant?: boolean;
+    } = {},
   ): Promise<OrderEscrow> {
     const escrow = await this.findByOrderId(orderId);
     if (escrow.status !== 'held') {
@@ -605,7 +611,7 @@ export class OrderEscrowService {
         })
       : null;
 
-    return this.prisma.$transaction(async (tx) => {
+    const refunded = await this.prisma.$transaction(async (tx) => {
       // Conditional transition guards against two concurrent refund calls
       // both crediting the wallet before either commits.
       const transitioned = await tx.orderEscrow.updateMany({
@@ -649,6 +655,17 @@ export class OrderEscrowService {
 
       return tx.orderEscrow.findUniqueOrThrow({ where: { id: escrow.id } });
     });
+
+    if (options.notifyRestaurant !== false) {
+      this.notifications.emit({
+        type: 'order_cancelled',
+        recipientUserId: escrow.restaurantUserId,
+        title: 'Order cancelled',
+        body: `Order ${orderReference(orderId)} was cancelled and the customer refunded. No need to prepare it.`,
+        data: { orderId },
+      });
+    }
+    return refunded;
   }
 
   async findByOrderId(orderId: string): Promise<OrderEscrow> {
@@ -700,7 +717,5 @@ export class OrderEscrowService {
   }
 }
 
-/** The short order reference both apps show ("#31040039"): the id's last 8 characters. */
-export function orderReference(orderId: string): string {
-  return `#${orderId.slice(-8).toUpperCase()}`;
-}
+// Existing importers reach the short reference through this file.
+export { orderReference };

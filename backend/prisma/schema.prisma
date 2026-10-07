@@ -842,6 +842,14 @@ enum NotificationType {
   runner_claim_confirmed
   // A runner claimed the student's order — to the student.
   runner_assigned
+  // To the restaurant: one of its orders was cancelled and refunded by
+  // someone else (the student, an admin, a dispute) — never its own decline.
+  order_cancelled
+  // To the restaurant: a dispute was opened on one of its orders.
+  dispute_opened
+  // To the restaurant: the payout transfer for an order went out / failed.
+  payout_sent
+  payout_failed
 }
 
 model Notification {

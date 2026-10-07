@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/domain/auth_models.dart';
+import '../../features/notifications/data/notifications_repository.dart';
+import '../../features/notifications/domain/app_notification.dart';
 import '../../features/ordering/domain/order_history_models.dart';
 import '../../features/vendor/domain/vendor_dashboard_models.dart';
 import '../../features/wallet/data/wallet_repository.dart';
@@ -60,6 +62,14 @@ CachedSource<num> walletBalanceSource(Ref ref, AuthSession session) => CachedSou
   decode: (json) => json! as num,
 );
 
+/// The student's notification centre (newest page + unread count).
+CachedSource<NotificationFeed> notificationsSource(Ref ref, AuthSession session) => CachedSource(
+  key: CacheKeys.notifications(session.user.id),
+  fetch: () => ref.read(notificationsRepositoryProvider).list(token: session.accessToken),
+  encode: (feed) => feed.toJson(),
+  decode: (json) => NotificationFeed.fromJson(json! as Map<String, dynamic>),
+);
+
 /// Brings every saved copy for [session] up to date — including menus and
 /// screens that aren't open. Menus: the most recently saved few.
 Future<void> refreshAllCached(Ref ref, AuthSession session, {int maxMenus = 10}) async {
@@ -73,6 +83,7 @@ Future<void> refreshAllCached(Ref ref, AuthSession session, {int maxMenus = 10})
     if (isStudent) refreshCached(ref, vendorListSource(ref, session)),
     if (isStudent) refreshCached(ref, vendorCategoriesSource(ref)),
     if (isStudent) refreshCached(ref, orderHistorySource(ref, session)),
+    if (isStudent) refreshCached(ref, notificationsSource(ref, session)),
     refreshCached(ref, walletBalanceSource(ref, session)),
     for (final (vendorId, _) in menuIds.take(maxMenus)) refreshCached(ref, menuSource(ref, vendorId)),
   ]);

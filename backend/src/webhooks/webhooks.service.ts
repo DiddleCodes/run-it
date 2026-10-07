@@ -3,6 +3,9 @@ import { WalletTransaction } from '@prisma/client';
 import { PaystackChargeSuccessEvent, PaystackTransferEvent, PaystackWebhookEvent } from '../paystack/paystack.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { NotificationsEmitterService } from '../notifications/notifications-emitter.service';
+import { formatKobo } from '../common/display/money';
+import { orderReference } from '../common/display/order-reference';
 
 type TransferLegResult = 'success' | 'failed';
 
@@ -13,6 +16,7 @@ export class WebhooksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly notifications: NotificationsEmitterService,
   ) {}
 
   /**
@@ -137,10 +141,33 @@ export class WebhooksService {
 
     if (escrow) {
       if (escrow.restaurantTransferReference === reference) {
-        await this.prisma.orderEscrow.updateMany({
+        const { count } = await this.prisma.orderEscrow.updateMany({
           where: { id: escrow.id, restaurantTransferStatus: 'pending' },
           data: { restaurantTransferStatus: legStatus },
         });
+        // Only the call that actually moved it out of pending — a repeated
+        // webhook doesn't tell the restaurant twice.
+        if (count === 1) {
+          const amount = formatKobo(escrow.restaurantShare);
+          const ref = orderReference(escrow.orderId);
+          this.notifications.emit(
+            legStatus === 'success'
+              ? {
+                  type: 'payout_sent',
+                  recipientUserId: escrow.restaurantUserId,
+                  title: 'Payout sent',
+                  body: `${amount} for order ${ref} is on its way to your bank account.`,
+                  data: { orderId: escrow.orderId },
+                }
+              : {
+                  type: 'payout_failed',
+                  recipientUserId: escrow.restaurantUserId,
+                  title: 'Payout failed',
+                  body: `The ${amount} payout for order ${ref} couldn't be sent. Check your payout account details in Profile.`,
+                  data: { orderId: escrow.orderId },
+                },
+          );
+        }
       } else if (escrow.runnerTransferReference === reference) {
         await this.prisma.orderEscrow.updateMany({
           where: { id: escrow.id, runnerTransferStatus: 'pending' },

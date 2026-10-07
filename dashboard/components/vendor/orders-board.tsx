@@ -34,10 +34,13 @@ function itemsSummary(order: IncomingOrder): string {
   return order.items.map((i) => `${i.quantity}× ${i.nameSnapshot}`).join(", ");
 }
 
-export function OrdersBoard({ initialData }: { initialData: IncomingOrdersResponse }) {
+export function OrdersBoard({ initialData, focusOrderId }: { initialData: IncomingOrdersResponse; focusOrderId?: string }) {
   const [orders, setOrders] = useState<IncomingOrder[]>(initialData.items);
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
-  const [selected, setSelected] = useState<IncomingOrder | null>(null);
+  // Opened from a notification: start with that order's panel open, if it's still in the queue.
+  const [selected, setSelected] = useState<IncomingOrder | null>(
+    () => (focusOrderId ? (initialData.items.find((o) => o.id === focusOrderId) ?? null) : null),
+  );
   const [actioningId, setActioningId] = useState<string | null>(null);
   // Task 61: the order being declined (modal open) and the chosen reason.
   const [declineTarget, setDeclineTarget] = useState<IncomingOrder | null>(null);

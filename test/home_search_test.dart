@@ -11,6 +11,8 @@ import 'package:run_it/core/network/vendors_repository.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
 import 'package:run_it/features/home/presentation/home_screen.dart';
+import 'package:run_it/features/notifications/data/notifications_repository.dart';
+import 'package:run_it/features/notifications/domain/app_notification.dart';
 import 'package:run_it/features/vendor/domain/vendor_dashboard_models.dart';
 
 class _FakeAuthController extends AuthController {
@@ -92,7 +94,17 @@ class _FakeVendorsRepository extends VendorsRepository {
   }
 }
 
-Future<_FakeVendorsRepository> _pumpHome(WidgetTester tester) async {
+/// A feed with [unread] unread notifications.
+class _FakeNotificationsRepository extends NotificationsRepository {
+  const _FakeNotificationsRepository(this.unread);
+  final int unread;
+
+  @override
+  Future<NotificationFeed> list({required String token, int limit = 50}) async =>
+      NotificationFeed(items: const [], unreadCount: unread);
+}
+
+Future<_FakeVendorsRepository> _pumpHome(WidgetTester tester, {int unreadNotifications = 0}) async {
   final repository = _FakeVendorsRepository();
   // The Campus Pick promo card (unrelated to search) overflows in the test
   // environment only: google_fonts can't fetch its font here, and the
@@ -116,6 +128,7 @@ Future<_FakeVendorsRepository> _pumpHome(WidgetTester tester) async {
       overrides: [
         authControllerProvider.overrideWith(_FakeAuthController.new),
         vendorsRepositoryProvider.overrideWithValue(repository),
+        notificationsRepositoryProvider.overrideWithValue(_FakeNotificationsRepository(unreadNotifications)),
       ],
       child: const MaterialApp(home: HomeScreen()),
     ),
@@ -134,6 +147,26 @@ Future<void> _type(WidgetTester tester, String text) async {
 }
 
 void main() {
+  group('Home bell', () {
+    testWidgets('shows how many notifications are unread', (tester) async {
+      await _pumpHome(tester, unreadNotifications: 3);
+      expect(find.byKey(const ValueKey('bell-badge')), findsOneWidget);
+      expect(find.text('3'), findsOneWidget);
+      expect(find.bySemanticsLabel('Notifications, 3 unread'), findsOneWidget);
+    });
+
+    testWidgets('shows no badge when everything is read', (tester) async {
+      await _pumpHome(tester);
+      expect(find.byKey(const ValueKey('bell-badge')), findsNothing);
+      expect(find.bySemanticsLabel('Notifications'), findsOneWidget);
+    });
+
+    testWidgets('caps the badge at 9+', (tester) async {
+      await _pumpHome(tester, unreadNotifications: 14);
+      expect(find.text('9+'), findsOneWidget);
+    });
+  });
+
   group('Home search bar', () {
     testWidgets('is one control: the field draws no box of its own inside the pill', (tester) async {
       await _pumpHome(tester);

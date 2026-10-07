@@ -1,6 +1,6 @@
 import { MatchingService } from '../src/matching/matching.service';
 import { escalateJobId, rebroadcastJobId } from '../src/matching/matching.constants';
-import { createConfigMock, createPrismaMock } from './support/mocks';
+import { createNotificationsEmitterMock, createConfigMock, createPrismaMock } from './support/mocks';
 
 const MATCHING_CONFIG = {
   'matching.rebroadcastSeconds': 20,
@@ -12,8 +12,9 @@ function makeService() {
   const config = createConfigMock(MATCHING_CONFIG);
   const gateway = { broadcastNewJob: jest.fn() };
   const queue = { add: jest.fn().mockResolvedValue(undefined), remove: jest.fn().mockResolvedValue(undefined) };
-  const service = new MatchingService(queue as any, gateway as any, prisma as any, config as any);
-  return { service, prisma, config, gateway, queue };
+  const notifications = createNotificationsEmitterMock();
+  const service = new MatchingService(queue as any, gateway as any, prisma as any, config as any, notifications as any);
+  return { service, prisma, config, gateway, queue, notifications };
 }
 
 describe('MatchingService.broadcastNewJob', () => {
@@ -100,7 +101,7 @@ describe('MatchingService.handleRebroadcast', () => {
 
 describe('MatchingService.handleEscalate', () => {
   it('creates a Dispute when still unclaimed past the matching window', async () => {
-    const { service, prisma } = makeService();
+    const { service, prisma, notifications } = makeService();
     prisma.order.findUnique.mockResolvedValue({ id: 'order-1', vendorId: 'vendor-1', runnerUserId: null, status: 'preparing' });
     prisma.dispute.upsert.mockResolvedValue({ id: 'dispute-1' });
 
@@ -111,6 +112,22 @@ describe('MatchingService.handleEscalate', () => {
       create: { orderId: 'order-1', reason: 'No runner claimed this order within the matching window' },
       update: {},
     });
+    expect(notifications.emitToOrderRestaurant).toHaveBeenCalledWith({
+      type: 'dispute_opened',
+      orderId: 'order-1',
+      title: 'Dispute opened',
+      body: 'A dispute was opened on order #ORDER-1: No runner claimed this order within the matching window',
+    });
+  });
+
+  it('does not tell the restaurant again when a retried escalation finds the dispute already open', async () => {
+    const { service, prisma, notifications } = makeService();
+    prisma.order.findUnique.mockResolvedValue({ id: 'order-1', vendorId: 'vendor-1', runnerUserId: null, status: 'preparing' });
+    prisma.dispute.findUnique.mockResolvedValue({ id: 'dispute-1' });
+
+    await service.handleEscalate('order-1');
+
+    expect(notifications.emitToOrderRestaurant).not.toHaveBeenCalled();
   });
 
   it('does not escalate once a runner has claimed it', async () => {

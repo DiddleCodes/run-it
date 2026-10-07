@@ -18,6 +18,7 @@ import { MetricsQueryDto } from './dto/metrics-query.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { UpdateOrderStatusDto, VendorDrivenStatus } from './dto/update-order-status.dto';
 import { UpsertVendorDto } from './dto/upsert-vendor.dto';
+import { formatKobo } from '../common/display/money';
 
 const DEFAULT_METRICS_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -42,9 +43,6 @@ const DECLINE_REASON_LABELS: Record<Exclude<OrderDeclineReasonInput, 'other'>, s
   too_busy: 'Too busy',
 };
 
-function formatNaira(kobo: number): string {
-  return `₦${(kobo / 100).toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
-}
 
 @Injectable()
 export class VendorsService {
@@ -387,6 +385,7 @@ export class VendorsService {
     const escrow = await this.escrow.refund(orderId, {
       requireOrderStatus: 'placed',
       orderData: { declinedAt: new Date(), declineReason: dto.reason, declineReasonNote: note },
+      notifyRestaurant: false,
     });
 
     const reasonText = dto.reason === 'other' ? note! : DECLINE_REASON_LABELS[dto.reason];
@@ -395,7 +394,7 @@ export class VendorsService {
       recipientUserId: order.studentUserId,
       title: 'Order declined',
       body: walletPaid
-        ? `${vendor.businessName} declined your order — "${reasonText}". Your ${formatNaira(escrow.grossAmount)} has been refunded to your Bridgit wallet.`
+        ? `${vendor.businessName} declined your order — "${reasonText}". Your ${formatKobo(escrow.grossAmount)} has been refunded to your Bridgit wallet.`
         : `${vendor.businessName} declined your order — "${reasonText}". You haven't been charged for it.`,
       data: { orderId, reason: dto.reason, refunded: String(walletPaid) },
     });

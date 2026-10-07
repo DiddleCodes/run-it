@@ -7,6 +7,8 @@ import { JwtPayload } from '../auth/jwt-payload.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import { ESCALATE_JOB, REBROADCAST_JOB, escalateJobId, rebroadcastJobId, MATCHING_QUEUE } from './matching.constants';
 import { RunnerDispatchGateway } from './runner-dispatch.gateway';
+import { NotificationsEmitterService } from '../notifications/notifications-emitter.service';
+import { orderReference } from '../common/display/order-reference';
 
 export interface AvailableJob {
   orderId: string;
@@ -57,6 +59,7 @@ export class MatchingService {
     private readonly gateway: RunnerDispatchGateway,
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly notifications: NotificationsEmitterService,
   ) {}
 
   /**
@@ -115,10 +118,19 @@ export class MatchingService {
     // upsert, not create: matches the delivery-proof-review Dispute's own
     // convention (Dispute.orderId is @unique) — a retried/duplicate
     // escalation job for the same order must not throw.
+    const reason = 'No runner claimed this order within the matching window';
+    const alreadyOpen = await this.prisma.dispute.findUnique({ where: { orderId }, select: { id: true } });
     await this.prisma.dispute.upsert({
       where: { orderId },
-      create: { orderId, reason: 'No runner claimed this order within the matching window' },
+      create: { orderId, reason },
       update: {},
+    });
+    // A retried escalation job doesn't tell the restaurant twice.
+    if (!alreadyOpen) this.notifications.emitToOrderRestaurant({
+      type: 'dispute_opened',
+      orderId: orderId,
+      title: 'Dispute opened',
+      body: `A dispute was opened on order ${orderReference(orderId)}: ${reason}`,
     });
     this.logger.warn(`Order ${orderId} escalated — unclaimed past the matching window`);
   }

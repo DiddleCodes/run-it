@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { NotificationBell } from "./notification-bell";
 
 interface TopBarProps {
   user: { name: string | null; email: string | null; accountType: string };
@@ -30,33 +31,14 @@ export function TopBar({ user }: TopBarProps) {
   return (
     <header className="glass-bar h-14 flex items-center px-5 border-b border-black/5 flex-shrink-0 gap-4 sticky top-0 z-30">
       <div className="ml-auto flex items-center gap-1">
-        <div className="relative">
-          <button
-            onClick={() => {
-              setNotifOpen((p) => !p);
-              setMenuOpen(false);
-            }}
-            aria-label="Notifications"
-            className="relative p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-black/5 transition-colors"
-          >
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M9 2a5 5 0 00-5 5v3l-1.5 2.5h13L14 10V7a5 5 0 00-5-5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-              <path d="M7.5 15a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </button>
-          {notifOpen && (
-            <div className="absolute right-0 top-10 w-72 bg-card border border-[var(--border)] rounded-xl shadow-xl z-50 overflow-hidden">
-              <div className="px-4 py-3 border-b border-[var(--border)]">
-                <p className="text-sm font-semibold">Notifications</p>
-              </div>
-              {/* No notification feed exists yet — say so rather than show made-up alerts. */}
-              <div className="px-4 py-6 text-center">
-                <p className="text-sm text-[var(--foreground)]">No notifications yet</p>
-                <p className="text-[11px] text-[var(--muted-foreground)] mt-1">Order and dispute alerts are coming soon.</p>
-              </div>
-            </div>
-          )}
-        </div>
+        <NotificationBell
+          accountType={user.accountType}
+          open={notifOpen}
+          onOpenChange={(open) => {
+            setNotifOpen(open);
+            if (open) setMenuOpen(false);
+          }}
+        />
 
         <div className="relative">
           <button

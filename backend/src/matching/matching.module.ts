@@ -6,11 +6,12 @@ import { MatchingController } from './matching.controller';
 import { MatchingProcessor } from './matching.processor';
 import { MatchingService } from './matching.service';
 import { RunnerDispatchGateway } from './runner-dispatch.gateway';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   // CommonModule re-exports AuthModule's JwtModule — RunnerDispatchGateway
   // verifies the same JWT the REST API issues, same as NotificationsGateway.
-  imports: [CommonModule, BullModule.registerQueue({ name: MATCHING_QUEUE })],
+  imports: [CommonModule, NotificationsModule, BullModule.registerQueue({ name: MATCHING_QUEUE })],
   controllers: [MatchingController],
   providers: [MatchingService, MatchingProcessor, RunnerDispatchGateway],
   // Consumed by OrderEscrowModule (claim cancels pending jobs) and

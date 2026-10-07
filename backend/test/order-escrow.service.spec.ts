@@ -111,7 +111,7 @@ describe('OrderEscrowService.hold', () => {
   });
 
   it('debits the wallet for food subtotal + delivery fee + service fee, writes a ledger entry, and splits per configured rates', async () => {
-    const { service, prisma } = makeService();
+    const { service, prisma, notifications } = makeService();
     prisma.orderEscrow.findUnique.mockResolvedValue(null);
     prisma.wallet.findUnique.mockResolvedValue({ id: 'w1', userId: 's1', balance: 1_000_000 });
     prisma.wallet.updateMany.mockResolvedValue({ count: 1 });
@@ -154,6 +154,15 @@ describe('OrderEscrowService.hold', () => {
     expect(result.grossAmount).toBe(155_000);
     expect(result.status).toBe('held');
     expect(result.studentWalletTransactionId).toBe('wt1');
+
+    // The restaurant's "new order" notice names the order by its short reference.
+    expect(notifications.emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'order_placed',
+        recipientUserId: 'r1',
+        body: 'Order #ORDER-1 is waiting for you to accept it.',
+      }),
+    );
   });
 
   it('keeps the service fee out of the commissionable base — it never touches the restaurant payout', async () => {
@@ -1305,6 +1314,28 @@ describe('OrderEscrowService.refund', () => {
       where: { id: 'order-1' },
       data: { status: 'cancelled', cancelledAt: expect.any(Date) },
     });
+  });
+
+  it('tells the restaurant its order was cancelled — unless it declined the order itself', async () => {
+    const { service, prisma, notifications } = makeService();
+    const escrow = { ...heldEscrow, orderId: 'order-1790884524513906', restaurantUserId: 'rest-user-1' };
+    prisma.orderEscrow.findUnique.mockResolvedValue(escrow);
+    prisma.walletTransaction.findUniqueOrThrow.mockResolvedValue({ id: 'wt1', walletId: 'w1' });
+    prisma.orderEscrow.updateMany.mockResolvedValue({ count: 1 });
+    prisma.orderEscrow.findUniqueOrThrow.mockResolvedValue({ ...escrow, status: 'refunded' });
+
+    await service.refund('order-1790884524513906');
+    expect(notifications.emit).toHaveBeenCalledWith({
+      type: 'order_cancelled',
+      recipientUserId: 'rest-user-1',
+      title: 'Order cancelled',
+      body: 'Order #24513906 was cancelled and the customer refunded. No need to prepare it.',
+      data: { orderId: 'order-1790884524513906' },
+    });
+
+    notifications.emit.mockClear();
+    await service.refund('order-1790884524513906', { notifyRestaurant: false });
+    expect(notifications.emit).not.toHaveBeenCalled();
   });
 
   it('Task 47: cancels a Pay on Delivery order with no wallet transaction to credit back — no wallet lookup at all', async () => {

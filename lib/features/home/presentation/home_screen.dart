@@ -27,6 +27,7 @@ import '../../ordering/application/ordering_providers.dart';
 import '../../ordering/domain/ordering_models.dart';
 import '../../ordering/domain/vendor_filters.dart';
 import '../../ordering/presentation/widgets/ordering_components.dart' show MenuImagePlaceholder;
+import '../../notifications/application/notifications_controller.dart';
 
 /// Task 14/15: the backend's controlled category vocabulary (`GET
 /// /vendors/categories`) — every vendor's own category is validated
@@ -356,9 +357,9 @@ class _Header extends ConsumerWidget {
         const SizedBox(width: 8),
         _HeaderIconButton(
           icon: CupertinoIcons.bell,
-          onTap: () => ref
-              .read(appNotificationProvider.notifier)
-              .info('Notifications are coming soon.'),
+          semanticLabel: 'Notifications',
+          badgeCount: ref.watch(unreadNotificationCountProvider),
+          onTap: () => context.push(AppRoutes.notifications),
         ),
         const SizedBox(width: 8),
         _AvatarButton(
@@ -371,25 +372,65 @@ class _Header extends ConsumerWidget {
 }
 
 class _HeaderIconButton extends StatelessWidget {
-  const _HeaderIconButton({required this.icon, required this.onTap});
+  const _HeaderIconButton({required this.icon, required this.onTap, this.semanticLabel, this.badgeCount = 0});
   final IconData icon;
   final VoidCallback onTap;
+  final String? semanticLabel;
+
+  /// Unread count shown on the corner; hidden at 0, "9+" past nine.
+  final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      customBorder: const CircleBorder(),
-      child: Container(
-        width: 46,
-        height: 46,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.surfaceCard,
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: AppColors.borderSubtle),
+    final label = semanticLabel == null
+        ? null
+        : badgeCount > 0
+        ? '$semanticLabel, $badgeCount unread'
+        : semanticLabel;
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: label != null,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceCard,
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: AppColors.borderSubtle),
+              ),
+              child: Icon(icon, color: AppColors.inkText, size: 21),
+            ),
+            if (badgeCount > 0)
+              Positioned(
+                top: -4,
+                right: -4,
+                child: Container(
+                  key: const ValueKey('bell-badge'),
+                  constraints: const BoxConstraints(minWidth: 20),
+                  height: 20,
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryMaroon,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.backgroundCream, width: 2),
+                  ),
+                  child: Text(
+                    badgeCount > 9 ? '9+' : '$badgeCount',
+                    style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w700, height: 1),
+                  ),
+                ),
+              ),
+          ],
         ),
-        child: Icon(icon, color: AppColors.inkText, size: 21),
       ),
     );
   }

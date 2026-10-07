@@ -18,6 +18,7 @@ import { DeliveryProofDto } from './dto/delivery-proof.dto';
 import { ReportProblemDto } from './dto/report-problem.dto';
 import { formatKobo } from '../common/display/money';
 import { runnerDisplayName } from '../common/display/runner-display-name';
+import { orderReference } from '../common/display/order-reference';
 
 // Re-exported so existing imports from here keep working.
 export { runnerDisplayName };
@@ -194,9 +195,16 @@ export class OrdersService {
       throw new ConflictException(`A dispute already exists for order ${orderId}`);
     }
 
-    return this.prisma.dispute.create({
+    const dispute = await this.prisma.dispute.create({
       data: { orderId, reason: dto.reason, reporterPhotoUrl: dto.photoUrl },
     });
+    this.notifications.emitToOrderRestaurant({
+      type: 'dispute_opened',
+      orderId: orderId,
+      title: 'Dispute opened',
+      body: `A dispute was opened on order ${orderReference(orderId)}: ${dto.reason}`,
+    });
+    return dispute;
   }
 
   async getOrderForViewer(orderId: string, user: JwtPayload) {

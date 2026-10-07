@@ -93,3 +93,71 @@ describe('NotificationsService.markRead', () => {
     expect(prisma.notification.update).not.toHaveBeenCalled();
   });
 });
+
+describe('NotificationsService — unread state', () => {
+  it('lists newest first with the unread count alongside the page', async () => {
+    const { service, prisma } = makeService();
+    prisma.notification.findMany.mockResolvedValue([{ id: 'n2' }, { id: 'n1' }]);
+    prisma.notification.count.mockImplementation(({ where }: any) => Promise.resolve(where.readAt === null ? 1 : 2));
+
+    const result = await service.list('user-1', {});
+
+    expect(prisma.notification.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'user-1' }, orderBy: { createdAt: 'desc' } }),
+    );
+    expect(result).toEqual({ items: [{ id: 'n2' }, { id: 'n1' }], total: 2, unreadCount: 1, page: 1, limit: 20 });
+  });
+
+  it('marks one of my notifications read, once', async () => {
+    const { service, prisma } = makeService();
+    prisma.notification.findUnique.mockResolvedValue({ id: 'n1', userId: 'user-1', readAt: null });
+    prisma.notification.update.mockResolvedValue({ id: 'n1', readAt: new Date() });
+
+    await service.markRead('user-1', 'n1');
+    expect(prisma.notification.update).toHaveBeenCalledWith({ where: { id: 'n1' }, data: { readAt: expect.any(Date) } });
+
+    prisma.notification.update.mockClear();
+    prisma.notification.findUnique.mockResolvedValue({ id: 'n1', userId: 'user-1', readAt: new Date() });
+    await service.markRead('user-1', 'n1');
+    expect(prisma.notification.update).not.toHaveBeenCalled();
+  });
+
+  it('marks all of my unread notifications read — and only mine', async () => {
+    const { service, prisma } = makeService();
+    prisma.notification.updateMany.mockResolvedValue({ count: 3 });
+
+    await expect(service.markAllRead('user-1')).resolves.toEqual({ updated: 3 });
+    expect(prisma.notification.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1', readAt: null },
+      data: { readAt: expect.any(Date) },
+    });
+  });
+});
+
+describe('NotificationsService — notifications for an order\'s restaurant', () => {
+  it('finds the user who runs the order\'s restaurant, then stores and pushes as usual', async () => {
+    const { service, prisma, fcmQueue } = makeService();
+    prisma.order.findUnique.mockResolvedValue({ vendor: { userId: 'rest-user-1' } });
+
+    await service.handleForOrderRestaurant({
+      type: 'dispute_opened',
+      orderId: 'order-1',
+      title: 'Dispute opened',
+      body: 'A dispute was opened on order #ORDER-1: Cold food',
+    });
+
+    expect(prisma.notification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ userId: 'rest-user-1', type: 'dispute_opened', data: { orderId: 'order-1' } }),
+    });
+    expect(fcmQueue.add).toHaveBeenCalledWith('push', expect.objectContaining({ userId: 'rest-user-1' }), expect.anything());
+  });
+
+  it('does nothing for an order that no longer exists', async () => {
+    const { service, prisma } = makeService();
+    prisma.order.findUnique.mockResolvedValue(null);
+
+    await service.handleForOrderRestaurant({ type: 'dispute_opened', orderId: 'gone', title: 't', body: 'b' });
+
+    expect(prisma.notification.create).not.toHaveBeenCalled();
+  });
+});

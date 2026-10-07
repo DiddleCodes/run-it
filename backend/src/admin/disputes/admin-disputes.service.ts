@@ -5,6 +5,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AdminAuditLogService } from '../admin-audit-log.service';
 import { OpenDisputeDto } from './dto/open-dispute.dto';
 import { DisputeResolutionInput, ResolveDisputeDto } from './dto/resolve-dispute.dto';
+import { NotificationsEmitterService } from '../../notifications/notifications-emitter.service';
+import { orderReference } from '../../common/display/order-reference';
 
 const ORDER_DETAIL_INCLUDE = {
   vendor: { select: { id: true, businessName: true } },
@@ -20,6 +22,7 @@ export class AdminDisputesService {
     private readonly prisma: PrismaService,
     private readonly escrow: OrderEscrowService,
     private readonly auditLog: AdminAuditLogService,
+    private readonly notifications: NotificationsEmitterService,
   ) {}
 
   async list(status?: DisputeStatus) {
@@ -50,7 +53,7 @@ export class AdminDisputesService {
     const existing = await this.prisma.dispute.findUnique({ where: { orderId: dto.orderId } });
     if (existing) throw new ConflictException(`A dispute already exists for order ${dto.orderId}`);
 
-    return this.prisma.$transaction(async (tx) => {
+    const dispute = await this.prisma.$transaction(async (tx) => {
       const dispute = await tx.dispute.create({ data: { orderId: dto.orderId, reason: dto.reason } });
       await this.auditLog.record(
         { actorId: adminUserId, action: 'dispute.open', targetType: 'dispute', targetId: dispute.id, reason: dto.reason },
@@ -58,6 +61,13 @@ export class AdminDisputesService {
       );
       return dispute;
     });
+    this.notifications.emitToOrderRestaurant({
+      type: 'dispute_opened',
+      orderId: dto.orderId,
+      title: 'Dispute opened',
+      body: `A dispute was opened on order ${orderReference(dto.orderId)}: ${dto.reason}`,
+    });
+    return dispute;
   }
 
   // Resolution types are exactly what the existing escrow endpoints

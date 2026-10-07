@@ -1,11 +1,12 @@
 import { WebhooksService } from '../src/webhooks/webhooks.service';
-import { createPrismaMock, createRedisMock } from './support/mocks';
+import { createNotificationsEmitterMock, createPrismaMock, createRedisMock } from './support/mocks';
 
 function makeService() {
   const prisma = createPrismaMock();
   const redis = createRedisMock();
-  const service = new WebhooksService(prisma as any, redis as any);
-  return { service, prisma, redis };
+  const notifications = createNotificationsEmitterMock();
+  const service = new WebhooksService(prisma as any, redis as any, notifications as any);
+  return { service, prisma, redis, notifications };
 }
 
 const chargeSuccessEvent = {
@@ -80,6 +81,9 @@ describe('WebhooksService.applyPaystackEvent — transfer confirmation', () => {
     const { service, prisma } = makeService();
     const escrow = {
       id: 'esc1',
+      orderId: 'order-1790884524513906',
+      restaurantUserId: 'rest-user-1',
+      restaurantShare: 122_825,
       restaurantTransferReference: 'escrow_esc1_restaurant',
       runnerTransferReference: 'escrow_esc1_runner',
     };
@@ -97,6 +101,57 @@ describe('WebhooksService.applyPaystackEvent — transfer confirmation', () => {
       where: { id: 'esc1', restaurantTransferStatus: 'pending' },
       data: { restaurantTransferStatus: 'success' },
     });
+  });
+});
+
+describe('WebhooksService — restaurant payout notifications', () => {
+  const escrow = {
+    id: 'esc1',
+    orderId: 'order-1790884524513906',
+    restaurantUserId: 'rest-user-1',
+    restaurantShare: 122_825,
+    restaurantTransferReference: 'escrow_esc1_restaurant',
+    runnerTransferReference: null,
+  };
+  const event = (kind: 'transfer.success' | 'transfer.failed') => ({
+    event: kind,
+    data: { reference: 'escrow_esc1_restaurant', transfer_code: 'TRF_1', amount: 122_825, status: kind === 'transfer.success' ? 'success' : 'failed' },
+  });
+
+  it('tells the restaurant its payout went out, with the amount in the shared format', async () => {
+    const { service, prisma, notifications } = makeService();
+    prisma.orderEscrow.findFirst.mockResolvedValue(escrow);
+    prisma.orderEscrow.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.applyPaystackEvent(event('transfer.success') as any);
+
+    expect(notifications.emit).toHaveBeenCalledWith({
+      type: 'payout_sent',
+      recipientUserId: 'rest-user-1',
+      title: 'Payout sent',
+      body: '₦1,228.25 for order #24513906 is on its way to your bank account.',
+      data: { orderId: 'order-1790884524513906' },
+    });
+  });
+
+  it('tells it when the payout failed', async () => {
+    const { service, prisma, notifications } = makeService();
+    prisma.orderEscrow.findFirst.mockResolvedValue(escrow);
+    prisma.orderEscrow.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.applyPaystackEvent(event('transfer.failed') as any);
+
+    expect(notifications.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'payout_failed', recipientUserId: 'rest-user-1' }));
+  });
+
+  it('says nothing for a repeated webhook that changed nothing', async () => {
+    const { service, prisma, notifications } = makeService();
+    prisma.orderEscrow.findFirst.mockResolvedValue(escrow);
+    prisma.orderEscrow.updateMany.mockResolvedValue({ count: 0 });
+
+    await service.applyPaystackEvent(event('transfer.success') as any);
+
+    expect(notifications.emit).not.toHaveBeenCalled();
   });
 });
 

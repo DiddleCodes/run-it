@@ -7,6 +7,9 @@ import 'package:run_it/core/routing/app_router.dart';
 import 'package:run_it/core/widgets/app_notification.dart';
 import 'package:run_it/features/auth/application/auth_controller.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
+import 'package:run_it/features/notifications/application/notifications_controller.dart';
+import 'package:run_it/features/notifications/data/notifications_repository.dart';
+import 'package:run_it/features/notifications/domain/app_notification.dart';
 
 class _FakeAuthController extends AuthController {
   @override
@@ -73,7 +76,18 @@ AuthSession _session(String userId, {String accessToken = 'access-1'}) => AuthSe
   user: UserProfile(id: userId, name: 'Ayanfe O.', contact: 'a@ui.edu.ng', accountType: AccountType.student),
 );
 
+class _CountingNotifications extends NotificationsRepository {
+  var fetches = 0;
+
+  @override
+  Future<NotificationFeed> list({required String token, int limit = 50}) async {
+    fetches++;
+    return NotificationFeed.empty;
+  }
+}
+
 void main() {
+  late _CountingNotifications notifications;
   late _FakeClient client;
   late _FakeDeviceTokens deviceTokens;
   late ProviderContainer container;
@@ -82,11 +96,13 @@ void main() {
   setUp(() {
     client = _FakeClient();
     deviceTokens = _FakeDeviceTokens();
+    notifications = _CountingNotifications();
     container = ProviderContainer(
       overrides: [
         pushMessagingClientProvider.overrideWithValue(client),
         deviceTokenRepositoryProvider.overrideWithValue(deviceTokens),
         authControllerProvider.overrideWith(_FakeAuthController.new),
+        notificationsRepositoryProvider.overrideWithValue(notifications),
       ],
     );
     addTearDown(container.dispose);
@@ -227,5 +243,29 @@ void main() {
       container.read(appNotificationProvider).single.message,
       'Runner assigned — Test R. is picking up your order from Golden Crust Bakery.',
     );
+  });
+
+  test("a student's bell catches up the moment a push arrives — but not for a chat message", () async {
+    auth.signIn(
+      AuthSession(
+        accessToken: 'a',
+        refreshToken: 'r',
+        expiresAt: DateTime.now().add(const Duration(minutes: 5)),
+        user: const UserProfile(id: 's1', name: 'S', contact: 's@student.ui.edu.ng', accountType: AccountType.student),
+      ),
+    );
+    await settle();
+    await container.read(notificationsProvider.future); // the bell has loaded it
+    final before = notifications.fetches;
+
+    client.foreground.add(const PushMessage(title: 'Order accepted', data: {'type': 'order_accepted', 'orderId': 'o1'}));
+    await settle();
+    await settle();
+    expect(notifications.fetches, before + 1);
+
+    client.foreground.add(const PushMessage(title: 'Tunde', data: {'type': 'chat_message', 'orderId': 'o1'}));
+    await settle();
+    await settle();
+    expect(notifications.fetches, before + 1);
   });
 }

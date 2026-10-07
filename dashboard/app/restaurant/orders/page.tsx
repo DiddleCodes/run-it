@@ -4,14 +4,16 @@ import { PageHeader } from "@/components/layout/page-header";
 import { OrdersBoard } from "@/components/vendor/orders-board";
 import type { IncomingOrdersResponse } from "@/lib/api/vendor-client";
 
-export default async function RestaurantOrdersPage() {
+export default async function RestaurantOrdersPage({ searchParams }: { searchParams: Promise<{ order?: string }> }) {
+  const { order: focusOrderId } = await searchParams;
   const token = await getSessionToken();
   const initialData = await backendFetch<IncomingOrdersResponse>("/vendors/me/orders/incoming", { token: token! });
 
   return (
     <>
       <PageHeader title="Orders" subtitle="Live queue for your kitchen." breadcrumb="Restaurant" />
-      <OrdersBoard initialData={initialData} />
+      {/* Keyed so following a notification to another order opens that one. */}
+      <OrdersBoard key={focusOrderId ?? ""} initialData={initialData} focusOrderId={focusOrderId} />
     </>
   );
 }

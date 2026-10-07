@@ -142,6 +142,7 @@ export function createPrismaMock() {
       findUnique: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       count: jest.fn().mockResolvedValue(0),
     },
     deviceToken: {
@@ -194,6 +195,7 @@ export function createConfigMock(values: Record<string, unknown>) {
 export function createNotificationsEmitterMock() {
   return {
     emit: jest.fn(),
+    emitToOrderRestaurant: jest.fn(),
   };
 }
 

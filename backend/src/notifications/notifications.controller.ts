@@ -30,6 +30,11 @@ export class NotificationsController {
     return this.notifications.list(user.sub, query);
   }
 
+  @Post('read-all')
+  markAllRead(@CurrentUser() user: JwtPayload) {
+    return this.notifications.markAllRead(user.sub);
+  }
+
   @Post(':id/read')
   markRead(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.notifications.markRead(user.sub, id);

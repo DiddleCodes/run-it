@@ -1,14 +1,15 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { AdminDisputesService } from '../src/admin/disputes/admin-disputes.service';
 import { AdminAuditLogService } from '../src/admin/admin-audit-log.service';
-import { createPrismaMock } from './support/mocks';
+import { createNotificationsEmitterMock, createPrismaMock } from './support/mocks';
 
 function makeService() {
   const prisma = createPrismaMock();
   const escrow = { release: jest.fn(), refund: jest.fn() };
   const auditLog = new AdminAuditLogService(prisma as any);
-  const service = new AdminDisputesService(prisma as any, escrow as any, auditLog);
-  return { service, prisma, escrow };
+  const notifications = createNotificationsEmitterMock();
+  const service = new AdminDisputesService(prisma as any, escrow as any, auditLog, notifications as any);
+  return { service, prisma, escrow, notifications };
 }
 
 const openDispute = {
@@ -35,6 +36,19 @@ describe('AdminDisputesService.open', () => {
     prisma.order.findUnique.mockResolvedValue(null);
 
     await expect(service.open('admin-1', { orderId: 'missing', reason: 'x' })).rejects.toThrow(NotFoundException);
+  });
+
+  it('tells the order\'s restaurant a dispute was opened', async () => {
+    const { service, prisma, notifications } = makeService();
+    prisma.order.findUnique.mockResolvedValue({ id: 'order-1' });
+    prisma.dispute.findUnique.mockResolvedValue(null);
+    prisma.dispute.create.mockResolvedValue({ id: 'dispute-1', orderId: 'order-1' });
+
+    await service.open('admin-1', { orderId: 'order-1', reason: 'Customer complaint' });
+
+    expect(notifications.emitToOrderRestaurant).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'dispute_opened', orderId: 'order-1', body: 'A dispute was opened on order #ORDER-1: Customer complaint' }),
+    );
   });
 
   it('creates the dispute and writes an audit row', async () => {

@@ -5,9 +5,11 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/auth/domain/auth_models.dart';
+import '../../features/notifications/application/notifications_controller.dart';
 import '../../features/ordering/application/order_tracking_controller.dart';
 import '../../features/runner/application/runner_controller.dart';
 import '../network/api_client.dart';
@@ -133,6 +135,31 @@ String? pushDestination(
   return orderId == trackedOrderId ? AppRoutes.orderTracking : AppRoutes.orderDetail;
 }
 
+/// Opens what [pushDestination] picks for [message] — shared by a tapped
+/// push and a tapped row in the notification centre, so both always land
+/// on the same screen.
+void openPushDestination(
+  GoRouter router,
+  PushMessage message, {
+  required String? trackedOrderId,
+  String? activeDeliveryOrderId,
+}) {
+  final destination = pushDestination(
+    message,
+    trackedOrderId: trackedOrderId,
+    activeDeliveryOrderId: activeDeliveryOrderId,
+  );
+  if (destination == null) return;
+  if (destination == AppRoutes.orderDetail || destination == AppRoutes.orderChat) {
+    unawaited(router.push(destination, extra: message.orderId));
+  } else if (destination == AppRoutes.runnerDelivery) {
+    // Pushed over the runner's tabs, the same way tapping the job does.
+    unawaited(router.push(destination));
+  } else {
+    router.go(destination);
+  }
+}
+
 /// Push notifications, end to end on the device:
 ///
 /// - registers this device's FCM token with the backend whenever someone
@@ -232,6 +259,7 @@ class PushNotificationsController {
   void _onForegroundMessage(PushMessage message) {
     final text = [message.title, message.body].whereType<String>().join(' — ');
     if (text.isNotEmpty) ref.read(appNotificationProvider.notifier).info(text);
+    _refreshNotificationCentre(message);
 
     final tracking = ref.read(orderTrackingProvider);
     if (message.orderId != null && message.orderId == tracking.orderId) {
@@ -239,7 +267,18 @@ class PushNotificationsController {
     }
   }
 
+  /// A student's bell badge and list pick up a new stored notification
+  /// straight away (chat messages are push-only, never in the list).
+  void _refreshNotificationCentre(PushMessage message) {
+    final session = ref.read(authControllerProvider);
+    if (session?.user.accountType != AccountType.student || message.type == 'chat_message') return;
+    // Not loaded yet means nothing on screen to update — it fetches when first shown.
+    if (!ref.exists(notificationsProvider)) return;
+    unawaited(ref.read(notificationsProvider.notifier).refresh());
+  }
+
   void _onOpened(PushMessage message) {
+    _refreshNotificationCentre(message);
     _pendingOpen = message;
     _tryOpenPending();
     if (_pendingOpen != null) _attachRouterListener();
@@ -260,20 +299,12 @@ class PushNotificationsController {
     _pendingOpen = null;
     _detachRouterListener();
     final trackedOrderId = ref.read(orderTrackingProvider).orderId;
-    final destination = pushDestination(
+    openPushDestination(
+      router,
       message,
       trackedOrderId: trackedOrderId,
       activeDeliveryOrderId: ref.read(runnerControllerProvider).activeDelivery?.job.id,
     );
-    if (destination == null) return;
-    if (destination == AppRoutes.orderDetail || destination == AppRoutes.orderChat) {
-      unawaited(router.push(destination, extra: message.orderId));
-    } else if (destination == AppRoutes.runnerDelivery) {
-      // Pushed over the runner's tabs, the same way tapping the job does.
-      unawaited(router.push(destination));
-    } else {
-      router.go(destination);
-    }
   }
 
   void _attachRouterListener() {

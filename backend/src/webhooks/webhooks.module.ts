@@ -6,9 +6,10 @@ import { PAYSTACK_WEBHOOK_QUEUE } from './webhooks.constants';
 import { WebhooksController } from './webhooks.controller';
 import { WebhooksProcessor } from './webhooks.processor';
 import { WebhooksService } from './webhooks.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [PaystackModule, BullModule.registerQueue({ name: PAYSTACK_WEBHOOK_QUEUE })],
+  imports: [PaystackModule, NotificationsModule, BullModule.registerQueue({ name: PAYSTACK_WEBHOOK_QUEUE })],
   controllers: [WebhooksController],
   providers: [WebhooksService, WebhooksProcessor, PaystackWebhookIpGuard],
   exports: [WebhooksService],

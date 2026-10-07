@@ -687,6 +687,8 @@ describe('VendorsService.declineOrder (Task 61)', () => {
     expect(escrow.refund).toHaveBeenCalledWith('order-1', {
       requireOrderStatus: 'placed',
       orderData: { declinedAt: expect.any(Date), declineReason: 'out_of_stock', declineReasonNote: null },
+      // The restaurant declined it itself — no "order cancelled" notice back to it.
+      notifyRestaurant: false,
     });
     expect(result).toEqual({
       id: 'order-1',
@@ -699,7 +701,7 @@ describe('VendorsService.declineOrder (Task 61)', () => {
       type: 'order_declined',
       recipientUserId: 'student-1',
       title: 'Order declined',
-      body: 'Spice Garden declined your order — "Out of stock". Your ₦2,500 has been refunded to your Bridgit wallet.',
+      body: 'Spice Garden declined your order — "Out of stock". Your ₦2,500.00 has been refunded to your Bridgit wallet.',
       data: { orderId: 'order-1', reason: 'out_of_stock', refunded: 'true' },
     });
   });
