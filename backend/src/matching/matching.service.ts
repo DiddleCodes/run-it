@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ESCALATE_JOB, REBROADCAST_JOB, escalateJobId, rebroadcastJobId, MATCHING_QUEUE } from './matching.constants';
 import { RunnerDispatchGateway } from './runner-dispatch.gateway';
 import { NotificationsEmitterService } from '../notifications/notifications-emitter.service';
-import { orderReference } from '../common/display/order-reference';
+import { PICKUP_CODE } from '../notifications/notification-event';
 
 export interface AvailableJob {
   orderId: string;
@@ -130,7 +130,7 @@ export class MatchingService {
       type: 'dispute_opened',
       orderId: orderId,
       title: 'Dispute opened',
-      body: `A dispute was opened on order ${orderReference(orderId)}: ${reason}`,
+      body: `A dispute was opened on order ${PICKUP_CODE}: ${reason}`,
     });
     this.logger.warn(`Order ${orderId} escalated — unclaimed past the matching window`);
   }

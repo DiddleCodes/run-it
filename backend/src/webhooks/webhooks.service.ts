@@ -4,8 +4,8 @@ import { PaystackChargeSuccessEvent, PaystackTransferEvent, PaystackWebhookEvent
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { NotificationsEmitterService } from '../notifications/notifications-emitter.service';
+import { PICKUP_CODE } from '../notifications/notification-event';
 import { formatKobo } from '../common/display/money';
-import { orderReference } from '../common/display/order-reference';
 
 type TransferLegResult = 'success' | 'failed';
 
@@ -149,22 +149,19 @@ export class WebhooksService {
         // webhook doesn't tell the restaurant twice.
         if (count === 1) {
           const amount = formatKobo(escrow.restaurantShare);
-          const ref = orderReference(escrow.orderId);
-          this.notifications.emit(
+          this.notifications.emitToOrderRestaurant(
             legStatus === 'success'
               ? {
                   type: 'payout_sent',
-                  recipientUserId: escrow.restaurantUserId,
+                  orderId: escrow.orderId,
                   title: 'Payout sent',
-                  body: `${amount} for order ${ref} is on its way to your bank account.`,
-                  data: { orderId: escrow.orderId },
+                  body: `${amount} for order ${PICKUP_CODE} is on its way to your bank account.`,
                 }
               : {
                   type: 'payout_failed',
-                  recipientUserId: escrow.restaurantUserId,
+                  orderId: escrow.orderId,
                   title: 'Payout failed',
-                  body: `The ${amount} payout for order ${ref} couldn't be sent. Check your payout account details in Profile.`,
-                  data: { orderId: escrow.orderId },
+                  body: `The ${amount} payout for order ${PICKUP_CODE} couldn't be sent. Check your payout account details in Profile.`,
                 },
           );
         }

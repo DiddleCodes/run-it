@@ -11,6 +11,7 @@ import { Dispute, Order } from '@prisma/client';
 import { timingSafeEqual } from 'crypto';
 import { JwtPayload } from '../auth/jwt-payload.interface';
 import { NotificationsEmitterService } from '../notifications/notifications-emitter.service';
+import { PICKUP_CODE } from '../notifications/notification-event';
 import { OrderEscrowService } from '../order-escrow/order-escrow.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -18,7 +19,6 @@ import { DeliveryProofDto } from './dto/delivery-proof.dto';
 import { ReportProblemDto } from './dto/report-problem.dto';
 import { formatKobo } from '../common/display/money';
 import { runnerDisplayName } from '../common/display/runner-display-name';
-import { orderReference } from '../common/display/order-reference';
 
 // Re-exported so existing imports from here keep working.
 export { runnerDisplayName };
@@ -202,7 +202,7 @@ export class OrdersService {
       type: 'dispute_opened',
       orderId: orderId,
       title: 'Dispute opened',
-      body: `A dispute was opened on order ${orderReference(orderId)}: ${dto.reason}`,
+      body: `A dispute was opened on order ${PICKUP_CODE}: ${dto.reason}`,
     });
     return dispute;
   }

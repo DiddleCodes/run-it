@@ -11,7 +11,7 @@ const items: DashboardNotification[] = [
     id: "n2",
     type: "payout_sent",
     title: "Payout sent",
-    body: "₦1,228.25 for order #24513906 is on its way to your bank account.",
+    body: "₦1,228.25 for order 5319 is on its way to your bank account.",
     data: { orderId: "order-1790884524513906" },
     readAt: null,
     createdAt: "2026-10-07T10:00:00.000Z",
@@ -20,8 +20,8 @@ const items: DashboardNotification[] = [
     id: "n1",
     type: "order_placed",
     title: "New order received",
-    body: "Order #24513906 is waiting for you to accept it.",
-    data: { orderId: "order-1790884524513906" },
+    body: "Order 5319 is waiting for you to accept it.",
+    data: { orderId: "order-1790884524513906", pickupCode: "5319" },
     readAt: null,
     createdAt: "2026-10-07T09:00:00.000Z",
   },
@@ -29,7 +29,7 @@ const items: DashboardNotification[] = [
     id: "n0",
     type: "order_cancelled",
     title: "Order cancelled",
-    body: "Order #11112222 was cancelled and the customer refunded. No need to prepare it.",
+    body: "Order 4410 was cancelled and the customer refunded. No need to prepare it.",
     data: { orderId: "order-11112222" },
     readAt: "2026-10-06T09:00:00.000Z",
     createdAt: "2026-10-06T08:00:00.000Z",
@@ -71,7 +71,7 @@ describe("Dashboard notification bell", () => {
     fireEvent.click(screen.getByLabelText("Notifications, 2 unread"));
     const rows = await screen.findAllByRole("button", { name: /Payout sent|New order received|Order cancelled/ });
     expect(rows.map((r) => r.getAttribute("data-unread"))).toEqual(["true", "true", "false"]);
-    expect(screen.getByText("₦1,228.25 for order #24513906 is on its way to your bank account.")).toBeInTheDocument();
+    expect(screen.getByText("₦1,228.25 for order 5319 is on its way to your bank account.")).toBeInTheDocument();
   });
 
   it("opening an unread one marks it read (count drops) and goes to that order", async () => {
@@ -80,7 +80,7 @@ describe("Dashboard notification bell", () => {
     fireEvent.click(await screen.findByText("New order received"));
 
     expect(fetchMock).toHaveBeenCalledWith("/api/proxy/notifications/n1/read", expect.objectContaining({ method: "POST" }));
-    expect(push).toHaveBeenCalledWith("/restaurant/orders?order=order-1790884524513906");
+    expect(push).toHaveBeenCalledWith("/restaurant/orders?order=order-1790884524513906&code=5319");
     await waitFor(() => expect(screen.getByTestId("bell-badge").textContent).toBe("1"));
   });
 
@@ -114,7 +114,8 @@ describe("Dashboard notification bell", () => {
 
 describe("notificationHref", () => {
   it("sends a restaurant to the order, or to Profile for a failed payout", () => {
-    expect(notificationHref(items[1], "restaurant")).toBe("/restaurant/orders?order=order-1790884524513906");
+    expect(notificationHref(items[1], "restaurant")).toBe("/restaurant/orders?order=order-1790884524513906&code=5319");
+    expect(notificationHref({ ...items[1], data: { orderId: "o-1" } }, "restaurant")).toBe("/restaurant/orders?order=o-1");
     expect(notificationHref({ ...items[0], type: "payout_failed" }, "restaurant")).toBe("/restaurant/profile");
     expect(notificationHref(items[0], "restaurant")).toBeNull();
     expect(notificationHref(items[1], "admin")).toBeNull();

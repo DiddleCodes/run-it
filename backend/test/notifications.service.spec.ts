@@ -137,19 +137,45 @@ describe('NotificationsService — unread state', () => {
 describe('NotificationsService — notifications for an order\'s restaurant', () => {
   it('finds the user who runs the order\'s restaurant, then stores and pushes as usual', async () => {
     const { service, prisma, fcmQueue } = makeService();
-    prisma.order.findUnique.mockResolvedValue({ vendor: { userId: 'rest-user-1' } });
+    prisma.order.findUnique.mockResolvedValue({ pickupCode: '5319', vendor: { userId: 'rest-user-1' } });
 
     await service.handleForOrderRestaurant({
       type: 'dispute_opened',
       orderId: 'order-1',
       title: 'Dispute opened',
-      body: 'A dispute was opened on order #ORDER-1: Cold food',
+      body: 'A dispute was opened on order {pickupCode}: Cold food',
     });
 
+    // Named by the pickup code the restaurant's orders page shows.
     expect(prisma.notification.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ userId: 'rest-user-1', type: 'dispute_opened', data: { orderId: 'order-1' } }),
+      data: expect.objectContaining({
+        userId: 'rest-user-1',
+        type: 'dispute_opened',
+        body: 'A dispute was opened on order 5319: Cold food',
+        data: { orderId: 'order-1', pickupCode: '5319' },
+      }),
     });
     expect(fcmQueue.add).toHaveBeenCalledWith('push', expect.objectContaining({ userId: 'rest-user-1' }), expect.anything());
+  });
+
+  it('a new order still reaches the live restaurant-dashboard channel, named by pickup code', async () => {
+    const { service, prisma, gateway } = makeService();
+    prisma.order.findUnique.mockResolvedValue({ pickupCode: '5319', vendor: { userId: 'rest-user-1' } });
+
+    await service.handleForOrderRestaurant({
+      type: 'order_placed',
+      orderId: 'order-1',
+      title: 'New order received',
+      body: 'Order {pickupCode} is waiting for you to accept it.',
+      data: { vendorId: 'vendor-1' },
+    });
+
+    expect(gateway.notifyNewOrder).toHaveBeenCalledWith('vendor-1', {
+      orderId: 'order-1',
+      title: 'New order received',
+      body: 'Order 5319 is waiting for you to accept it.',
+      data: { vendorId: 'vendor-1', orderId: 'order-1', pickupCode: '5319' },
+    });
   });
 
   it('does nothing for an order that no longer exists', async () => {

@@ -11,11 +11,13 @@ const POLL_MS = 30_000;
 export function notificationHref(n: DashboardNotification, accountType: string): string | null {
   if (accountType !== "restaurant") return null;
   const orderId = n.data?.orderId;
+  const code = n.data?.pickupCode;
   switch (n.type) {
     case "order_placed":
     case "order_cancelled":
     case "dispute_opened":
-      return orderId ? `/restaurant/orders?order=${encodeURIComponent(orderId)}` : "/restaurant/orders";
+      if (!orderId) return "/restaurant/orders";
+      return `/restaurant/orders?order=${encodeURIComponent(orderId)}${code ? `&code=${encodeURIComponent(code)}` : ""}`;
     case "payout_failed":
       return "/restaurant/profile";
     default:

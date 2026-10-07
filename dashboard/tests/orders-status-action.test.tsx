@@ -177,3 +177,18 @@ describe("Task 61: declining an order", () => {
   });
 });
 
+
+describe("Arriving from a restaurant notification", () => {
+  it("opens that order's panel — titled by its pickup code, as the notice named it", () => {
+    render(<OrdersBoard initialData={initialData} focusOrderId="order-1" focusPickupCode="XK-7291" />);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getAllByText("Order XK-7291").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("says plainly when that order is no longer in the live queue", () => {
+    render(<OrdersBoard initialData={initialData} focusOrderId="order-gone" focusPickupCode="4410" />);
+    expect(screen.getByRole("status").textContent).toContain("Order 4410 isn't in the live queue any more");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});

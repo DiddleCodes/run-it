@@ -17,6 +17,7 @@ import { AlertsService } from '../alerts/alerts.service';
 import { JwtPayload } from '../auth/jwt-payload.interface';
 import { MatchingService } from '../matching/matching.service';
 import { NotificationsEmitterService } from '../notifications/notifications-emitter.service';
+import { PICKUP_CODE } from '../notifications/notification-event';
 import { orderReference } from '../common/display/order-reference';
 import { runnerDisplayName } from '../common/display/runner-display-name';
 import { PaystackService } from '../paystack/paystack.service';
@@ -305,12 +306,12 @@ export class OrderEscrowService {
       }
     });
 
-    this.notifications.emit({
+    this.notifications.emitToOrderRestaurant({
       type: 'order_placed',
-      recipientUserId: dto.restaurantUserId,
+      orderId,
       title: 'New order received',
-      body: `Order ${orderReference(orderId)} is waiting for you to accept it.`,
-      data: { orderId, vendorId },
+      body: `Order ${PICKUP_CODE} is waiting for you to accept it.`,
+      data: { vendorId },
     });
 
     return escrow;
@@ -657,12 +658,11 @@ export class OrderEscrowService {
     });
 
     if (options.notifyRestaurant !== false) {
-      this.notifications.emit({
+      this.notifications.emitToOrderRestaurant({
         type: 'order_cancelled',
-        recipientUserId: escrow.restaurantUserId,
+        orderId,
         title: 'Order cancelled',
-        body: `Order ${orderReference(orderId)} was cancelled and the customer refunded. No need to prepare it.`,
-        data: { orderId },
+        body: `Order ${PICKUP_CODE} was cancelled and the customer refunded. No need to prepare it.`,
       });
     }
     return refunded;

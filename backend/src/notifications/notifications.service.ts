@@ -9,6 +9,7 @@ import {
   NotificationEvent,
   ORDER_RESTAURANT_NOTIFICATION_EVENT,
   OrderRestaurantNotificationEvent,
+  PICKUP_CODE,
 } from './notification-event';
 import { FCM_PUSH_QUEUE } from './notifications.constants';
 import { FcmPushJob } from './fcm.processor';
@@ -92,12 +93,22 @@ export class NotificationsService {
   async handleForOrderRestaurant(event: OrderRestaurantNotificationEvent): Promise<void> {
     const { orderId, ...rest } = event;
     try {
-      const order = await this.prisma.order.findUnique({ where: { id: orderId }, select: { vendor: { select: { userId: true } } } });
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        select: { pickupCode: true, vendor: { select: { userId: true } } },
+      });
       if (!order) {
         this.logger.warn(`${event.type} for unknown order ${orderId} — no restaurant to notify`);
         return;
       }
-      await this.handle({ ...rest, recipientUserId: order.vendor.userId, data: { ...rest.data, orderId } });
+      const fill = (text: string) => text.split(PICKUP_CODE).join(order.pickupCode);
+      await this.handle({
+        ...rest,
+        title: fill(rest.title),
+        body: fill(rest.body),
+        recipientUserId: order.vendor.userId,
+        data: { ...rest.data, orderId, pickupCode: order.pickupCode },
+      });
     } catch (err) {
       this.logger.error(`Failed to resolve the restaurant for ${event.type} on order ${orderId}: ${(err as Error).message}`);
     }

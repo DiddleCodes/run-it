@@ -34,7 +34,15 @@ function itemsSummary(order: IncomingOrder): string {
   return order.items.map((i) => `${i.quantity}× ${i.nameSnapshot}`).join(", ");
 }
 
-export function OrdersBoard({ initialData, focusOrderId }: { initialData: IncomingOrdersResponse; focusOrderId?: string }) {
+export function OrdersBoard({
+  initialData,
+  focusOrderId,
+  focusPickupCode,
+}: {
+  initialData: IncomingOrdersResponse;
+  focusOrderId?: string;
+  focusPickupCode?: string;
+}) {
   const [orders, setOrders] = useState<IncomingOrder[]>(initialData.items);
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
   // Opened from a notification: start with that order's panel open, if it's still in the queue.
@@ -165,8 +173,18 @@ export function OrdersBoard({ initialData, focusOrderId }: { initialData: Incomi
     },
   ];
 
+  // Followed a notification to an order that's no longer in the live queue
+  // (cancelled, disputed or done) — say so rather than show nothing.
+  const focusGone = !!focusOrderId && !orders.some((o) => o.id === focusOrderId);
+
   return (
     <>
+      {focusGone && (
+        <div role="status" className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--secondary)] px-4 py-3 text-sm text-[var(--foreground)]">
+          {focusPickupCode ? `Order ${focusPickupCode}` : "That order"} isn&apos;t in the live queue any more — it was cancelled,
+          disputed or already completed.
+        </div>
+      )}
       <div className="flex gap-1 mb-4 flex-wrap">
         {TABS.map((t) => {
           const count = t.key === "all" ? orders.length : orders.filter((o) => o.status === t.key).length;

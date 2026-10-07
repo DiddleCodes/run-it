@@ -47,7 +47,7 @@ describe('AdminDisputesService.open', () => {
     await service.open('admin-1', { orderId: 'order-1', reason: 'Customer complaint' });
 
     expect(notifications.emitToOrderRestaurant).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'dispute_opened', orderId: 'order-1', body: 'A dispute was opened on order #ORDER-1: Customer complaint' }),
+      expect.objectContaining({ type: 'dispute_opened', orderId: 'order-1', body: 'A dispute was opened on order {pickupCode}: Customer complaint' }),
     );
   });
 

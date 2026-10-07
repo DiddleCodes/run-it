@@ -116,7 +116,7 @@ describe('MatchingService.handleEscalate', () => {
       type: 'dispute_opened',
       orderId: 'order-1',
       title: 'Dispute opened',
-      body: 'A dispute was opened on order #ORDER-1: No runner claimed this order within the matching window',
+      body: 'A dispute was opened on order {pickupCode}: No runner claimed this order within the matching window',
     });
   });
 

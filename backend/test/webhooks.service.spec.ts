@@ -125,12 +125,11 @@ describe('WebhooksService — restaurant payout notifications', () => {
 
     await service.applyPaystackEvent(event('transfer.success') as any);
 
-    expect(notifications.emit).toHaveBeenCalledWith({
+    expect(notifications.emitToOrderRestaurant).toHaveBeenCalledWith({
       type: 'payout_sent',
-      recipientUserId: 'rest-user-1',
+      orderId: 'order-1790884524513906',
       title: 'Payout sent',
-      body: '₦1,228.25 for order #24513906 is on its way to your bank account.',
-      data: { orderId: 'order-1790884524513906' },
+      body: '₦1,228.25 for order {pickupCode} is on its way to your bank account.',
     });
   });
 
@@ -141,7 +140,9 @@ describe('WebhooksService — restaurant payout notifications', () => {
 
     await service.applyPaystackEvent(event('transfer.failed') as any);
 
-    expect(notifications.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'payout_failed', recipientUserId: 'rest-user-1' }));
+    expect(notifications.emitToOrderRestaurant).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'payout_failed', orderId: 'order-1790884524513906' }),
+    );
   });
 
   it('says nothing for a repeated webhook that changed nothing', async () => {
@@ -151,7 +152,7 @@ describe('WebhooksService — restaurant payout notifications', () => {
 
     await service.applyPaystackEvent(event('transfer.success') as any);
 
-    expect(notifications.emit).not.toHaveBeenCalled();
+    expect(notifications.emitToOrderRestaurant).not.toHaveBeenCalled();
   });
 });
 

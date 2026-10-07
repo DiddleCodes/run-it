@@ -4,8 +4,8 @@ import { PageHeader } from "@/components/layout/page-header";
 import { OrdersBoard } from "@/components/vendor/orders-board";
 import type { IncomingOrdersResponse } from "@/lib/api/vendor-client";
 
-export default async function RestaurantOrdersPage({ searchParams }: { searchParams: Promise<{ order?: string }> }) {
-  const { order: focusOrderId } = await searchParams;
+export default async function RestaurantOrdersPage({ searchParams }: { searchParams: Promise<{ order?: string; code?: string }> }) {
+  const { order: focusOrderId, code: focusPickupCode } = await searchParams;
   const token = await getSessionToken();
   const initialData = await backendFetch<IncomingOrdersResponse>("/vendors/me/orders/incoming", { token: token! });
 
@@ -13,7 +13,12 @@ export default async function RestaurantOrdersPage({ searchParams }: { searchPar
     <>
       <PageHeader title="Orders" subtitle="Live queue for your kitchen." breadcrumb="Restaurant" />
       {/* Keyed so following a notification to another order opens that one. */}
-      <OrdersBoard key={focusOrderId ?? ""} initialData={initialData} focusOrderId={focusOrderId} />
+      <OrdersBoard
+        key={focusOrderId ?? ""}
+        initialData={initialData}
+        focusOrderId={focusOrderId}
+        focusPickupCode={focusPickupCode}
+      />
     </>
   );
 }

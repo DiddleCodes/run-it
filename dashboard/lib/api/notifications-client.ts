@@ -8,7 +8,8 @@ export interface DashboardNotification {
   type: string;
   title: string;
   body: string;
-  data: { orderId?: string } | null;
+  // pickupCode: restaurant notices name the order by it ("Order 5319").
+  data: { orderId?: string; pickupCode?: string } | null;
   readAt: string | null;
   createdAt: string;
 }

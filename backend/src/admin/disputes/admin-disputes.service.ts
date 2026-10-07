@@ -6,7 +6,7 @@ import { AdminAuditLogService } from '../admin-audit-log.service';
 import { OpenDisputeDto } from './dto/open-dispute.dto';
 import { DisputeResolutionInput, ResolveDisputeDto } from './dto/resolve-dispute.dto';
 import { NotificationsEmitterService } from '../../notifications/notifications-emitter.service';
-import { orderReference } from '../../common/display/order-reference';
+import { PICKUP_CODE } from '../../notifications/notification-event';
 
 const ORDER_DETAIL_INCLUDE = {
   vendor: { select: { id: true, businessName: true } },
@@ -65,7 +65,7 @@ export class AdminDisputesService {
       type: 'dispute_opened',
       orderId: dto.orderId,
       title: 'Dispute opened',
-      body: `A dispute was opened on order ${orderReference(dto.orderId)}: ${dto.reason}`,
+      body: `A dispute was opened on order ${PICKUP_CODE}: ${dto.reason}`,
     });
     return dispute;
   }

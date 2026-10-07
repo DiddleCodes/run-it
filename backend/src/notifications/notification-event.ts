@@ -7,6 +7,13 @@ import { NotificationType } from '@prisma/client';
 // and a new emit() call at its trigger point.
 export const NOTIFICATION_EVENT = 'notification' as const;
 
+/**
+ * Restaurant-facing text names an order by its pickup code (what the
+ * restaurant's orders page shows), not the short reference students and
+ * runners see. Write this placeholder; NotificationsService fills it in.
+ */
+export const PICKUP_CODE = '{pickupCode}';
+
 /** A notification for whichever restaurant owns [orderId] — resolved by NotificationsService. */
 export const ORDER_RESTAURANT_NOTIFICATION_EVENT = 'notification.order-restaurant' as const;
 
