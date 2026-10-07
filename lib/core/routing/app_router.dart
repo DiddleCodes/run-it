@@ -29,12 +29,14 @@ import '../../features/runner/presentation/runner_messages_screen.dart';
 import '../../features/runner/presentation/runner_profile_screen.dart';
 import '../../features/runner/presentation/runner_scan_screen.dart';
 import '../../features/runner/presentation/runner_screens.dart';
+import '../../features/auth/presentation/sign_in_gate_screen.dart';
 import '../../features/splash/presentation/splash_screen.dart';
 import '../../features/vendor/domain/vendor_dashboard_models.dart';
 import '../../features/vendor/presentation/restaurant_menu_screen.dart';
 import '../../features/vendor/presentation/restaurant_metrics_screen.dart';
 import '../../features/vendor/presentation/restaurant_orders_screen.dart';
 import '../../features/vendor/presentation/restaurant_profile_screen.dart';
+import '../../features/vendor/presentation/restaurant_application_status_screen.dart';
 import '../../features/vendor/presentation/restaurant_profile_setup_screen.dart';
 import '../../features/vendor/presentation/vendor_application_screen.dart';
 import '../../features/wallet/presentation/wallet_screen.dart';
@@ -50,42 +52,44 @@ import '../widgets/app_nav_shell.dart';
 String _postSignupDestination(UserProfile user) =>
     user.passcodeSet ? postAuthDestination(user) : AppRoutes.setPasscode;
 
-/// Where Set Passcode / Biometric Setup hand off once biometrics are set
-/// up or skipped — those two screens are shared verbatim between all
-/// three account types, so only this destination differs: students land
-/// on Home, runners continue on to pick a runner type before KYC capture,
-/// and restaurants continue into the vendor-application wizard (Business
-/// Info is its first step).
+/// Where an account belongs given its *current* review status — decided
+/// by [SignInGateScreen] right after fetching that status, never from a
+/// possibly-stale saved copy:
+///
+/// - runner: verified → Runner Mode; pending or rejected → the
+///   verification status screen; no application → start verification.
+/// - restaurant: approved (or delisted) → the restaurant shell; pending or
+///   rejected → the application status screen; no application → the
+///   application wizard.
+/// - student: Home (nothing to review).
+String destinationFor(UserProfile user) => switch (user.accountType) {
+  AccountType.student => AppRoutes.home,
+  AccountType.runner => switch (user.kycStatus) {
+    KycStatus.verified => AppRoutes.runnerHome,
+    KycStatus.pending || KycStatus.rejected => AppRoutes.kycStatus,
+    KycStatus.none => AppRoutes.runnerType,
+  },
+  AccountType.restaurant => switch (user.vendorStatus) {
+    VendorReviewStatus.approved || VendorReviewStatus.inactive => AppRoutes.restaurantOrders,
+    VendorReviewStatus.pending || VendorReviewStatus.rejected => AppRoutes.restaurantApplicationStatus,
+    VendorReviewStatus.none => AppRoutes.vendorApplication,
+  },
+};
+
+/// Where Set Passcode / Biometric Setup hand off once biometrics are set up
+/// or skipped (the emailed-code sign-in). Students go Home; runners and
+/// restaurants go through [SignInGateScreen], which checks whether they're
+/// already approved before sending anyone into verification.
 String postBiometricDestination(AccountType accountType) =>
-    switch (accountType) {
-      AccountType.runner => AppRoutes.runnerType,
-      AccountType.restaurant => AppRoutes.vendorApplication,
-      AccountType.student => AppRoutes.home,
-    };
+    accountType == AccountType.student ? AppRoutes.home : AppRoutes.signInGate;
 
 /// Where a *returning* user belongs once their session is established —
-/// used by splash (session already restored) and by passcode/biometric
-/// login on [WelcomeBackScreen]. Distinct from [_postSignupDestination]:
-/// a returning runner — Verified or not — goes straight into the runner
-/// shell, not back into the KYC intro/capture wizard; the shell itself
-/// degrades for a non-Verified runner (read-only Jobs, a Pending-review
-/// Profile state) rather than parking them on a standalone status screen.
-/// A returning student always has a passcode already (that's how they got
-/// a session), so they always land on home.
-///
-/// A returning restaurant always lands on Profile Setup (Task 12) — never
-/// directly on the shell — because that screen itself checks the real
-/// backend (`GET /vendors/me`) and either confirms an already-complete
-/// profile straight through to [AppRoutes.restaurantOrders] or, for the
-/// rare case of an app kill between wizard submission and finishing setup,
-/// picks up exactly where they left off. That self-healing check is
-/// simpler and more honest than caching a second local "is setup done"
-/// flag here that could drift from what the backend actually has.
-String postAuthDestination(UserProfile user) => switch (user.accountType) {
-  AccountType.runner => AppRoutes.runnerHome,
-  AccountType.restaurant => AppRoutes.restaurantProfileSetup,
-  AccountType.student => AppRoutes.home,
-};
+/// splash, passcode/biometric sign-in on [WelcomeBackScreen], and
+/// Forgot-passcode recovery (via the redirect off the public screens).
+/// Same gate as [postBiometricDestination], so every sign-in path routes
+/// on the same fresh status.
+String postAuthDestination(UserProfile user) =>
+    user.accountType == AccountType.student ? AppRoutes.home : AppRoutes.signInGate;
 
 abstract class AppRoutes {
   AppRoutes._();
@@ -99,6 +103,7 @@ abstract class AppRoutes {
   static const otp = '/auth/otp';
   static const setPasscode = '/auth/set-passcode';
   static const biometricSetup = '/auth/biometric-setup';
+  static const signInGate = '/auth/continue';
   static const runnerType = '/kyc/runner-type';
   static const kycIntro = '/kyc/intro';
   static const kycCapture = '/kyc/capture';
@@ -135,6 +140,7 @@ abstract class AppRoutes {
   static const payoutAccount = '/payout-account';
   static const vendorApplication = '/vendor/apply';
   static const restaurantProfileSetup = '/vendor/profile-setup';
+  static const restaurantApplicationStatus = '/vendor/application-status';
   static const restaurantOrders = '/restaurant/orders';
   static const restaurantMenu = '/restaurant/menu';
   static const restaurantMenuAdd = '/restaurant/menu/add';
@@ -203,6 +209,7 @@ abstract class AppRoutes {
   static const _vendorOnlyRoutes = {
     vendorApplication,
     restaurantProfileSetup,
+    restaurantApplicationStatus,
     restaurantMenuAdd,
     restaurantMenuEdit,
     ..._restaurantShellRoutes,
@@ -373,6 +380,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const BiometricSetupScreen(),
       ),
       GoRoute(
+        path: AppRoutes.signInGate,
+        builder: (context, state) => const SignInGateScreen(),
+      ),
+      GoRoute(
         path: AppRoutes.runnerType,
         builder: (context, state) => const RunnerTypeScreen(),
       ),
@@ -498,6 +509,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.restaurantProfileSetup,
         builder: (context, state) => const RestaurantProfileSetupScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.restaurantApplicationStatus,
+        builder: (context, state) => const RestaurantApplicationStatusScreen(),
       ),
       GoRoute(
         path: AppRoutes.restaurantOrders,

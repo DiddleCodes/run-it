@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../../../core/network/runner_kyc_repository.dart';
 import '../../../core/network/uploads_repository.dart';
 import '../../../core/widgets/app_notification.dart';
@@ -412,6 +413,8 @@ class AuthController extends Notifier<AuthSession?> {
     'runnerType': user.runnerType?.name,
     'vehicleType': user.vehicleType?.name,
     'vehiclePlate': user.vehiclePlate,
+    'vendorStatus': user.vendorStatus.name,
+    'vendorRejectionReason': user.vendorRejectionReason,
   };
 
   UserProfile _decodeUser(Map<String, dynamic> json) => UserProfile(
@@ -433,6 +436,8 @@ class AuthController extends Notifier<AuthSession?> {
         ? null
         : VehicleType.values.byName(json['vehicleType'] as String),
     vehiclePlate: json['vehiclePlate'] as String?,
+    vendorStatus: VendorReviewStatus.values.asNameMap()[json['vendorStatus']] ?? VendorReviewStatus.none,
+    vendorRejectionReason: json['vendorRejectionReason'] as String?,
   );
 
   // ---- Passcode (student login credential) ----
@@ -631,6 +636,14 @@ class AuthController extends Notifier<AuthSession?> {
         vehicleType: vehicleType,
         vehiclePlate: vehiclePlate,
       );
+    } on ApiException catch (e) {
+      // Already approved: the backend changed nothing. Pick up the real
+      // status so the caller can send them to Runner Mode.
+      if (e.statusCode == 409) {
+        await refreshProfile();
+        throw const AlreadyApprovedException();
+      }
+      return false;
     } catch (_) {
       return false;
     }
@@ -658,17 +671,20 @@ class AuthController extends Notifier<AuthSession?> {
   /// an admin decision landed) gets corrected. A no-op on any network
   /// failure — polling callers simply retry on their next tick rather than
   /// surfacing a transient error.
-  Future<void> refreshProfile() async {
+  ///
+  /// Returns whether it reached the backend — the sign-in gate needs to know
+  /// the status is real before routing on it.
+  Future<bool> refreshProfile() async {
     final session = state;
-    if (session == null) return;
+    if (session == null) return false;
     final MeResult result;
     try {
       result = await repository.fetchMe(token: session.accessToken);
     } catch (_) {
-      return;
+      return false;
     }
     final current = state;
-    if (current == null) return;
+    if (current == null) return false;
     state = current.copyWith(
       user: current.user.copyWith(
         kycStatus: result.kycStatus,
@@ -677,8 +693,12 @@ class AuthController extends Notifier<AuthSession?> {
         runnerType: result.runnerType,
         vehicleType: result.vehicleType,
         vehiclePlate: result.vehiclePlate,
+        vendorStatus: result.vendorStatus,
+        vendorRejectionReason: result.vendorRejectionReason,
+        clearVendorRejectionReason: result.vendorRejectionReason == null,
       ),
     );
+    return true;
   }
 
   /// Lets a runner edit their declared vehicle from Profile after
@@ -719,6 +739,12 @@ class AuthController extends Notifier<AuthSession?> {
       ),
     );
   }
+}
+
+/// A verification or application the backend refused because the account
+/// is already approved — nothing was changed on the server.
+class AlreadyApprovedException implements Exception {
+  const AlreadyApprovedException();
 }
 
 final authControllerProvider = NotifierProvider<AuthController, AuthSession?>(

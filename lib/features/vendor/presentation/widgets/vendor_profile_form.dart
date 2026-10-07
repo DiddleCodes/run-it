@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/network/api_exception.dart';
 import '../../../../core/network/uploads_repository.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -33,6 +34,8 @@ class VendorProfileForm extends ConsumerStatefulWidget {
     this.initialLogoBytes,
     this.requestedCampusId,
     this.submitLabel = 'Save',
+    this.asApplication = false,
+    this.onAlreadyApproved,
     required this.onSaved,
   });
 
@@ -54,6 +57,13 @@ class VendorProfileForm extends ConsumerStatefulWidget {
   final Uint8List? initialLogoBytes;
   final String submitLabel;
   final ValueChanged<MyVendorProfile> onSaved;
+
+  /// Submits as the restaurant's application rather than a profile edit.
+  final bool asApplication;
+
+  /// The backend refused the application because the restaurant is
+  /// already approved (409) — nothing was changed.
+  final VoidCallback? onAlreadyApproved;
 
   @override
   ConsumerState<VendorProfileForm> createState() => _VendorProfileFormState();
@@ -123,9 +133,17 @@ class _VendorProfileFormState extends ConsumerState<VendorProfileForm> {
             description: _descriptionController.text.trim(),
             logoUrl: logoUrl,
             requestedCampusId: widget.requestedCampusId,
+            asApplication: widget.asApplication,
           );
       if (!mounted) return;
       widget.onSaved(saved);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.statusCode == 409 && widget.onAlreadyApproved != null) {
+        widget.onAlreadyApproved!();
+        return;
+      }
+      ref.read(appNotificationProvider.notifier).error(e.message);
     } catch (e) {
       if (!mounted) return;
       ref

@@ -57,10 +57,11 @@ class RestaurantProfileSetupScreen extends ConsumerWidget {
         );
       },
       data: (vendor) {
-        // Already real — nothing left to confirm. Scheduled for next frame
-        // since navigating away mid-build isn't safe.
+        // Already applied — the gate routes on the real review status
+        // (dashboard if approved, the status screen if pending/rejected).
+        // Scheduled for next frame since navigating away mid-build isn't safe.
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (context.mounted) context.go(AppRoutes.restaurantOrders);
+          if (context.mounted) context.go(AppRoutes.signInGate);
         });
         return const Scaffold(body: Center(child: AppSpinner()));
       },
@@ -87,7 +88,7 @@ class _SetupForm extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "You're approved!",
+                  'Almost there',
                   style: Theme.of(context).textTheme.headlineLarge?.copyWith(color: onBg, fontSize: 25),
                 ).animate().fadeIn(duration: 260.ms).moveY(begin: 8, end: 0),
                 const SizedBox(height: 6),
@@ -102,12 +103,19 @@ class _SetupForm extends ConsumerWidget {
                   initialDescription: application.description,
                   initialLogoBytes: application.storefrontPhoto,
                   requestedCampusId: application.campus?.id,
-                  submitLabel: 'Get Started',
+                  submitLabel: 'Submit application',
+                  asApplication: true,
                   onSaved: (_) {
                     ref
                         .read(appNotificationProvider.notifier)
-                        .success('Your dashboard is ready.');
-                    context.go(AppRoutes.restaurantOrders);
+                        .success("Application sent — we'll review it shortly.");
+                    context.go(AppRoutes.signInGate);
+                  },
+                  onAlreadyApproved: () {
+                    ref
+                        .read(appNotificationProvider.notifier)
+                        .info('Your restaurant is already approved — nothing was changed.');
+                    context.go(AppRoutes.signInGate);
                   },
                 ),
               ],

@@ -31,6 +31,15 @@ export class VendorsController {
     return this.vendors.upsertMyVendor(user.sub, dto);
   }
 
+  // The app's restaurant application. Unlike POST /vendors/me (profile
+  // edits), refuses once the restaurant is approved.
+  @Post('me/application')
+  @UseGuards(JwtAuthGuard)
+  submitApplication(@CurrentUser() user: JwtPayload, @Body() dto: UpsertVendorDto) {
+    assertCanActAsVendor(user);
+    return this.vendors.submitApplication(user.sub, dto);
+  }
+
   // The Restaurant Dashboard's Profile tab prefilling itself with the
   // vendor's own current business info before letting them edit it.
   @Get('me')

@@ -46,11 +46,14 @@ class VendorsRepository {
     // pass it, so a routine business-info edit never accidentally flips a
     // restaurant's existing Pay on Delivery opt-in back off.
     bool? payAtDeliveryEnabled,
+    // The app's restaurant application (POST /vendors/me/application),
+    // which the backend refuses (409) once the restaurant is approved.
+    bool asApplication = false,
     required String token,
   }) async {
     final json =
         await client.post(
-              '/vendors/me',
+              asApplication ? '/vendors/me/application' : '/vendors/me',
               token: token,
               body: {
                 'businessName': businessName,

@@ -54,6 +54,7 @@ class _RecordingVendorsRepository extends VendorsRepository {
     String? logoUrl,
     String? requestedCampusId,
     bool? payAtDeliveryEnabled,
+    bool asApplication = false,
     required String token,
   }) async {
     upsertCalls.add(payAtDeliveryEnabled);

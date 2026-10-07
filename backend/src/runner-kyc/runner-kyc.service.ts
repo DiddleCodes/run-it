@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SubmitRunnerKycDto } from './dto/submit-runner-kyc.dto';
 
@@ -13,6 +13,16 @@ export class RunnerKycService {
   // reason: a resubmission is a fresh review request, not an edit of a
   // still-pending one.
   async submit(userId: string, dto: SubmitRunnerKycDto) {
+    // An approved runner is never sent back to "pending" (losing job
+    // access) or has their verified documents replaced by a resubmission.
+    const existing = await this.prisma.runnerKyc.findUnique({ where: { userId }, select: { status: true } });
+    if (existing?.status === 'approved') {
+      throw new ConflictException({
+        code: 'already_approved',
+        message: "You're already verified — there's nothing to resubmit.",
+      });
+    }
+
     const needsVehicle = dto.runnerType === 'independent_rider';
     if (needsVehicle) {
       if (!dto.vehiclePhotoUrl || !dto.vehicleType) {

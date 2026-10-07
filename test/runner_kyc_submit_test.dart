@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:run_it/core/network/api_exception.dart';
 import 'package:run_it/core/network/runner_kyc_repository.dart';
 import 'package:run_it/core/network/uploads_repository.dart';
 import 'package:run_it/core/routing/app_router.dart';
@@ -97,12 +98,41 @@ class _FailingRunnerKycRepository extends RunnerKycRepository {
   }
 }
 
+/// The backend refusing a resubmission because the runner is already approved.
+class _AlreadyApprovedRunnerKycRepository extends RunnerKycRepository {
+  const _AlreadyApprovedRunnerKycRepository();
+  @override
+  Future<void> submit({
+    required String token,
+    required RunnerType runnerType,
+    required IdType idType,
+    required String idPhotoUrl,
+    required String selfiePhotoUrl,
+    String? vehiclePhotoUrl,
+    VehicleType? vehicleType,
+    String? vehiclePlate,
+  }) async {
+    throw const ApiException(409, "You're already verified — there's nothing to resubmit.");
+  }
+}
+
+/// Its GET /auth/me says verified.
+class _ApprovedAuthController extends _FakeAuthController {
+  _ApprovedAuthController(super.session);
+  @override
+  Future<bool> refreshProfile() async {
+    state = state!.copyWith(user: state!.user.copyWith(kycStatus: KycStatus.verified));
+    return true;
+  }
+}
+
 Widget _harness(AuthController controller) {
   final router = GoRouter(
     initialLocation: AppRoutes.kycCapture,
     routes: [
       GoRoute(path: AppRoutes.kycCapture, builder: (_, _) => const KycCaptureScreen()),
       GoRoute(path: AppRoutes.kycStatus, builder: (_, _) => const Text('KYC_STATUS_SCREEN')),
+      GoRoute(path: AppRoutes.runnerHome, builder: (_, _) => const Text('RUNNER_HOME')),
     ],
   );
   return ProviderScope(
@@ -219,5 +249,29 @@ void main() {
     // and the account never optimistically moves to pending.
     expect(find.byType(KycCaptureScreen), findsOneWidget);
     expect(container.read(authControllerProvider)!.user.kycStatus, KycStatus.none);
+  });
+
+  testWidgets('an already-approved runner who resubmits is told so and sent to Runner Mode — nothing changed', (tester) async {
+    final controller = _ApprovedAuthController(_runnerSession())
+      ..uploads = _RecordingUploadsRepository()
+      ..runnerKyc = const _AlreadyApprovedRunnerKycRepository();
+
+    await tester.pumpWidget(_harness(controller));
+    final container = ProviderScope.containerOf(tester.element(find.byType(KycCaptureScreen)));
+    container.read(kycFlowProvider.notifier).setRunnerType(RunnerType.studentRunner);
+    await tester.pump();
+    tester.widget<CameraCaptureStep>(find.byType(CameraCaptureStep)).onCaptured(Uint8List.fromList([1]));
+    await tester.pump();
+    tester.widget<CameraCaptureStep>(find.byType(CameraCaptureStep)).onCaptured(Uint8List.fromList([2]));
+    await tester.pump();
+
+    await tester.tap(find.text('Submit for Verification'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.text('RUNNER_HOME'), findsOneWidget);
+    expect(find.text("You're already verified — nothing was changed."), findsOneWidget);
+    expect(container.read(authControllerProvider)!.user.kycStatus, KycStatus.verified);
+    await tester.pump(const Duration(seconds: 5));
   });
 }

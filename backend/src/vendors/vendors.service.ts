@@ -82,6 +82,20 @@ export class VendorsService {
     });
   }
 
+  // The mobile application flow. An approved (or delisted) restaurant is
+  // never put back into review or has its saved details overwritten by
+  // re-running the application; profile edits go through upsertMyVendor.
+  async submitApplication(userId: string, dto: UpsertVendorDto) {
+    const existing = await this.prisma.vendor.findUnique({ where: { userId }, select: { status: true } });
+    if (existing && (existing.status === 'active' || existing.status === 'inactive')) {
+      throw new ConflictException({
+        code: 'already_approved',
+        message: 'Your restaurant is already approved — there is nothing to resubmit.',
+      });
+    }
+    return this.upsertMyVendor(userId, dto);
+  }
+
   // A controlled vocabulary so "Nigerian Food"/"nigerian food"/"Naija
   // Dishes" can never coexist as separate, un-mergeable category chips.
   // Matches case-insensitively against either the stable slug or the

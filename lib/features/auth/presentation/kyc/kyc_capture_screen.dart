@@ -654,17 +654,27 @@ class _AlmostThereStepState extends ConsumerState<_AlmostThereStep> {
     if (idImage == null || selfieImage == null || runnerType == null) return;
 
     setState(() => _submitting = true);
-    final ok = await ref
-        .read(authControllerProvider.notifier)
-        .submitKycForReview(
-          runnerType: runnerType,
-          idType: capture.idType,
-          idImage: idImage,
-          selfieImage: selfieImage,
-          vehiclePhoto: capture.vehiclePhoto,
-          vehicleType: capture.vehicleType,
-          vehiclePlate: capture.plateNumber,
-        );
+    final bool ok;
+    try {
+      ok = await ref
+          .read(authControllerProvider.notifier)
+          .submitKycForReview(
+            runnerType: runnerType,
+            idType: capture.idType,
+            idImage: idImage,
+            selfieImage: selfieImage,
+            vehiclePhoto: capture.vehiclePhoto,
+            vehicleType: capture.vehicleType,
+            vehiclePlate: capture.plateNumber,
+          );
+    } on AlreadyApprovedException {
+      if (!mounted) return;
+      ref.read(kycFlowProvider.notifier).reset();
+      ref.read(appNotificationProvider.notifier).info("You're already verified — nothing was changed.");
+      final user = ref.read(authControllerProvider)?.user;
+      context.go(user == null ? AppRoutes.runnerHome : destinationFor(user));
+      return;
+    }
     if (!mounted) return;
     if (!ok) {
       setState(() => _submitting = false);

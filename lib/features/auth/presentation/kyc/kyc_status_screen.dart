@@ -179,6 +179,12 @@ class _PendingState extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: AppSpacing.md),
+        // Runner Mode works read-only until approval — waiting here is optional.
+        TextButton(
+          onPressed: () => context.go(AppRoutes.runnerHome),
+          child: const Text('Look around Runner Mode meanwhile'),
+        ),
       ],
     );
   }

@@ -6,6 +6,7 @@ import 'package:run_it/core/network/api_exception.dart';
 import 'package:run_it/core/network/campus_repository.dart';
 import 'package:run_it/core/network/vendors_repository.dart';
 import 'package:run_it/core/routing/app_router.dart';
+import 'package:run_it/core/widgets/app_notification.dart';
 import 'package:run_it/core/widgets/segmented_progress_bar.dart';
 import 'package:run_it/features/auth/domain/auth_models.dart';
 import 'package:run_it/features/payout/application/payout_controller.dart';
@@ -30,6 +31,11 @@ class _FakeMyVendorProfileController extends MyVendorProfileController {
     throw const ApiException(404, 'Create your vendor profile first via POST /vendors/me');
   }
 
+  bool? lastAsApplication;
+
+  /// The backend refusing the application: this restaurant is already approved.
+  bool refuseAsAlreadyApproved = false;
+
   @override
   Future<MyVendorProfile> save({
     required String businessName,
@@ -37,8 +43,13 @@ class _FakeMyVendorProfileController extends MyVendorProfileController {
     String? description,
     String? logoUrl,
     String? requestedCampusId,
+    bool asApplication = false,
   }) async {
     lastRequestedCampusId = requestedCampusId;
+    lastAsApplication = asApplication;
+    if (refuseAsAlreadyApproved) {
+      throw const ApiException(409, 'Your restaurant is already approved — there is nothing to resubmit.');
+    }
     final profile = MyVendorProfile(
       id: 'vendor-1',
       businessName: businessName,
@@ -79,33 +90,19 @@ class _FakePayoutController extends PayoutController {
 
 void main() {
   group('postBiometricDestination', () {
-    test('restaurant routes to the vendor-application wizard, not Home or Runner Type', () {
-      expect(
-        postBiometricDestination(AccountType.restaurant),
-        AppRoutes.vendorApplication,
-      );
-      expect(
-        postBiometricDestination(AccountType.restaurant),
-        isNot(AppRoutes.home),
-      );
-      expect(
-        postBiometricDestination(AccountType.restaurant),
-        isNot(AppRoutes.runnerType),
-      );
+    test('restaurants and runners go through the sign-in gate (it checks approval first)', () {
+      expect(postBiometricDestination(AccountType.restaurant), AppRoutes.signInGate);
+      expect(postBiometricDestination(AccountType.runner), AppRoutes.signInGate);
     });
 
-    test('student and runner destinations are unchanged', () {
+    test('students go straight Home', () {
       expect(postBiometricDestination(AccountType.student), AppRoutes.home);
-      expect(
-        postBiometricDestination(AccountType.runner),
-        AppRoutes.runnerType,
-      );
     });
   });
 
   group('postAuthDestination', () {
     test(
-      'a returning restaurant account lands on profile setup, which self-checks the real backend',
+      'a returning restaurant goes through the sign-in gate, which routes on its real status',
       () {
         const user = UserProfile(
           id: 'vendor-1',
@@ -114,7 +111,7 @@ void main() {
           accountType: AccountType.restaurant,
           campusId: 'ui',
         );
-        expect(postAuthDestination(user), AppRoutes.restaurantProfileSetup);
+        expect(postAuthDestination(user), AppRoutes.signInGate);
       },
     );
   });
@@ -132,11 +129,11 @@ void main() {
   });
 
   group('Vendor application wizard', () {
-    final fakeMyVendorProfileController = _FakeMyVendorProfileController();
+    var fakeMyVendorProfileController = _FakeMyVendorProfileController();
 
-    Widget buildApp() {
+    Widget buildApp({String initialLocation = AppRoutes.vendorApplication}) {
       final router = GoRouter(
-        initialLocation: AppRoutes.vendorApplication,
+        initialLocation: initialLocation,
         routes: [
           GoRoute(
             path: AppRoutes.vendorApplication,
@@ -149,6 +146,10 @@ void main() {
           GoRoute(
             path: AppRoutes.restaurantOrders,
             builder: (_, _) => const Text('RESTAURANT_ORDERS'),
+          ),
+          GoRoute(
+            path: AppRoutes.signInGate,
+            builder: (_, _) => const Text('SIGN_IN_GATE'),
           ),
         ],
       );
@@ -256,14 +257,13 @@ void main() {
         await tester.tap(find.text('Submit'));
         await tester.pumpAndSettle();
 
-        // STUB submission: a local pending-state record — then straight
-        // into Task 12's real profile-completion screen, auto-approved,
-        // never the old dead-end Pending screen.
+        // A local pending-state record, then the profile-completion
+        // screen that sends the real application.
         expect(
           container.read(vendorApplicationProvider).status,
           VendorApplicationStatus.pending,
         );
-        expect(find.text("You're approved!"), findsOneWidget);
+        expect(find.text('Almost there'), findsOneWidget);
         // Prefilled from the wizard's own data — never asks the restaurant
         // to re-enter what it already collected.
         expect(find.text("Mama Kemi's Kitchen"), findsOneWidget);
@@ -272,16 +272,44 @@ void main() {
         // Confirming here is what actually replaces the backend's
         // auto-provisioned placeholder vendor with the real submitted
         // details (see VendorsService.upsertMyVendor's doc comment).
-        await tester.ensureVisible(find.text('Get Started'));
+        await tester.ensureVisible(find.text('Submit application'));
         await tester.pump();
-        await tester.tap(find.text('Get Started'));
+        await tester.tap(find.text('Submit application'));
         await tester.pumpAndSettle();
 
-        expect(find.text('RESTAURANT_ORDERS'), findsOneWidget);
+        // Sent as an application (refused by the backend once approved),
+        // then the gate routes on the real status — pending, so not the
+        // dashboard.
+        expect(fakeMyVendorProfileController.lastAsApplication, isTrue);
+        expect(find.text('SIGN_IN_GATE'), findsOneWidget);
         // Task 27: the applicant's campus selection actually reaches the
         // real POST /vendors/me call now — previously it never did.
         expect(fakeMyVendorProfileController.lastRequestedCampusId, 'campus-ui-test');
       },
     );
+
+    testWidgets('an already-approved restaurant re-applying changes nothing and goes on to its real status', (tester) async {
+      fakeMyVendorProfileController = _FakeMyVendorProfileController()..refuseAsAlreadyApproved = true;
+      await tester.pumpWidget(buildApp(initialLocation: AppRoutes.restaurantProfileSetup));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).first, 'Golden Crust Bakery');
+      await tester.tap(find.text('Choose a category'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Nigerian'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Submit application'));
+      await tester.tap(find.text('Submit application'));
+      await tester.pumpAndSettle();
+
+      expect(fakeMyVendorProfileController.lastAsApplication, isTrue);
+      expect(find.text('SIGN_IN_GATE'), findsOneWidget);
+      final container = ProviderScope.containerOf(tester.element(find.text('SIGN_IN_GATE')));
+      expect(
+        container.read(appNotificationProvider).map((n) => n.message),
+        contains('Your restaurant is already approved — nothing was changed.'),
+      );
+      await tester.pump(const Duration(seconds: 5));
+    });
   });
 }

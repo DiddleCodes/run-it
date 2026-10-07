@@ -126,32 +126,14 @@ void main() {
     });
   });
 
-  group('postAuthDestination for returning runners', () {
-    // TASK 4g §1: a non-Verified runner keeps limited app access (browse
-    // Jobs read-only, a Pending-review Profile state) rather than being
-    // parked on a standalone status screen — so every returning runner,
-    // Verified or not, lands in the runner shell. The shell itself
-    // degrades for a non-Verified runner; it's no longer a blocked screen.
-    test('a runner mid-review (pending) lands on the runner home shell', () {
-      final destination = postAuthDestination(
-        _session(kycStatus: KycStatus.pending).user,
-      );
-      expect(destination, AppRoutes.runnerHome);
-    });
-
-    test('a rejected runner also lands on the runner home shell', () {
-      expect(
-        postAuthDestination(_session(kycStatus: KycStatus.rejected).user),
-        AppRoutes.runnerHome,
-      );
-    });
-
-    test('a verified runner returns straight to the runner home', () {
-      expect(
-        postAuthDestination(_session(kycStatus: KycStatus.verified).user),
-        AppRoutes.runnerHome,
-      );
-    });
+  group('returning runners go through the sign-in gate', () {
+    // The gate fetches the real status, then destinationFor decides
+    // (see sign_in_routing_test.dart for the full matrix).
+    for (final status in KycStatus.values) {
+      test('$status → the gate, never straight to a screen chosen from a saved status', () {
+        expect(postAuthDestination(_session(kycStatus: status).user), AppRoutes.signInGate);
+      });
+    }
   });
 
   group('isPlausiblePlateNumber — lenient format validation', () {

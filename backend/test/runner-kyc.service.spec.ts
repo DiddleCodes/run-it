@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { RunnerKycService } from '../src/runner-kyc/runner-kyc.service';
 import { createPrismaMock } from './support/mocks';
 
@@ -108,5 +108,27 @@ describe('RunnerKycService.submit', () => {
     expect(call.update.status).toBe('pending');
     expect(call.update.rejectionReason).toBeNull();
     expect(call.update.reviewedAt).toBeNull();
+  });
+});
+
+describe('RunnerKycService.submit — an already-approved runner', () => {
+  it('is refused, keeping the approval and the verified documents untouched', async () => {
+    const { service, prisma } = makeService();
+    prisma.runnerKyc.findUnique.mockResolvedValue({ status: 'approved' });
+
+    await expect(service.submit('runner-1', baseDto)).rejects.toThrow(ConflictException);
+    await expect(service.submit('runner-1', baseDto)).rejects.toMatchObject({
+      response: { code: 'already_approved' },
+    });
+    expect(prisma.runnerKyc.upsert).not.toHaveBeenCalled();
+  });
+
+  it('a pending or rejected runner can still (re)submit', async () => {
+    for (const status of ['pending', 'rejected']) {
+      const { service, prisma } = makeService();
+      prisma.runnerKyc.findUnique.mockResolvedValue({ status });
+      await service.submit('runner-1', baseDto);
+      expect(prisma.runnerKyc.upsert).toHaveBeenCalled();
+    }
   });
 });

@@ -772,3 +772,56 @@ describe('VendorsService.declineOrder (Task 61)', () => {
     expect(notifications.emit).not.toHaveBeenCalled();
   });
 });
+
+describe('VendorsService.submitApplication (the app\'s restaurant application)', () => {
+  const dto = { businessName: 'Golden Crust', category: 'nigerian' };
+
+  function withCategories() {
+    const setup = makeService();
+    setup.prisma.vendorCategory.findMany.mockResolvedValue([{ slug: 'nigerian', label: 'Nigerian' }]);
+    return setup;
+  }
+
+  it.each(['active', 'inactive'])('refuses a %s (approved) restaurant and changes nothing', async (status) => {
+    const { service, prisma } = withCategories();
+    prisma.vendor.findUnique.mockResolvedValue({ status });
+
+    await expect(service.submitApplication('user-A', dto)).rejects.toMatchObject({
+      status: 409,
+      response: { code: 'already_approved' },
+    });
+    expect(prisma.vendor.upsert).not.toHaveBeenCalled();
+  });
+
+  it('a new restaurant applies as pending', async () => {
+    const { service, prisma } = withCategories();
+    prisma.vendor.findUnique.mockResolvedValue(null);
+
+    await service.submitApplication('user-A', dto);
+
+    expect(prisma.vendor.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: expect.objectContaining({ status: 'pending' }) }),
+    );
+  });
+
+  it('a rejected restaurant resubmits back into review', async () => {
+    const { service, prisma } = withCategories();
+    prisma.vendor.findUnique.mockResolvedValue({ status: 'rejected' });
+
+    await service.submitApplication('user-A', dto);
+
+    expect(prisma.vendor.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ update: expect.objectContaining({ status: 'pending', rejectionReason: null }) }),
+    );
+  });
+
+  it('a pending restaurant can correct its application without leaving review', async () => {
+    const { service, prisma } = withCategories();
+    prisma.vendor.findUnique.mockResolvedValue({ status: 'pending' });
+
+    await service.submitApplication('user-A', dto);
+
+    const { update } = prisma.vendor.upsert.mock.calls[0][0];
+    expect(update.status).toBeUndefined();
+  });
+});

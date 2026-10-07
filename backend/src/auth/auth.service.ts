@@ -331,7 +331,7 @@ export class AuthService {
   async me(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      include: { runnerKyc: true },
+      include: { runnerKyc: true, vendor: { select: { status: true, rejectionReason: true } } },
     });
     return {
       id: user.id,
@@ -343,6 +343,9 @@ export class AuthService {
       runnerType: user.runnerKyc?.runnerType ?? null,
       vehicleType: user.runnerKyc?.vehicleType ?? null,
       vehiclePlate: user.runnerKyc?.vehiclePlate ?? null,
+      // Where a restaurant account is in its application (null: none yet).
+      vendorStatus: user.vendor?.status ?? null,
+      vendorRejectionReason: user.vendor?.rejectionReason ?? null,
     };
   }
 

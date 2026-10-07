@@ -46,6 +46,11 @@ bool isPlausiblePlateNumber(String raw) {
 /// pass through an extra selfie-match step before reaching the same states.
 enum KycStatus { none, pending, verified, rejected }
 
+/// Where a restaurant account's application stands (backend VendorStatus;
+/// `none` = no application yet). `inactive` is an approved restaurant
+/// that's been delisted — still theirs to run, not a new application.
+enum VendorReviewStatus { none, pending, approved, rejected, inactive }
+
 /// A raw lat/lng reading — deliberately not tied to any location plugin's
 /// own position type, so the geofence math in [Campus.contains] stays
 /// plugin-free and trivially unit-testable.
@@ -152,6 +157,8 @@ class UserProfile {
     this.runnerType,
     this.vehicleType,
     this.vehiclePlate,
+    this.vendorStatus = VendorReviewStatus.none,
+    this.vendorRejectionReason,
   });
 
   final String id;
@@ -196,6 +203,10 @@ class UserProfile {
   final VehicleType? vehicleType;
   final String? vehiclePlate;
 
+  /// Restaurant accounts only.
+  final VendorReviewStatus vendorStatus;
+  final String? vendorRejectionReason;
+
   /// Runners are gated behind Verified before they can see or accept jobs;
   /// students only need to exist to browse/order.
   bool get canAccessRunnerJobs =>
@@ -210,6 +221,9 @@ class UserProfile {
     RunnerType? runnerType,
     VehicleType? vehicleType,
     String? vehiclePlate,
+    VendorReviewStatus? vendorStatus,
+    String? vendorRejectionReason,
+    bool clearVendorRejectionReason = false,
   }) => UserProfile(
     id: id,
     name: name,
@@ -227,6 +241,10 @@ class UserProfile {
     runnerType: runnerType ?? this.runnerType,
     vehicleType: vehicleType ?? this.vehicleType,
     vehiclePlate: vehiclePlate ?? this.vehiclePlate,
+    vendorStatus: vendorStatus ?? this.vendorStatus,
+    vendorRejectionReason: clearVendorRejectionReason
+        ? null
+        : vendorRejectionReason ?? this.vendorRejectionReason,
   );
 }
 

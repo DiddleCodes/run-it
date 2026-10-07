@@ -62,6 +62,8 @@ class MeResult {
     this.runnerType,
     this.vehicleType,
     this.vehiclePlate,
+    this.vendorStatus = VendorReviewStatus.none,
+    this.vendorRejectionReason,
   });
 
   final KycStatus kycStatus;
@@ -69,7 +71,17 @@ class MeResult {
   final RunnerType? runnerType;
   final VehicleType? vehicleType;
   final String? vehiclePlate;
+  final VendorReviewStatus vendorStatus;
+  final String? vendorRejectionReason;
 }
+
+VendorReviewStatus _vendorStatusFromWire(String? wire) => switch (wire) {
+  'pending' => VendorReviewStatus.pending,
+  'active' => VendorReviewStatus.approved,
+  'rejected' => VendorReviewStatus.rejected,
+  'inactive' => VendorReviewStatus.inactive,
+  _ => VendorReviewStatus.none,
+};
 
 KycStatus _kycStatusFromWire(String? wire) => switch (wire) {
   'pending' => KycStatus.pending,
@@ -180,6 +192,8 @@ class AuthRepository {
           ? null
           : VehicleType.values.byName(json['vehicleType'] as String),
       vehiclePlate: json['vehiclePlate'] as String?,
+      vendorStatus: _vendorStatusFromWire(json['vendorStatus'] as String?),
+      vendorRejectionReason: json['vendorRejectionReason'] as String?,
     );
   }
 

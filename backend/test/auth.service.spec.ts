@@ -656,6 +656,24 @@ describe('AuthService.me', () => {
     const result = await service.me('student-1');
 
     expect(result.kycStatus).toBeNull();
+    expect(result.vendorStatus).toBeNull();
+  });
+
+  it("a restaurant gets its application's status and any rejection reason", async () => {
+    const { service, prisma } = makeService();
+    prisma.user.findUniqueOrThrow.mockResolvedValue({
+      id: 'rest-1',
+      email: 'r@runit.dev',
+      name: 'R',
+      accountType: 'restaurant',
+      runnerKyc: null,
+      vendor: { status: 'rejected', rejectionReason: 'Menu photos missing' },
+    });
+
+    const result = await service.me('rest-1');
+
+    expect(result.vendorStatus).toBe('rejected');
+    expect(result.vendorRejectionReason).toBe('Menu photos missing');
   });
 });
 
