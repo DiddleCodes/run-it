@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { runnerDisplayName } from '../src/orders/orders.service';
-import { OrderEscrowService } from '../src/order-escrow/order-escrow.service';
+import { OrderEscrowService, orderReference } from '../src/order-escrow/order-escrow.service';
 import {
   createAlertsMock,
   createConfigMock,
@@ -1134,7 +1134,7 @@ describe('OrderEscrowService.release', () => {
         recipientCode: 'RCP_restaurant',
         reference: 'escrow_esc1_restaurant',
         // Shows on the restaurant's bank statement.
-        reason: 'Bridgit order order-1 — restaurant payout',
+        reason: 'Bridgit payout #ORDER-1',
       }),
     );
     expect(paystack.initiateTransfer).toHaveBeenCalledTimes(1);
@@ -1355,5 +1355,14 @@ describe('OrderEscrowService.refund', () => {
 
     await expect(service.refund('order-1', { requireOrderStatus: 'placed' })).rejects.toThrow(ConflictException);
     expect(prisma.orderEscrow.findUniqueOrThrow).not.toHaveBeenCalled();
+  });
+});
+
+describe('Paystack transfer reasons (shown on bank statements)', () => {
+  // The withdrawal reason's exact text is asserted in wallet.service.spec.
+  it('the restaurant payout uses the short order reference, ASCII-only', () => {
+    const payout = `Bridgit payout ${orderReference('order-1790884524513906')}`;
+    expect(payout).toBe('Bridgit payout #24513906');
+    expect(payout).toMatch(/^[\x20-\x7E]+$/);
   });
 });
