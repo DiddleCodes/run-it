@@ -19,6 +19,7 @@ import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { UpdateOrderStatusDto, VendorDrivenStatus } from './dto/update-order-status.dto';
 import { UpsertVendorDto } from './dto/upsert-vendor.dto';
 import { formatKobo } from '../common/display/money';
+import { EarningsRow, toLine, totalEarnings } from './earnings.util';
 
 const DEFAULT_METRICS_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -464,6 +465,80 @@ export class VendorsService {
       totalOrders: orders.length,
       totalRevenue,
       mostOrderedItems,
+    };
+  }
+
+  // The restaurant's Earnings page. Settled covers orders delivered in the
+  // range; pending and failed are what's outstanding right now, whenever the
+  // order was — a failed payout needs fixing however old it is. Only this
+  // restaurant's own orders, found through its own vendor row.
+  async earnings(userId: string, query: MetricsQueryDto) {
+    const vendor = await this.getOwnVendorOrThrow(userId);
+    const to = query.to ? new Date(query.to) : new Date();
+    const from = query.from ? new Date(query.from) : new Date(to.getTime() - DEFAULT_METRICS_WINDOW_MS);
+
+    const select = {
+      id: true,
+      pickupCode: true,
+      status: true,
+      deliveredAt: true,
+      escrow: {
+        select: {
+          status: true,
+          restaurantTransferStatus: true,
+          foodSubtotal: true,
+          restaurantCommission: true,
+          restaurantPlatformFee: true,
+          restaurantShare: true,
+        },
+      },
+    } as const;
+    // Belt and braces with classifyPayout: never even load cancelled or refunded orders.
+    const earning = { vendorId: vendor.id, status: 'delivered' as const, escrow: { status: { not: 'refunded' as const } } };
+
+    const [inRange, outstanding] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { ...earning, deliveredAt: { gte: from, lte: to } },
+        orderBy: { deliveredAt: 'desc' },
+        select,
+      }),
+      this.prisma.order.findMany({
+        where: { ...earning, escrow: { status: { not: 'refunded' as const }, restaurantTransferStatus: { not: 'success' as const } } },
+        select,
+      }),
+    ]);
+
+    const toRow = (o: (typeof inRange)[number]): EarningsRow | null =>
+      o.escrow
+        ? {
+            orderId: o.id,
+            pickupCode: o.pickupCode,
+            orderStatus: o.status,
+            deliveredAt: o.deliveredAt,
+            escrowStatus: o.escrow.status,
+            restaurantTransferStatus: o.escrow.restaurantTransferStatus,
+            foodSubtotal: o.escrow.foodSubtotal,
+            restaurantCommission: o.escrow.restaurantCommission,
+            restaurantPlatformFee: o.escrow.restaurantPlatformFee,
+            restaurantShare: o.escrow.restaurantShare,
+          }
+        : null;
+    const rangeRows = inRange.map(toRow).filter((r): r is EarningsRow => r !== null);
+    const outstandingTotals = totalEarnings(outstanding.map(toRow).filter((r): r is EarningsRow => r !== null));
+    const rangeTotals = totalEarnings(rangeRows);
+
+    return {
+      from,
+      to,
+      summary: {
+        settledKobo: rangeTotals.settledKobo,
+        settledCount: rangeTotals.settledCount,
+        pendingKobo: outstandingTotals.pendingKobo,
+        pendingCount: outstandingTotals.pendingCount,
+        failedKobo: outstandingTotals.failedKobo,
+        failedCount: outstandingTotals.failedCount,
+      },
+      items: rangeRows.map(toLine).filter((l) => l !== null),
     };
   }
 

@@ -117,6 +117,35 @@ export interface IncomingOrdersResponse {
   limit: number;
 }
 
+// GET /vendors/me/earnings (VendorsService.earnings / earnings.util.ts).
+export type PayoutStatus = "settled" | "pending" | "failed";
+
+export interface EarningsLine {
+  orderId: string;
+  pickupCode: string;
+  deliveredAt: string | null;
+  foodSubtotalKobo: number;
+  commissionKobo: number;
+  payoutKobo: number;
+  payoutStatus: PayoutStatus;
+}
+
+export interface Earnings {
+  from: string;
+  to: string;
+  summary: {
+    /** In the selected range. */
+    settledKobo: number;
+    settledCount: number;
+    /** Outstanding now, whenever delivered. */
+    pendingKobo: number;
+    pendingCount: number;
+    failedKobo: number;
+    failedCount: number;
+  };
+  items: EarningsLine[];
+}
+
 export interface MetricsItem {
   menuItemId: string | null;
   name: string;
@@ -194,6 +223,14 @@ export const vendorClient = {
     if (params.to) search.set("to", params.to);
     const qs = search.toString();
     return proxyFetch<Metrics>(`vendors/me/metrics${qs ? `?${qs}` : ""}`);
+  },
+
+  getEarnings: (params: { from?: string; to?: string } = {}) => {
+    const search = new URLSearchParams();
+    if (params.from) search.set("from", params.from);
+    if (params.to) search.set("to", params.to);
+    const qs = search.toString();
+    return proxyFetch<Earnings>(`vendors/me/earnings${qs ? `?${qs}` : ""}`);
   },
 
   getBanks: () => proxyFetch<Bank[]>("payout-accounts/banks"),

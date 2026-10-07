@@ -8,8 +8,15 @@ export function nairaToKobo(naira: string): number {
   return Math.round(parseFloat(naira) * 100);
 }
 
+/** Always Lagos time — never the server's or viewer's own zone (a UTC host would be an hour off). */
 export function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-NG", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return new Date(iso).toLocaleString("en-NG", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Africa/Lagos",
+  });
 }
 
 /** Chart axes: "₦2.5K", "₦1.2M" — full amounts stay in formatKobo. */

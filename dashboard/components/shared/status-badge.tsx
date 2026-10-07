@@ -22,6 +22,9 @@ const config: Record<string, { label: string; className: string }> = {
   open: { label: "Open", className: "bg-red-50 text-red-600 border-red-200" },
   resolved: { label: "Resolved", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   refunded: { label: "Refunded", className: "bg-purple-50 text-purple-700 border-purple-200" },
+  // Restaurant payouts (Earnings).
+  settled: { label: "Settled", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  failed: { label: "Failed", className: "bg-red-50 text-red-600 border-red-200" },
   active: { label: "Active", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   inactive: { label: "Inactive", className: "bg-gray-100 text-gray-500 border-gray-200" },
   suspended: { label: "Suspended", className: "bg-red-50 text-red-600 border-red-200" },

@@ -49,6 +49,16 @@ export const restaurantNav: NavItem[] = [
     ),
   },
   {
+    label: "Earnings",
+    href: "/restaurant/earnings",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="1.5" y="3.5" width="13" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+        <circle cx="8" cy="8" r="1.75" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    ),
+  },
+  {
     label: "Profile",
     href: "/restaurant/profile",
     icon: (

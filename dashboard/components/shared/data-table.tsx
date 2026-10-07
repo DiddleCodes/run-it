@@ -8,6 +8,8 @@ export interface Column<T> {
   sortable?: boolean;
   render?: (row: T) => ReactNode;
   className?: string;
+  /** "right" for money: header and cells flush right, digits tabular so they line up. */
+  align?: "left" | "right";
 }
 
 interface DataTableProps<T extends { id: string }> {
@@ -78,10 +80,10 @@ export function DataTable<T extends { id: string }>({
                   key={col.key}
                   className={`px-4 py-3 text-left text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide select-none ${
                     col.sortable ? "cursor-pointer hover:text-[var(--foreground)] transition-colors" : ""
-                  } ${col.className ?? ""}`}
+                  } ${col.align === "right" ? "text-right" : ""} ${col.className ?? ""}`}
                   onClick={() => col.sortable && handleSort(col.key)}
                 >
-                  <span className="flex items-center gap-1">
+                  <span className={`flex items-center gap-1 ${col.align === "right" ? "justify-end" : ""}`}>
                     {col.header}
                     {col.sortable && (
                       <span className={`opacity-40 ${sortKey === col.key ? "opacity-100 text-[var(--primary)]" : ""}`}>
@@ -114,7 +116,10 @@ export function DataTable<T extends { id: string }>({
                   onClick={() => onRowClick?.(row)}
                 >
                   {columns.map((col) => (
-                    <td key={col.key} className={`px-4 py-3 text-[var(--card-foreground)] ${col.className ?? ""}`}>
+                    <td
+                      key={col.key}
+                      className={`px-4 py-3 text-[var(--card-foreground)] ${col.align === "right" ? "text-right tabular-nums" : ""} ${col.className ?? ""}`}
+                    >
                       {col.render ? col.render(row) : String((row as Record<string, unknown>)[col.key] ?? "")}
                     </td>
                   ))}

@@ -43,7 +43,7 @@ export function StatCard({ icon, label, value, trend, accent = "burgundy", loadi
           </span>
         )}
       </div>
-      <div className="text-2xl font-semibold text-[var(--foreground)] leading-tight mb-0.5">{value}</div>
+      <div className="text-2xl font-semibold tabular-nums text-[var(--foreground)] leading-tight mb-0.5">{value}</div>
       <div className="text-sm text-[var(--muted-foreground)]">{label}</div>
       {trend?.label && <div className="text-[11px] text-[var(--muted-foreground)] mt-1 opacity-70">{trend.label}</div>}
     </div>

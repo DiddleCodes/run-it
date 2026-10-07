@@ -112,6 +112,14 @@ export class VendorsController {
     return this.vendors.metrics(user.sub, query);
   }
 
+  // The restaurant's own Earnings page — settled / pending / failed payouts.
+  @Get('me/earnings')
+  @UseGuards(JwtAuthGuard)
+  earnings(@CurrentUser() user: JwtPayload, @Query() query: MetricsQueryDto) {
+    assertCanActAsVendor(user);
+    return this.vendors.earnings(user.sub, query);
+  }
+
   // Task 11: orders awaiting pickup, each with the pickup code to show the
   // runner in person. Task 12 extended this with pagination + a status
   // filter for the Restaurant Dashboard's Orders tab — see
