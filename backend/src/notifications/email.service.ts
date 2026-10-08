@@ -44,7 +44,7 @@ export class EmailService {
     }
 
     try {
-      await axios.post(
+      const response = await axios.post<{ messageId?: string }>(
         EmailService.BREVO_SEND_URL,
         {
           sender: { name: senderName, email: senderEmail },
@@ -55,6 +55,8 @@ export class EmailService {
         },
         { headers: { 'api-key': apiKey, 'Content-Type': 'application/json' }, timeout: 5_000 },
       );
+      // Brevo's id for the message — what its Transactional logs search on.
+      this.logger.log(`Sent "${payload.subject}" to ${payload.to} via Brevo (${response?.data?.messageId ?? 'no message id'})`);
       return true;
     } catch (err) {
       this.logger.error(`Failed to send email to ${payload.to} via Brevo: ${(err as Error).message}`);
