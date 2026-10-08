@@ -210,7 +210,7 @@ void main() {
 
       await tester.tap(find.text('Support'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('support@run-it.app'), findsOneWidget);
+      expect(find.textContaining('support@bridgitcampus.com'), findsOneWidget);
 
       await tester.tap(find.text('Updates'));
       await tester.pumpAndSettle();

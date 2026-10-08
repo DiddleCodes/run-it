@@ -337,7 +337,7 @@ class _RejectedState extends ConsumerWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-          'Reach us at support@run-it.app and we’ll help sort this out.',
+          'Reach us at support@bridgitcampus.com and we’ll help sort this out.',
         ),
       ),
     );

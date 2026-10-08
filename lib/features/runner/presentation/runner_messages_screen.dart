@@ -481,7 +481,7 @@ class _SupportPointer extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'In-app support chat isn’t available yet. Email support@run-it.app and we’ll get back to you.',
+              'In-app support chat isn’t available yet. Email support@bridgitcampus.com and we’ll get back to you.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
             ),

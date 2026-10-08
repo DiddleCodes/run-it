@@ -130,7 +130,7 @@ class StudentProfileScreen extends ConsumerWidget {
                   subtitle: 'Get help or chat with us',
                   onTap: () => ref
                       .read(appNotificationProvider.notifier)
-                      .info('Reach us at support@run-it.app.'),
+                      .info('Reach us at support@bridgitcampus.com.'),
                 ),
                 _SettingsRow(
                   icon: Icons.card_giftcard_rounded,

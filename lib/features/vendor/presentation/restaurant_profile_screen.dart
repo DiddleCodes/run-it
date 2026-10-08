@@ -122,7 +122,7 @@ class _RestaurantProfileScreenState extends ConsumerState<RestaurantProfileScree
                     accentColor: AppColors.accentForest,
                     onTap: () => ref
                         .read(appNotificationProvider.notifier)
-                        .info('Reach us at support@run-it.app.'),
+                        .info('Reach us at support@bridgitcampus.com.'),
                   ),
                 ],
               ),

@@ -201,7 +201,7 @@ class RunnerProfileScreen extends ConsumerWidget {
                   title: 'Help & Support',
                   onTap: () => ref
                       .read(appNotificationProvider.notifier)
-                      .info('Reach us at support@run-it.app.'),
+                      .info('Reach us at support@bridgitcampus.com.'),
                 ),
                 SettingsRow(
                   icon: Icons.info_outline_rounded,
