@@ -7,8 +7,8 @@ Developer Program enrollment; this is the checklist for when it's done.
 
 | | |
 |---|---|
-| Bundle ID | `com.runit.runIt` (Android's is `com.runit.run_it` — Apple doesn't allow `_`) |
-| Firebase iOS app | `1:694264652054:ios:5c18b92ed749f3b61f7037`, `Runner/GoogleService-Info.plist` matches the bundle ID |
+| Bundle ID | `com.bridgitcampus.app` (the same as Android's applicationId) |
+| Firebase iOS app | **Not yet registered for `com.bridgitcampus.app`.** `Runner/GoogleService-Info.plist` and `lib/firebase_options.dart` still describe the old `com.runit.runIt` app (`1:694264652054:ios:5c18b92ed749f3b61f7037`) — replace them with `flutterfire configure` once the new iOS app is registered |
 | Push entitlement | `Runner/Runner.entitlements` has `aps-environment`; `UIBackgroundModes` has `remote-notification` |
 | Signing style | Automatic (Xcode manages certificates and profiles once a team is set) |
 | Minimum iOS | 15.0 |
@@ -29,7 +29,7 @@ Developer Program enrollment; this is the checklist for when it's done.
 1. **Team ID** — from developer.apple.com → Membership. Set it in Xcode
    (Runner target → Signing & Capabilities → Team). That writes
    `DEVELOPMENT_TEAM` into the project; commit that change (it isn't secret).
-2. **App ID** — with automatic signing Xcode registers `com.runit.runIt`
+2. **App ID** — with automatic signing Xcode registers `com.bridgitcampus.app`
    itself. Make sure the **Push Notifications** capability is on for it.
 3. **Certificates** — Xcode creates these automatically:
    - *Apple Development* (running on your own iPhone),
@@ -50,7 +50,7 @@ Developer Program enrollment; this is the checklist for when it's done.
    with the Team ID. Keep the `.p8` out of the repo, like the other keys.
    Without this, FCM accepts iOS pushes but none arrive.
 6. **App Store Connect** — create the app record (bundle ID
-   `com.runit.runIt`, name, SKU), then fill in the privacy questionnaire
+   `com.bridgitcampus.app`, name, SKU), then fill in the privacy questionnaire
    (email, location, photos/ID for KYC, payments), a privacy policy URL,
    and export compliance: the app only uses standard HTTPS, so add
    `ITSAppUsesNonExemptEncryption = NO` to `Info.plist` to skip the

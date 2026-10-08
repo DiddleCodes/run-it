@@ -20,7 +20,7 @@ Nothing secret is in this repo. Two files hold it, both outside git:
 ## Back it up — now, and outside this machine
 
 If the keystore **and** its password are both lost, RUN-It can't ship an
-update under the same app identity (`com.runit.run_it`) — unless the app is
+update under the same app identity (`com.bridgitcampus.app`) — unless the app is
 enrolled in Play App Signing (below), in which case Google can reset a lost
 upload key after identity verification.
 

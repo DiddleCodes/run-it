@@ -7,7 +7,7 @@ Tester" app once, and every new build shows up there.
 | | |
 |---|---|
 | Firebase project | `run-it-febca` |
-| Android app | `com.runit.run_it` (`1:694264652054:android:96c2410f7f6bd4e61f7037`) |
+| Android app | `com.bridgitcampus.app` — **Firebase app not registered yet**; `tool/distribute_android.sh` still uploads to the old `com.runit.run_it` app (`1:694264652054:android:96c2410f7f6bd4e61f7037`) until its `APP_ID` is switched |
 | Tester group | `testers` ("RUN-It testers") |
 | Signing | the upload key — see [SIGNING.md](SIGNING.md) |
 

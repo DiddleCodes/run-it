@@ -36,8 +36,10 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.runit.run_it"
+        // The store identity. `namespace` above is only the Kotlin/R package and
+        // deliberately stays com.runit.run_it — changing it moves MainActivity
+        // for no user-visible gain.
+        applicationId = "com.bridgitcampus.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
