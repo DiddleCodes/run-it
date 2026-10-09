@@ -123,6 +123,17 @@ export const adminNav: NavItem[] = [
     ),
   },
   {
+    label: "Analytics",
+    href: "/admin/analytics",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="2" y="9" width="2.5" height="5" rx="0.5" stroke="currentColor" strokeWidth="1.5" />
+        <rect x="6.75" y="5" width="2.5" height="9" rx="0.5" stroke="currentColor" strokeWidth="1.5" />
+        <rect x="11.5" y="2" width="2.5" height="12" rx="0.5" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    ),
+  },
+  {
     label: "Reconciliation",
     href: "/admin/reconciliation",
     icon: (

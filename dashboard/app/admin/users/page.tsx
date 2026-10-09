@@ -10,7 +10,7 @@ export default async function UsersPage() {
 
   return (
     <>
-      <PageHeader title="Users" subtitle="Search, suspend, and reinstate accounts." breadcrumb="Admin" />
+      <PageHeader title="Users" subtitle="Search, suspend, and reinstate accounts, or add another admin." breadcrumb="Admin" />
       <UsersBoard initialData={initialData} />
     </>
   );

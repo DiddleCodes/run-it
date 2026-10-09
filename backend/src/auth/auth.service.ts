@@ -12,6 +12,13 @@ import { JwtPayload } from './jwt-payload.interface';
 import { SESSION_INVALID_MESSAGE } from './session-validity.util';
 
 const RESET_TOKEN_TTL_MINUTES = 30;
+// An invited admin may not open their email straight away.
+const ADMIN_INVITE_TTL_HOURS = 72;
+
+/** Names are typed by admins — never put them into an email's HTML raw. */
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+}
 const BCRYPT_ROUNDS = 12;
 const OTP_TTL_MINUTES = 10;
 const OTP_LENGTH = 6;
@@ -395,6 +402,52 @@ export class AuthService {
     }
 
     return { message };
+  }
+
+  /**
+   * Emails a newly created admin a link to choose their own password — the
+   * same one-time token as a password reset (so /reset-password completes
+   * it), valid for 72 hours. Returns whether the email reached Brevo; if it
+   * didn't (or the link expires), "Forgot password?" on the dashboard sends
+   * a fresh one, since admins can always reset.
+   */
+  async sendAdminInvite(user: { id: string; email: string }, invitedBy: string | null): Promise<boolean> {
+    const rawToken = randomBytes(32).toString('hex');
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: this.hashToken(rawToken),
+        expiresAt: new Date(Date.now() + ADMIN_INVITE_TTL_HOURS * 3_600_000),
+      },
+    });
+
+    const link = `${this.config.get<string>('dashboardUrl')}/reset-password?token=${rawToken}`;
+    const by = invitedBy ? `${invitedBy} added you` : 'You have been added';
+    const sent = await this.email.send({
+      to: user.email,
+      subject: "You're now a Bridgit admin",
+      html: this.adminInviteEmailHtml(link, escapeHtml(by)),
+      text: `${by} as an admin on the Bridgit dashboard. Choose your password here: ${link} (expires in ${ADMIN_INVITE_TTL_HOURS} hours). If this is unexpected, ignore this email.`,
+    });
+
+    if (!sent && isDevEnvironment(this.config.get<string>('nodeEnv'))) {
+      this.logger.warn(`[DEV ONLY] Brevo not configured/send failed — admin invite link for ${user.email}: ${link}`);
+    }
+    return sent;
+  }
+
+  private adminInviteEmailHtml(link: string, by: string): string {
+    return `
+      <div style="font-family: -apple-system, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #1a1a1a;">
+        <h2 style="margin: 0 0 16px;">You're now a Bridgit admin</h2>
+        <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.5;">${by} as an admin on the Bridgit dashboard. Choose a password to sign in:</p>
+        <p style="margin: 0 0 24px; text-align: center;">
+          <a href="${link}" style="display: inline-block; padding: 12px 28px; background: #7A1636; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">Choose your password</a>
+        </p>
+        <p style="margin: 0 0 8px; font-size: 14px; color: #555;">This link expires in ${ADMIN_INVITE_TTL_HOURS} hours. After that, use "Forgot password?" on the sign-in page.</p>
+        <p style="margin: 0; font-size: 13px; color: #888;">If this is unexpected, you can ignore this email.</p>
+      </div>
+    `.trim();
   }
 
   private resetPasswordEmailHtml(resetLink: string): string {

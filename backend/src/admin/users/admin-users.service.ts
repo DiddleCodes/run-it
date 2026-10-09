@@ -1,9 +1,11 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { AccountType } from '@prisma/client';
+import { AuthService } from '../../auth/auth.service';
 import { CampusService } from '../../campus/campus.service';
 import { NotificationsEmitterService } from '../../notifications/notifications-emitter.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AdminAuditLogService } from '../admin-audit-log.service';
+import { CreateAdminDto } from './dto/create-admin.dto';
 import { DEFAULT_PAGE_SIZE, ListAdminUsersQueryDto, MAX_PAGE_SIZE } from './dto/list-admin-users-query.dto';
 
 // Never returns User.password — every query below is an explicit `select`,
@@ -32,7 +34,40 @@ export class AdminUsersService {
     private readonly auditLog: AdminAuditLogService,
     private readonly notifications: NotificationsEmitterService,
     private readonly campus: CampusService,
+    private readonly auth: AuthService,
   ) {}
+
+  /**
+   * Adds another dashboard admin. No password is set here — the new admin
+   * gets an invite email and chooses their own (AuthService.sendAdminInvite),
+   * so no admin ever sees or shares another's password. An email that
+   * already has any account is refused rather than converted: promoting a
+   * student/runner/restaurant account to admin would silently change what
+   * that person's existing login can do.
+   */
+  async createAdmin(adminUserId: string, dto: CreateAdminDto) {
+    const existing = await this.prisma.user.findUnique({ where: { email: dto.email }, select: { accountType: true } });
+    if (existing) {
+      throw new ConflictException(
+        existing.accountType === 'admin'
+          ? 'That email is already an admin.'
+          : `That email already belongs to a ${existing.accountType} account. Use a different email for the admin.`,
+      );
+    }
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: { email: dto.email, name: dto.name, accountType: 'admin' },
+        select: USER_SELECT,
+      });
+      await this.auditLog.record({ actorId: adminUserId, action: 'admin.create', targetType: 'user', targetId: user.id }, tx);
+      return user;
+    });
+
+    const inviter = await this.prisma.user.findUnique({ where: { id: adminUserId }, select: { name: true } });
+    const inviteSent = await this.auth.sendAdminInvite({ id: created.id, email: dto.email }, inviter?.name ?? null);
+    return { user: created, inviteSent };
+  }
 
   async list(query: ListAdminUsersQueryDto) {
     const page = query.page ?? 1;

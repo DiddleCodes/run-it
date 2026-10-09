@@ -263,6 +263,54 @@ export interface AdminUsersResponse {
   limit: number;
 }
 
+// GET /admin/analytics/menu — which dishes, at which restaurants, earn the most.
+// "Earned" is what the restaurant actually gets after Bridgit's commission and fee.
+export interface MenuAnalyticsDish {
+  key: string;
+  menuItemId: string | null;
+  name: string;
+  vendorId: string;
+  restaurantName: string;
+  salesKobo: number;
+  earnedKobo: number;
+  quantity: number;
+  orders: number;
+  shareOfRestaurantPct: number;
+  previousSalesKobo: number;
+  previousQuantity: number;
+  changePct: number | null;
+}
+
+export interface MenuAnalyticsRestaurant {
+  vendorId: string;
+  name: string;
+  salesKobo: number;
+  earnedKobo: number;
+  orders: number;
+  itemsSold: number;
+  topDish: { name: string; earnedKobo: number; sharePct: number } | null;
+  unorderedDishes: string[];
+}
+
+export interface MenuInsight {
+  kind: "top_dish" | "top_restaurant" | "reliance" | "rising" | "new_hit" | "falling" | "unordered" | "no_data";
+  tone: "positive" | "warning" | "info";
+  title: string;
+  detail: string;
+}
+
+export interface MenuAnalytics {
+  from: string;
+  to: string;
+  previousFrom: string;
+  vendorId: string | null;
+  restaurantOptions: { id: string; name: string }[];
+  totals: { salesKobo: number; earnedKobo: number; orders: number; itemsSold: number; restaurants: number };
+  dishes: MenuAnalyticsDish[];
+  restaurants: MenuAnalyticsRestaurant[];
+  insights: MenuInsight[];
+}
+
 export const adminClient = {
   listVendors: (params: { status?: VendorReviewStatus; page?: number; limit?: number } = {}) => {
     const search = new URLSearchParams();
@@ -303,6 +351,14 @@ export const adminClient = {
   resolveDispute: (id: string, resolutionType: DisputeResolutionType, note?: string) =>
     proxyFetch<AdminDisputeDetail>(`admin/disputes/${id}/resolve`, { method: "POST", body: { resolutionType, note } }),
 
+  getMenuAnalytics: (params: { from?: string; to?: string; vendorId?: string } = {}) => {
+    const search = new URLSearchParams();
+    if (params.from) search.set("from", params.from);
+    if (params.to) search.set("to", params.to);
+    if (params.vendorId) search.set("vendorId", params.vendorId);
+    const qs = search.toString();
+    return proxyFetch<MenuAnalytics>(`admin/analytics/menu${qs ? `?${qs}` : ""}`);
+  },
   getPlatformMetrics: (params: { from?: string; to?: string } = {}) => {
     const search = new URLSearchParams();
     if (params.from) search.set("from", params.from);
@@ -332,6 +388,9 @@ export const adminClient = {
     return proxyFetch<AdminUsersResponse>(`admin/users${qs ? `?${qs}` : ""}`);
   },
   getUser: (id: string) => proxyFetch<AdminUserDetail>(`admin/users/${id}`),
+  // No password: the new admin is emailed a link to choose their own.
+  createAdmin: (body: { name: string; email: string }) =>
+    proxyFetch<{ user: AdminUserSummary; inviteSent: boolean }>("admin/users/admins", { method: "POST", body }),
   suspendUser: (id: string, reason: string) =>
     proxyFetch<AdminUserDetail>(`admin/users/${id}/suspend`, { method: "POST", body: { reason } }),
   reinstateUser: (id: string) => proxyFetch<AdminUserDetail>(`admin/users/${id}/reinstate`, { method: "POST" }),

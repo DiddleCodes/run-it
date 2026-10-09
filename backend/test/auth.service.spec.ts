@@ -802,3 +802,43 @@ describe('AuthService.logout', () => {
     await expect(service.logout('bogus-or-already-used')).resolves.toEqual({ message: 'Logged out.' });
   });
 });
+
+describe('AuthService.sendAdminInvite', () => {
+  it('emails a 72-hour link that /reset-password accepts — the new admin chooses their own password', async () => {
+    const { service, prisma, email } = makeService({ nodeEnv: 'test', dashboardUrl: 'https://dashboard.bridgitcampus.com' });
+    let stored: any;
+    prisma.passwordResetToken.create.mockImplementation(async ({ data }: any) => (stored = { id: 'tok-1', usedAt: null, ...data }));
+
+    const sent = await service.sendAdminInvite({ id: 'admin-2', email: 'ops@bridgitcampus.com' }, 'Stephen A.');
+
+    expect(sent).toBe(true);
+    const mail = email.send.mock.calls[0][0];
+    expect(mail.to).toBe('ops@bridgitcampus.com');
+    expect(mail.subject).toBe("You're now a Bridgit admin");
+    expect(mail.text).toContain('Stephen A. added you');
+    const token = mail.text.match(/reset-password\?token=([0-9a-f]{64})/)[1];
+    expect(mail.html).toContain(`https://dashboard.bridgitcampus.com/reset-password?token=${token}`);
+    // Only the hash is stored, and it lasts about 72 hours.
+    expect(stored.tokenHash).not.toBe(token);
+    const hours = (stored.expiresAt.getTime() - Date.now()) / 3_600_000;
+    expect(hours).toBeGreaterThan(71.9);
+    expect(hours).toBeLessThanOrEqual(72);
+
+    // The link in the email sets the password.
+    prisma.passwordResetToken.findUnique.mockResolvedValue(stored);
+    await expect(service.resetPassword(token, 'a-brand-new-password')).resolves.toEqual({
+      message: 'Password updated. You can now sign in.',
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'admin-2' } }));
+  });
+
+  it("escapes the inviter's name in the email HTML", async () => {
+    const { service, prisma, email } = makeService();
+    prisma.passwordResetToken.create.mockResolvedValue({});
+
+    await service.sendAdminInvite({ id: 'a', email: 'a@b.co' }, '<img src=x onerror=alert(1)>');
+
+    expect(email.send.mock.calls[0][0].html).not.toContain('<img');
+    expect(email.send.mock.calls[0][0].html).toContain('&lt;img');
+  });
+});

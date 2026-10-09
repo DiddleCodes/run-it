@@ -18,9 +18,12 @@ import { AdminUsersService } from './users/admin-users.service';
 import { AdminVendorReviewController } from './vendor-review/admin-vendor-review.controller';
 import { AdminVendorReviewService } from './vendor-review/admin-vendor-review.service';
 import { UploadsModule } from '../uploads/uploads.module';
+import { AuthModule } from '../auth/auth.module';
+import { AdminAnalyticsController } from './analytics/admin-analytics.controller';
+import { AdminAnalyticsService } from './analytics/admin-analytics.service';
 
 @Module({
-  imports: [CommonModule, OrderEscrowModule, PayoutAccountsModule, NotificationsModule, CampusModule, UploadsModule],
+  imports: [CommonModule, OrderEscrowModule, PayoutAccountsModule, NotificationsModule, CampusModule, UploadsModule, AuthModule],
   controllers: [
     AdminVendorReviewController,
     AdminDisputesController,
@@ -28,6 +31,7 @@ import { UploadsModule } from '../uploads/uploads.module';
     AdminUsersController,
     AdminRunnerKycController,
     AdminCampusController,
+    AdminAnalyticsController,
   ],
   providers: [
     AdminAuditLogService,
@@ -37,6 +41,7 @@ import { UploadsModule } from '../uploads/uploads.module';
     AdminUsersService,
     AdminRunnerKycService,
     AdminCampusService,
+    AdminAnalyticsService,
   ],
   exports: [AdminAuditLogService],
 })

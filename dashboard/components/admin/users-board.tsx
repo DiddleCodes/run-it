@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Column, DataTable } from "@/components/shared/data-table";
+import { AddAdminDialog } from "./add-admin-dialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Drawer, Modal } from "@/components/shared/modal";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -182,6 +183,7 @@ export function UsersBoard({ initialData }: { initialData: AdminUsersResponse })
             </button>
           ))}
         </div>
+        <AddAdminDialog onAdded={(user) => setUsers((current) => [user, ...current.filter((u) => u.id !== user.id)])} />
       </div>
 
       <DataTable columns={columns} data={filtered} emptyTitle="No users found" emptyDescription="Try a different search or filter." onRowClick={openDetail} />

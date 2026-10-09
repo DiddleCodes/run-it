@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { AdminUsersService } from '../src/admin/users/admin-users.service';
 import { AdminAuditLogService } from '../src/admin/admin-audit-log.service';
 import { createNotificationsEmitterMock, createPrismaMock } from './support/mocks';
@@ -12,8 +12,9 @@ function makeService() {
     requireById: jest.fn().mockResolvedValue({ id: 'campus-1', name: 'Test Campus', allowedEmailDomains: [] }),
     list: jest.fn(),
   };
-  const service = new AdminUsersService(prisma as any, auditLog, notifications as any, campus as any);
-  return { service, prisma, notifications, campus };
+  const auth = { sendAdminInvite: jest.fn().mockResolvedValue(true) };
+  const service = new AdminUsersService(prisma as any, auditLog, notifications as any, campus as any, auth as any);
+  return { service, prisma, notifications, campus, auth };
 }
 
 describe('AdminUsersService.list', () => {
@@ -210,5 +211,53 @@ describe('AdminUsersService.settleCashDebt', () => {
 
     await expect(service.settleCashDebt('admin-1', 'student-1')).rejects.toThrow(BadRequestException);
     expect(prisma.cashCollectionDebt.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('AdminUsersService.createAdmin', () => {
+  it('creates an admin with no password, records who added them, and emails an invite', async () => {
+    const { service, prisma, auth } = makeService();
+    prisma.user.findUnique.mockImplementation(async ({ where }: any) =>
+      where.id === 'admin-1' ? { name: 'Stephen A.' } : null,
+    );
+    prisma.user.create.mockResolvedValue({ id: 'admin-2', email: 'ops@bridgitcampus.com', name: 'Ops', accountType: 'admin' });
+
+    const result = await service.createAdmin('admin-1', { email: 'ops@bridgitcampus.com', name: 'Ops' });
+
+    expect(prisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { email: 'ops@bridgitcampus.com', name: 'Ops', accountType: 'admin' } }),
+    );
+    expect(prisma.user.create.mock.calls[0][0].data).not.toHaveProperty('password');
+    expect(prisma.user.create.mock.calls[0][0].select).not.toHaveProperty('password');
+    expect(prisma.adminAuditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ actorId: 'admin-1', action: 'admin.create', targetType: 'user', targetId: 'admin-2' }),
+    });
+    expect(auth.sendAdminInvite).toHaveBeenCalledWith({ id: 'admin-2', email: 'ops@bridgitcampus.com' }, 'Stephen A.');
+    expect(result).toEqual({ user: expect.objectContaining({ id: 'admin-2' }), inviteSent: true });
+  });
+
+  it('still creates the admin if the invite email fails, and says so', async () => {
+    const { service, prisma, auth } = makeService();
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.create.mockResolvedValue({ id: 'admin-2' });
+    auth.sendAdminInvite.mockResolvedValue(false);
+
+    expect((await service.createAdmin('admin-1', { email: 'ops@bridgitcampus.com', name: 'Ops' })).inviteSent).toBe(false);
+  });
+
+  it.each([
+    ['admin', /already an admin/],
+    ['restaurant', /already belongs to a restaurant account/],
+    ['student', /already belongs to a student account/],
+  ])('refuses an email that already has a %s account, changing nothing', async (accountType, message) => {
+    const { service, prisma, auth } = makeService();
+    prisma.user.findUnique.mockResolvedValue({ accountType });
+
+    const error = await service.createAdmin('admin-1', { email: 'taken@example.com', name: 'X' }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect(error.message).toMatch(message);
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(auth.sendAdminInvite).not.toHaveBeenCalled();
   });
 });

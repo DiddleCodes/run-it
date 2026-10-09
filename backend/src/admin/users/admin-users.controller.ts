@@ -4,6 +4,7 @@ import { AdminGuard } from '../../common/guards/admin.guard';
 import { JwtPayload } from '../../auth/jwt-payload.interface';
 import { AdminUsersService } from './admin-users.service';
 import { AssignCampusDto } from './dto/assign-campus.dto';
+import { CreateAdminDto } from './dto/create-admin.dto';
 import { ListAdminUsersQueryDto } from './dto/list-admin-users-query.dto';
 import { SuspendUserDto } from './dto/suspend-user.dto';
 
@@ -11,6 +12,11 @@ import { SuspendUserDto } from './dto/suspend-user.dto';
 @UseGuards(AdminGuard)
 export class AdminUsersController {
   constructor(private readonly service: AdminUsersService) {}
+
+  @Post('admins')
+  createAdmin(@CurrentUser() admin: JwtPayload, @Body() dto: CreateAdminDto) {
+    return this.service.createAdmin(admin.sub, dto);
+  }
 
   @Get()
   list(@Query() query: ListAdminUsersQueryDto) {
