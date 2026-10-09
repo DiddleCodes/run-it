@@ -14,7 +14,7 @@ export default () => ({
     // callbacks once the in-app webview navigates to this exact URL, so the
     // two sides have to agree on it even though nothing ever actually loads
     // there (the client intercepts the navigation first).
-    callbackUrl: process.env.PAYSTACK_CALLBACK_URL ?? 'https://runit.app/payments/callback',
+    callbackUrl: process.env.PAYSTACK_CALLBACK_URL ?? 'https://api.bridgitcampus.com/payments/callback',
     // Paystack's published webhook source IPs (as of their docs). Checked
     // as a second factor alongside HMAC signature verification — see
     // PaystackWebhookIpGuard. Overridable via env because Paystack can

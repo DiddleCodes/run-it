@@ -156,7 +156,7 @@ describe('AuthService.requestPasswordReset', () => {
   // Task 36: the reset link used to only ever be logged server-side —
   // now it's actually emailed via the same real Brevo path requestOtp uses.
   it('emails the reset link via EmailService, built from the configured dashboard URL', async () => {
-    const { service, prisma, email } = makeService({ nodeEnv: 'test', dashboardUrl: 'https://dashboard.runit.app' });
+    const { service, prisma, email } = makeService({ nodeEnv: 'test', dashboardUrl: 'https://dashboard.bridgitcampus.com' });
     prisma.user.findUnique.mockResolvedValue({ id: 'u1', accountType: 'admin' });
     prisma.passwordResetToken.create.mockResolvedValue({});
 
@@ -168,8 +168,8 @@ describe('AuthService.requestPasswordReset', () => {
     expect(emailArgs.subject).toBe('Reset your Bridgit password');
     expect(emailArgs.text).toContain('Reset your Bridgit password:');
     expect(emailArgs.html).toContain('Reset your Bridgit password</h2>');
-    expect(emailArgs.html).toContain('https://dashboard.runit.app/reset-password?token=');
-    expect(emailArgs.text).toContain('https://dashboard.runit.app/reset-password?token=');
+    expect(emailArgs.html).toContain('https://dashboard.bridgitcampus.com/reset-password?token=');
+    expect(emailArgs.text).toContain('https://dashboard.bridgitcampus.com/reset-password?token=');
   });
 
   it('never calls EmailService for an unregistered email or a student/runner account', async () => {

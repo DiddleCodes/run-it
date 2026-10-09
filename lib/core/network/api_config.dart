@@ -1,9 +1,15 @@
-/// The RUN-It payments backend's base URL (Task 8b's NestJS service).
-/// Override at build/run time with `--dart-define=API_BASE_URL=...` for a
-/// staging/production backend; defaults to the local dev server.
+import 'package:flutter/foundation.dart';
+
+/// The production backend.
+const productionApiBaseUrl = 'https://api.bridgitcampus.com';
+
+/// The Bridgit backend's base URL. Override with
+/// `--dart-define=API_BASE_URL=...`. Without it, a release build talks to
+/// production (so a release can never silently ship pointing at a
+/// developer's machine) and a debug run talks to the local dev server.
 const apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://localhost:3000',
+  defaultValue: kReleaseMode ? productionApiBaseUrl : 'http://localhost:3000',
 );
 
 /// Paystack's *public* key only — the secret key never leaves the backend
@@ -20,7 +26,7 @@ const paystackPublicKey = String.fromEnvironment(
 
 /// Must match the backend's `PAYSTACK_CALLBACK_URL` (`.env.example`) — see
 /// that config value's own doc comment for why the two have to agree.
-const paystackCallbackUrl = 'https://runit.app/payments/callback';
+const paystackCallbackUrl = '$productionApiBaseUrl/payments/callback';
 
 /// Task 31: a Sentry DSN is publish-only (safe to ship in the compiled
 /// app), same trust level as the API base URL above — unlike the backend's
