@@ -270,8 +270,11 @@ Env vars (`.env.example`):
 | `JWT_SECRET` | Must match whatever signs tokens from the app's real auth flow |
 | `INTERNAL_SERVICE_API_KEY` | Shared secret for the delivery-confirmation flow calling `/release` and `/refund` |
 | `RESTAURANT_COMMISSION_RATE` / `DEFAULT_DELIVERY_FEE` / `RESTAURANT_PLATFORM_FEE` / `RUNNER_DELIVERY_PAY` | Commission/delivery-fee split — see "Commission split" above |
-| `AWS_REGION` / `S3_UPLOADS_BUCKET` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | S3 credentials/bucket for `POST /uploads/presign` |
-| `S3_PUBLIC_BASE_URL` | Optional CDN/custom domain fronting the bucket; falls back to the bucket's default virtual-hosted-style URL |
+| `S3_UPLOADS_BUCKET` | **Public** bucket: menu photos and restaurant logos only |
+| `S3_PRIVATE_BUCKET` | **Private** bucket (must differ): ID/selfie/vehicle, delivery-proof, handoff and dispute photos. Stored as `private://…` references; only admins get 10-minute signed links |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | Storage key (AWS, B2 or R2 — names are the same) and region (`auto` for R2) |
+| `S3_ENDPOINT` | Set for Backblaze B2 / Cloudflare R2 (path-style requests); unset for AWS |
+| `S3_PUBLIC_BASE_URL` | Where the public bucket's files are readable. Required with `S3_ENDPOINT`; on AWS defaults to the bucket's own URL |
 
 ### Tests
 

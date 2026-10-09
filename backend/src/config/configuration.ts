@@ -68,15 +68,25 @@ export default () => ({
   internalServiceApiKey: process.env.INTERNAL_SERVICE_API_KEY,
 
   s3: {
+    // Any S3-compatible store: AWS (no endpoint), or Backblaze B2 /
+    // Cloudflare R2 via S3_ENDPOINT. Region: the AWS/B2 region, or 'auto'
+    // for R2.
     region: process.env.AWS_REGION ?? 'us-east-1',
+    endpoint: process.env.S3_ENDPOINT || undefined,
+    // Public bucket: menu photos and restaurant logos only.
     bucket: process.env.S3_UPLOADS_BUCKET,
+    // Private bucket: ID/selfie/vehicle photos, delivery, handoff and
+    // dispute photos — only ever read through signed URLs.
+    privateBucket: process.env.S3_PRIVATE_BUCKET,
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    // Falls back to the bucket's default virtual-hosted-style URL when no
-    // CDN/custom domain is fronting it.
-    publicBaseUrl:
+    // Where the public bucket's files are readable. Required with
+    // S3_ENDPOINT (env.validation); on AWS it defaults to the bucket's own
+    // virtual-hosted URL.
+    publicBaseUrl: (
       process.env.S3_PUBLIC_BASE_URL ??
-      `https://${process.env.S3_UPLOADS_BUCKET}.s3.${process.env.AWS_REGION ?? 'us-east-1'}.amazonaws.com`,
+      `https://${process.env.S3_UPLOADS_BUCKET}.s3.${process.env.AWS_REGION ?? 'us-east-1'}.amazonaws.com`
+    ).replace(/\/+$/, ''),
   },
 
   reconciliation: {

@@ -1,4 +1,5 @@
-import { IsString, IsUrl, Length } from 'class-validator';
+import { IsString, Length } from 'class-validator';
+import { IsPrivateFileRef } from '../../uploads/private-files';
 
 // Task 30: the handoff photo is required, not optional — see
 // Order.handoffPhotoUrl's schema doc comment for why this is a hard
@@ -13,6 +14,7 @@ export class VerifyPickupDto {
   @Length(4, 6)
   code!: string;
 
-  @IsUrl()
+  // A private-bucket reference from POST /uploads/presign — the runner's own upload.
+  @IsPrivateFileRef('handoff-photo')
   handoffPhotoUrl!: string;
 }

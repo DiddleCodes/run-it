@@ -1,4 +1,6 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { JwtPayload } from '../auth/jwt-payload.interface';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PresignUploadDto } from './dto/presign-upload.dto';
 import { UploadsService } from './uploads.service';
@@ -12,7 +14,7 @@ export class UploadsController {
   // a PUT to one freshly generated key, so there's nothing to scope further.
   @Post('presign')
   @UseGuards(JwtAuthGuard)
-  presign(@Body() dto: PresignUploadDto) {
-    return this.uploads.presign(dto);
+  presign(@CurrentUser() user: JwtPayload, @Body() dto: PresignUploadDto) {
+    return this.uploads.presign(dto, user.sub);
   }
 }

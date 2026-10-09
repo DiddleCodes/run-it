@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { DisputeStatus } from '@prisma/client';
 import { OrderEscrowService } from '../../order-escrow/order-escrow.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { UploadsService } from '../../uploads/uploads.service';
 import { AdminAuditLogService } from '../admin-audit-log.service';
 import { OpenDisputeDto } from './dto/open-dispute.dto';
 import { DisputeResolutionInput, ResolveDisputeDto } from './dto/resolve-dispute.dto';
@@ -23,23 +24,34 @@ export class AdminDisputesService {
     private readonly escrow: OrderEscrowService,
     private readonly auditLog: AdminAuditLogService,
     private readonly notifications: NotificationsEmitterService,
+    private readonly uploads: UploadsService,
   ) {}
 
   async list(status?: DisputeStatus) {
-    return this.prisma.dispute.findMany({
+    const disputes = await this.prisma.dispute.findMany({
       where: status ? { status } : {},
       orderBy: { openedAt: 'desc' },
       include: { order: { select: { id: true, status: true, totalAmount: true, deliveryLocationLabel: true } } },
     });
+    // The list never shows photos — no references, no links.
+    return disputes.map((dispute) => ({ ...dispute, reporterPhotoUrl: null }));
   }
 
+  // Admin-only (AdminGuard on the controller): the student's report photo,
+  // the runner's handoff photo and delivery proof come back as signed links
+  // that work for 10 minutes, never as stored references or public URLs.
   async getOne(id: string) {
     const dispute = await this.prisma.dispute.findUnique({
       where: { id },
       include: { order: { include: ORDER_DETAIL_INCLUDE } },
     });
     if (!dispute) throw new NotFoundException('Dispute not found');
-    return dispute;
+    const [reporterPhotoUrl, handoffPhotoUrl, deliveryProofUrl] = await Promise.all([
+      this.uploads.signedReadUrl(dispute.reporterPhotoUrl),
+      this.uploads.signedReadUrl(dispute.order.handoffPhotoUrl),
+      this.uploads.signedReadUrl(dispute.order.deliveryProofUrl),
+    ]);
+    return { ...dispute, reporterPhotoUrl, order: { ...dispute.order, handoffPhotoUrl, deliveryProofUrl } };
   }
 
   // Manual open — for a dispute an admin identifies outside the auto-open

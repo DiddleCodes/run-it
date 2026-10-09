@@ -1,25 +1,16 @@
 import { IsIn, IsInt, Max, Min } from 'class-validator';
+import { UPLOAD_PURPOSES, UploadPurpose } from '../private-files';
 
-// Task 11: 'delivery-proof' is uploaded by a runner (not a vendor) — see
-// UploadsController's doc comment. Task 29: the three 'runner-kyc-*'
-// purposes are the real photo uploads behind SubmitRunnerKycDto — same
-// presign-then-PUT-then-register flow, just a different registering
-// endpoint (POST /runner-kyc/submit instead of the delivery-proof route).
-// Task 30: 'handoff-photo' is the runner's required pickup-handoff photo
-// (registered via POST /orders/:orderId/verify-pickup); 'dispute-report'
-// is the student's optional problem-report photo (registered via POST
+// Which purpose goes to which bucket is in ../private-files.ts. Registering
+// endpoints: menu-item-photo / vendor-logo (restaurant menu and profile),
+// runner-kyc-* (POST /runner-kyc/submit), handoff-photo (POST
+// /orders/:orderId/verify-pickup), delivery-proof (POST
+// /orders/:orderId/delivery-proof), dispute-report (POST
 // /orders/:orderId/report).
-export const UPLOAD_PURPOSES = [
-  'menu-item-photo',
-  'vendor-logo',
-  'delivery-proof',
-  'runner-kyc-id',
-  'runner-kyc-selfie',
-  'runner-kyc-vehicle',
-  'handoff-photo',
-  'dispute-report',
-] as const;
-export type UploadPurpose = (typeof UPLOAD_PURPOSES)[number];
+export { UPLOAD_PURPOSES };
+export type { UploadPurpose };
+
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 const ALLOWED_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 export type AllowedContentType = (typeof ALLOWED_CONTENT_TYPES)[number];
@@ -31,14 +22,11 @@ export class PresignUploadDto {
   @IsIn(UPLOAD_PURPOSES)
   purpose!: UploadPurpose;
 
-  // Declared upfront so we can reject an oversized upload before issuing a
-  // URL for it. Note this is advisory, not enforced during the actual PUT —
-  // a presigned PUT URL (unlike a presigned POST policy) can't carry a
-  // content-length condition, so a client could still upload more than it
-  // declared. Acceptable here since the uploader is always an
-  // authenticated user (vendor or runner), never an anonymous public client.
+  // The exact size of the file about to be uploaded. It's signed into the
+  // upload URL (Content-Length), so storage rejects a PUT of any other
+  // size — the 5 MB cap holds for the upload itself, not just this request.
   @IsInt()
   @Min(1)
-  @Max(5 * 1024 * 1024)
+  @Max(MAX_UPLOAD_BYTES)
   contentLengthBytes!: number;
 }

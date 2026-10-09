@@ -259,3 +259,91 @@ build `npx prisma generate && npm run build`, pre-deploy
 `/health` (120 s), draining 30 s, restart on failure ×5. Change both
 together. Variables besides the secrets: `NODE_ENV=production`,
 `TRUST_PROXY_HOPS=2`.
+
+## File storage
+
+Uploads go straight from the app or dashboard to storage with a presigned
+PUT (`POST /uploads/presign`); the backend never handles the bytes. Any
+S3-compatible store works by environment variables alone: AWS S3 (no
+`S3_ENDPOINT`), Backblaze B2 or Cloudflare R2 (`S3_ENDPOINT` set, path-style).
+
+| Bucket | Variable | Holds | Readable by |
+|---|---|---|---|
+| Public | `S3_UPLOADS_BUCKET` | `menu-item-photo/`, `vendor-logo/` | Anyone, at `S3_PUBLIC_BASE_URL/<key>` |
+| Private | `S3_PRIVATE_BUCKET` | `runner-kyc-id/`, `runner-kyc-selfie/`, `runner-kyc-vehicle/`, `delivery-proof/`, `handoff-photo/`, `dispute-report/` | Nobody by URL. The database stores `private://<purpose>/<uploader id>/<uuid>.<ext>`; `GET /admin/runner-kyc/:id` and `GET /admin/disputes/:id` (admin only) return 10-minute signed links. Lists carry no photos. |
+
+Rules the backend enforces:
+
+- Each upload URL signs the file's exact **size** (max 5 MB) and **type**;
+  storage refuses anything else, and the URL works for 5 minutes.
+- A private photo can only be registered by the user who uploaded it
+  (the uploader's id is in the key): runner verification, pickup handoff,
+  delivery proof and report-a-problem all check it.
+- Presigned PUTs carry no checksum (`requestChecksumCalculation:
+  'WHEN_REQUIRED'`) — the SDK default made every real upload fail with
+  `BadDigest`.
+
+Checked end to end against a local S3-compatible server (SeaweedFS, with
+signature checks on), 2026-10-09: the exact upload succeeds; one byte more,
+a 6 MB body or a different type is refused (403); the public file is
+readable without credentials; the private file is not (403) but its signed
+link is (200, same bytes) and editing the link's key breaks it (403).
+
+### Backblaze B2 setup
+
+1. **Buckets** (names are global across all of B2 — add a suffix if taken):
+   - `bridgit-public-prod` — Files in bucket: **Public**
+   - `bridgit-private-prod` — Files in bucket: **Private**
+   - Default encryption on for both; Object Lock off. Lifecycle: *Keep
+     only the last version* (B2 keeps every version by default).
+   - Note the **Endpoint** on either bucket's page, e.g.
+     `s3.eu-central-003.backblazeb2.com`; the region is the middle part,
+     `eu-central-003`.
+2. **Application key** (App Keys → Add a New Application Key): name
+   `bridgit-backend`; access to both buckets (if the form only offers one
+   bucket or all, choose **All** in an account holding only these
+   buckets); type **Read and Write**; no file-name prefix. The *keyID* is
+   `AWS_ACCESS_KEY_ID`, the *applicationKey* (shown once) is
+   `AWS_SECRET_ACCESS_KEY`.
+3. **CORS on the public bucket only** — the dashboard uploads menu photos
+   and logos from the browser. With the B2 CLI (`brew install b2-tools`,
+   `b2 account authorize`):
+
+   ```sh
+   b2 bucket update --cors-rules '[{"corsRuleName":"dashboardUploads","allowedOrigins":["https://dashboard.bridgitcampus.com"],"allowedOperations":["s3_put"],"allowedHeaders":["content-type"],"maxAgeSeconds":3600}]' bridgit-public-prod allPublic
+   ```
+
+   The private bucket needs no CORS: the app isn't a browser, and admins
+   view photos with plain `<img>` loads.
+4. **Railway variables** on `run-it`:
+
+   ```
+   S3_ENDPOINT=https://s3.eu-central-003.backblazeb2.com
+   AWS_REGION=eu-central-003
+   S3_UPLOADS_BUCKET=bridgit-public-prod
+   S3_PRIVATE_BUCKET=bridgit-private-prod
+   S3_PUBLIC_BASE_URL=https://s3.eu-central-003.backblazeb2.com/bridgit-public-prod
+   AWS_ACCESS_KEY_ID=<keyID>
+   AWS_SECRET_ACCESS_KEY=<applicationKey>
+   ```
+
+   (B2's own download URL, `https://f003.backblazeb2.com/file/bridgit-public-prod`,
+   also works as `S3_PUBLIC_BASE_URL`.)
+5. **Check**: upload a menu photo in the dashboard and open its URL in a
+   private browser window (must load); a runner's ID photo must load in
+   Admin → Runner verification and its link must stop working after 10
+   minutes.
+
+### AWS S3 or Cloudflare R2 instead
+
+- **AWS**: unset `S3_ENDPOINT` and `S3_PUBLIC_BASE_URL`; `AWS_REGION` = the
+  buckets' region. Public bucket: ACLs disabled, a bucket policy allowing
+  `s3:GetObject` on `arn:aws:s3:::<public>/*` (Block Public Access: policies
+  off, ACLs on). Private bucket: Block Public Access fully on. IAM key:
+  `s3:PutObject` on both buckets' `/*`, `s3:GetObject` on the private
+  bucket's `/*` (to sign read links). CORS on the public bucket as above
+  (S3 JSON form: `AllowedMethods: ["PUT"]`, `AllowedHeaders: ["content-type"]`).
+- **R2**: `S3_ENDPOINT=https://<account id>.r2.cloudflarestorage.com`,
+  `AWS_REGION=auto`; connect a custom domain to the public bucket and use it
+  as `S3_PUBLIC_BASE_URL` (the `r2.dev` URL is rate-limited); an R2 API
+  token with Object Read & Write on both buckets.

@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { requireOwnPrivateFile } from '../uploads/private-files';
 import { SubmitRunnerKycDto } from './dto/submit-runner-kyc.dto';
 
 @Injectable()
@@ -22,6 +23,11 @@ export class RunnerKycService {
         message: "You're already verified — there's nothing to resubmit.",
       });
     }
+
+    // ID, selfie and vehicle photos must be this runner's own private uploads.
+    requireOwnPrivateFile(dto.idPhotoUrl, 'runner-kyc-id', userId);
+    requireOwnPrivateFile(dto.selfiePhotoUrl, 'runner-kyc-selfie', userId);
+    if (dto.vehiclePhotoUrl) requireOwnPrivateFile(dto.vehiclePhotoUrl, 'runner-kyc-vehicle', userId);
 
     const needsVehicle = dto.runnerType === 'independent_rider';
     if (needsVehicle) {

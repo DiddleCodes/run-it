@@ -74,8 +74,8 @@ export class OrdersController {
   @Post('verify-pickup')
   @UseGuards(EscrowPartyGuard)
   @EscrowParty('runner')
-  verifyPickup(@Param('orderId') orderId: string, @Body() dto: VerifyPickupDto) {
-    return this.orders.verifyPickup(orderId, dto.code, dto.handoffPhotoUrl);
+  verifyPickup(@Param('orderId') orderId: string, @CurrentUser() user: JwtPayload, @Body() dto: VerifyPickupDto) {
+    return this.orders.verifyPickup(orderId, dto.code, dto.handoffPhotoUrl, user.sub);
   }
 
   // The runner's own scan/entry of the student-shown delivery PIN — this
@@ -92,8 +92,8 @@ export class OrdersController {
   @Post('delivery-proof')
   @UseGuards(EscrowPartyGuard)
   @EscrowParty('runner')
-  submitDeliveryProof(@Param('orderId') orderId: string, @Body() dto: DeliveryProofDto) {
-    return this.orders.submitDeliveryProof(orderId, dto);
+  submitDeliveryProof(@Param('orderId') orderId: string, @CurrentUser() user: JwtPayload, @Body() dto: DeliveryProofDto) {
+    return this.orders.submitDeliveryProof(orderId, dto, user.sub);
   }
 
   // Task 30: the real student-facing "report a problem" entry point —

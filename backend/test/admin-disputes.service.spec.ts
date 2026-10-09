@@ -1,14 +1,37 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { AdminDisputesService } from '../src/admin/disputes/admin-disputes.service';
 import { AdminAuditLogService } from '../src/admin/admin-audit-log.service';
-import { createNotificationsEmitterMock, createPrismaMock } from './support/mocks';
+import { UploadsService } from '../src/uploads/uploads.service';
+import { createConfigMock, createNotificationsEmitterMock, createPrismaMock } from './support/mocks';
+
+// The real signer with dummy keys: links are computed locally, nothing is fetched.
+const uploads = new UploadsService(
+  createConfigMock({
+    's3.region': 'eu-central-003',
+    's3.endpoint': 'https://s3.eu-central-003.backblazeb2.com',
+    's3.bucket': 'public-test',
+    's3.privateBucket': 'private-test',
+    's3.accessKeyId': 'test-key',
+    's3.secretAccessKey': 'test-secret',
+    's3.publicBaseUrl': 'https://s3.eu-central-003.backblazeb2.com/public-test',
+  }) as any,
+);
+const UUID = '3f2b8c1e-9a4d-4e5f-8b6a-1c2d3e4f5a6b';
+const privateRef = (purpose: string, owner: string) => `private://${purpose}/${owner}/${UUID}.jpg`;
+const expectSignedLink = (value: unknown, key: string) => {
+  const url = new URL(value as string);
+  expect(url.origin + url.pathname).toBe(`https://s3.eu-central-003.backblazeb2.com/private-test/${key}`);
+  expect(url.searchParams.get('X-Amz-Expires')).toBe('600');
+  expect(url.searchParams.has('X-Amz-Signature')).toBe(true);
+};
+
 
 function makeService() {
   const prisma = createPrismaMock();
   const escrow = { release: jest.fn(), refund: jest.fn() };
   const auditLog = new AdminAuditLogService(prisma as any);
   const notifications = createNotificationsEmitterMock();
-  const service = new AdminDisputesService(prisma as any, escrow as any, auditLog, notifications as any);
+  const service = new AdminDisputesService(prisma as any, escrow as any, auditLog, notifications as any, uploads);
   return { service, prisma, escrow, notifications };
 }
 
@@ -139,11 +162,43 @@ describe('AdminDisputesService.resolve', () => {
 describe('AdminDisputesService.list', () => {
   it('filters by status when given, and omits the filter entirely otherwise', async () => {
     const { service, prisma } = makeService();
+    prisma.dispute.findMany.mockResolvedValue([]);
 
     await service.list('open');
     expect(prisma.dispute.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { status: 'open' } }));
 
     await service.list(undefined);
     expect(prisma.dispute.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: {} }));
+  });
+});
+
+describe('AdminDisputesService — private photos', () => {
+  const dispute = {
+    id: 'dispute-1',
+    status: 'open',
+    reporterPhotoUrl: privateRef('dispute-report', 'student-1'),
+    order: {
+      id: 'order-1',
+      handoffPhotoUrl: privateRef('handoff-photo', 'runner-1'),
+      deliveryProofUrl: privateRef('delivery-proof', 'runner-1'),
+    },
+  };
+
+  it('the detail view returns signed links for the report, handoff and delivery-proof photos', async () => {
+    const { service, prisma } = makeService();
+    prisma.dispute.findUnique.mockResolvedValue(structuredClone(dispute));
+
+    const detail: any = await service.getOne('dispute-1');
+
+    expectSignedLink(detail.reporterPhotoUrl, `dispute-report/student-1/${UUID}.jpg`);
+    expectSignedLink(detail.order.handoffPhotoUrl, `handoff-photo/runner-1/${UUID}.jpg`);
+    expectSignedLink(detail.order.deliveryProofUrl, `delivery-proof/runner-1/${UUID}.jpg`);
+    expect(JSON.stringify(detail)).not.toContain('private://');
+  });
+
+  it('the list carries no photos at all', async () => {
+    const { service, prisma } = makeService();
+    prisma.dispute.findMany.mockResolvedValue([structuredClone(dispute)]);
+    expect((await service.list(undefined))[0].reporterPhotoUrl).toBeNull();
   });
 });

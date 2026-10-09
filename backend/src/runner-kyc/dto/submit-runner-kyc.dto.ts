@@ -1,12 +1,14 @@
 import { IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 import { RunnerKycIdType, RunnerKycRunnerType, RunnerVehicleType } from '@prisma/client';
+import { IsPrivateFileRef } from '../../uploads/private-files';
 
 const RUNNER_TYPES: RunnerKycRunnerType[] = ['student_runner', 'independent_rider'];
 const ID_TYPES: RunnerKycIdType[] = ['student_id', 'government_id'];
 const VEHICLE_TYPES: RunnerVehicleType[] = ['bicycle', 'motorbike', 'keke'];
 
-// Task 29: the real submit-for-review payload — three real S3 URLs (from
-// POST /uploads/presign, same pattern as delivery-proof) plus the
+// Task 29: the real submit-for-review payload — three private-bucket
+// references (`fileUrl` from POST /uploads/presign; RunnerKycService also
+// checks they're the runner's own uploads) plus the
 // declarative fields the KYC capture wizard collects. `vehiclePhotoUrl`/
 // `vehicleType`/`vehiclePlate` are only required for an independent rider
 // — RunnerKycService enforces that conditional requirement itself, since
@@ -20,17 +22,14 @@ export class SubmitRunnerKycDto {
   @IsIn(ID_TYPES)
   idType?: RunnerKycIdType;
 
-  @IsString()
-  @MinLength(1)
+  @IsPrivateFileRef('runner-kyc-id')
   idPhotoUrl!: string;
 
-  @IsString()
-  @MinLength(1)
+  @IsPrivateFileRef('runner-kyc-selfie')
   selfiePhotoUrl!: string;
 
   @IsOptional()
-  @IsString()
-  @MinLength(1)
+  @IsPrivateFileRef('runner-kyc-vehicle')
   vehiclePhotoUrl?: string;
 
   @IsOptional()

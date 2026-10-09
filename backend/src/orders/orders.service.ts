@@ -15,6 +15,7 @@ import { PICKUP_CODE } from '../notifications/notification-event';
 import { OrderEscrowService } from '../order-escrow/order-escrow.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { requireOwnPrivateFile } from '../uploads/private-files';
 import { DeliveryProofDto } from './dto/delivery-proof.dto';
 import { ReportProblemDto } from './dto/report-problem.dto';
 import { formatKobo } from '../common/display/money';
@@ -47,7 +48,13 @@ export class OrdersService {
   // same moment they scan the vendor-shown pickup code. See
   // Order.handoffPhotoUrl's schema doc comment for why this is a hard
   // block rather than a soft warning.
-  async verifyPickup(orderId: string, code: string, handoffPhotoUrl: string): Promise<{ status: Order['status'] }> {
+  async verifyPickup(
+    orderId: string,
+    code: string,
+    handoffPhotoUrl: string,
+    runnerUserId: string,
+  ): Promise<{ status: Order['status'] }> {
+    requireOwnPrivateFile(handoffPhotoUrl, 'handoff-photo', runnerUserId);
     const order = await this.getOrderOrThrow(orderId);
 
     // Idempotent: a retried correct scan after pickup already succeeded
@@ -140,7 +147,8 @@ export class OrdersService {
     return { status: 'delivered' };
   }
 
-  async submitDeliveryProof(orderId: string, dto: DeliveryProofDto): Promise<Order> {
+  async submitDeliveryProof(orderId: string, dto: DeliveryProofDto, runnerUserId: string): Promise<Order> {
+    requireOwnPrivateFile(dto.photoUrl, 'delivery-proof', runnerUserId);
     const order = await this.getOrderOrThrow(orderId);
     if (order.status !== 'picked_up') {
       throw new ConflictException(
@@ -189,6 +197,7 @@ export class OrdersService {
     if (order.studentUserId !== studentUserId) {
       throw new ForbiddenException('You are not the student on this order');
     }
+    if (dto.photoUrl) requireOwnPrivateFile(dto.photoUrl, 'dispute-report', studentUserId);
 
     const existing = await this.prisma.dispute.findUnique({ where: { orderId } });
     if (existing) {

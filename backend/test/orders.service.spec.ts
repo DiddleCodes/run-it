@@ -21,14 +21,16 @@ const baseOrder = {
   runnerUserId: 'runner-1',
 };
 
-const HANDOFF_PHOTO_URL = 'https://cdn.example.com/handoff/test.jpg';
+const HANDOFF_PHOTO_URL = 'private://handoff-photo/runner-1/3f2b8c1e-9a4d-4e5f-8b6a-1c2d3e4f5a6b.jpg';
+const PROOF_PHOTO_URL = 'private://delivery-proof/runner-1/3f2b8c1e-9a4d-4e5f-8b6a-1c2d3e4f5a6b.jpg';
+const REPORT_PHOTO_URL = 'private://dispute-report/student-1/3f2b8c1e-9a4d-4e5f-8b6a-1c2d3e4f5a6b.jpg';
 
 describe('OrdersService.verifyPickup', () => {
   it('rejects a mismatched pickup code and never advances status', async () => {
     const { service, prisma } = makeService();
     prisma.order.findUnique.mockResolvedValue({ ...baseOrder });
 
-    await expect(service.verifyPickup('order-1', '0000', HANDOFF_PHOTO_URL)).rejects.toThrow(BadRequestException);
+    await expect(service.verifyPickup('order-1', '0000', HANDOFF_PHOTO_URL, 'runner-1')).rejects.toThrow(BadRequestException);
     expect(prisma.order.update).not.toHaveBeenCalled();
   });
 
@@ -37,7 +39,7 @@ describe('OrdersService.verifyPickup', () => {
     prisma.order.findUnique.mockResolvedValue({ ...baseOrder });
     prisma.order.update.mockResolvedValue({ ...baseOrder, status: 'picked_up', handoffPhotoUrl: HANDOFF_PHOTO_URL });
 
-    const result = await service.verifyPickup('order-1', '1234', HANDOFF_PHOTO_URL);
+    const result = await service.verifyPickup('order-1', '1234', HANDOFF_PHOTO_URL, 'runner-1');
 
     expect(result).toEqual({ status: 'picked_up' });
     expect(prisma.order.update).toHaveBeenCalledWith({
@@ -51,7 +53,7 @@ describe('OrdersService.verifyPickup', () => {
     const { service, prisma } = makeService();
     prisma.order.findUnique.mockResolvedValue({ ...baseOrder, status: 'picked_up' });
 
-    const result = await service.verifyPickup('order-1', '1234', HANDOFF_PHOTO_URL);
+    const result = await service.verifyPickup('order-1', '1234', HANDOFF_PHOTO_URL, 'runner-1');
 
     expect(result).toEqual({ status: 'picked_up' });
     expect(prisma.order.update).not.toHaveBeenCalled();
@@ -61,14 +63,14 @@ describe('OrdersService.verifyPickup', () => {
     const { service, prisma } = makeService();
     prisma.order.findUnique.mockResolvedValue({ ...baseOrder, status: 'cancelled' });
 
-    await expect(service.verifyPickup('order-1', '1234', HANDOFF_PHOTO_URL)).rejects.toThrow(ConflictException);
+    await expect(service.verifyPickup('order-1', '1234', HANDOFF_PHOTO_URL, 'runner-1')).rejects.toThrow(ConflictException);
   });
 
   it('rejects pickup verification before the vendor marks the order ready (Task 12)', async () => {
     const { service, prisma } = makeService();
     prisma.order.findUnique.mockResolvedValue({ ...baseOrder, status: 'preparing' });
 
-    await expect(service.verifyPickup('order-1', '1234', HANDOFF_PHOTO_URL)).rejects.toThrow(ConflictException);
+    await expect(service.verifyPickup('order-1', '1234', HANDOFF_PHOTO_URL, 'runner-1')).rejects.toThrow(ConflictException);
     expect(prisma.order.update).not.toHaveBeenCalled();
   });
 
@@ -81,10 +83,10 @@ describe('OrdersService.verifyPickup', () => {
     redis.incr.mockImplementation(async () => ++attempts);
 
     for (let i = 0; i < 5; i++) {
-      await expect(service.verifyPickup('order-1', '0000', HANDOFF_PHOTO_URL)).rejects.toThrow(BadRequestException);
+      await expect(service.verifyPickup('order-1', '0000', HANDOFF_PHOTO_URL, 'runner-1')).rejects.toThrow(BadRequestException);
     }
-    await expect(service.verifyPickup('order-1', '0000', HANDOFF_PHOTO_URL)).rejects.toThrow(HttpException);
-    await expect(service.verifyPickup('order-1', '0000', HANDOFF_PHOTO_URL)).rejects.toMatchObject({ status: 429 });
+    await expect(service.verifyPickup('order-1', '0000', HANDOFF_PHOTO_URL, 'runner-1')).rejects.toThrow(HttpException);
+    await expect(service.verifyPickup('order-1', '0000', HANDOFF_PHOTO_URL, 'runner-1')).rejects.toMatchObject({ status: 429 });
   });
 });
 
@@ -241,13 +243,13 @@ describe('OrdersService.submitDeliveryProof', () => {
     prisma.order.findUnique.mockResolvedValue({ ...baseOrder, status: 'picked_up' });
     prisma.order.update.mockResolvedValue({ ...baseOrder, status: 'picked_up', needsManualReview: true });
 
-    const result = await service.submitDeliveryProof('order-1', { photoUrl: 'https://cdn.example.com/proof.jpg' });
+    const result = await service.submitDeliveryProof('order-1', { photoUrl: PROOF_PHOTO_URL }, 'runner-1');
 
     expect(result.status).toBe('picked_up');
     expect(prisma.order.update).toHaveBeenCalledWith({
       where: { id: 'order-1' },
       data: expect.objectContaining({
-        deliveryProofUrl: 'https://cdn.example.com/proof.jpg',
+        deliveryProofUrl: PROOF_PHOTO_URL,
         needsManualReview: true,
       }),
     });
@@ -258,7 +260,7 @@ describe('OrdersService.submitDeliveryProof', () => {
     prisma.order.findUnique.mockResolvedValue({ ...baseOrder, status: 'placed' });
 
     await expect(
-      service.submitDeliveryProof('order-1', { photoUrl: 'https://cdn.example.com/proof.jpg' }),
+      service.submitDeliveryProof('order-1', { photoUrl: PROOF_PHOTO_URL }, 'runner-1'),
     ).rejects.toThrow(ConflictException);
   });
 
@@ -267,7 +269,7 @@ describe('OrdersService.submitDeliveryProof', () => {
     prisma.order.findUnique.mockResolvedValue({ ...baseOrder, status: 'picked_up' });
     prisma.order.update.mockResolvedValue({ ...baseOrder, status: 'picked_up', needsManualReview: true });
 
-    await service.submitDeliveryProof('order-1', { photoUrl: 'https://cdn.example.com/proof.jpg' });
+    await service.submitDeliveryProof('order-1', { photoUrl: PROOF_PHOTO_URL }, 'runner-1');
 
     expect(prisma.dispute.upsert).toHaveBeenCalledWith({
       where: { orderId: 'order-1' },
@@ -478,14 +480,14 @@ describe('OrdersService.reportProblem', () => {
 
     await service.reportProblem('order-1', 'student-1', {
       reason: 'My food arrived cold and half-eaten.',
-      photoUrl: 'https://cdn.example.com/dispute-report/test.jpg',
+      photoUrl: REPORT_PHOTO_URL,
     });
 
     expect(prisma.dispute.create).toHaveBeenCalledWith({
       data: {
         orderId: 'order-1',
         reason: 'My food arrived cold and half-eaten.',
-        reporterPhotoUrl: 'https://cdn.example.com/dispute-report/test.jpg',
+        reporterPhotoUrl: REPORT_PHOTO_URL,
       },
     });
     expect(notifications.emitToOrderRestaurant).toHaveBeenCalledWith(
@@ -549,3 +551,33 @@ describe('runnerDisplayName (Task 73)', () => {
   });
 });
 
+
+describe("private photos: only the caller's own upload is accepted", () => {
+  const someoneElses = (purpose: string) => `private://${purpose}/runner-2/3f2b8c1e-9a4d-4e5f-8b6a-1c2d3e4f5a6b.jpg`;
+
+  it("verify-pickup refuses another runner's handoff photo, before touching the order", async () => {
+    const { service, prisma } = makeService();
+    await expect(service.verifyPickup('order-1', '1234', someoneElses('handoff-photo'), 'runner-1')).rejects.toThrow(
+      /uploaded by someone else/,
+    );
+    expect(prisma.order.update).not.toHaveBeenCalled();
+  });
+
+  it("delivery-proof refuses another runner's photo", async () => {
+    const { service, prisma } = makeService();
+    await expect(
+      service.submitDeliveryProof('order-1', { photoUrl: someoneElses('delivery-proof') }, 'runner-1'),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.order.update).not.toHaveBeenCalled();
+  });
+
+  it("report-a-problem refuses a photo the student didn't upload", async () => {
+    const { service, prisma } = makeService();
+    prisma.order.findUnique.mockResolvedValue({ ...baseOrder });
+    prisma.dispute.findUnique.mockResolvedValue(null);
+    await expect(
+      service.reportProblem('order-1', 'student-1', { reason: 'Cold', photoUrl: someoneElses('dispute-report') }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.dispute.create).not.toHaveBeenCalled();
+  });
+});

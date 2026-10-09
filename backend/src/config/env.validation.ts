@@ -31,10 +31,23 @@ export const envValidationSchema = Joi.object({
   INTERNAL_SERVICE_API_KEY: Joi.string().min(8).required(),
 
   AWS_REGION: Joi.string().default('us-east-1'),
+  // Public bucket (menu photos, logos) and private bucket (ID, delivery,
+  // dispute photos) — two different buckets. See src/uploads/private-files.ts.
   S3_UPLOADS_BUCKET: Joi.string().required(),
+  S3_PRIVATE_BUCKET: Joi.string().required().invalid(Joi.ref('S3_UPLOADS_BUCKET')).messages({
+    'any.invalid': 'S3_PRIVATE_BUCKET must be a different bucket from S3_UPLOADS_BUCKET',
+  }),
+  // Set for any S3-compatible store that isn't AWS (Backblaze B2,
+  // Cloudflare R2). Then S3_PUBLIC_BASE_URL is required too: the AWS-shaped
+  // default would be wrong.
+  S3_ENDPOINT: Joi.string().uri().allow('').optional(),
   AWS_ACCESS_KEY_ID: Joi.string().required(),
   AWS_SECRET_ACCESS_KEY: Joi.string().required(),
-  S3_PUBLIC_BASE_URL: Joi.string().uri().optional(),
+  S3_PUBLIC_BASE_URL: Joi.string().uri().when('S3_ENDPOINT', {
+    is: Joi.string().min(1).required(),
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
 
   PAYSTACK_WEBHOOK_IP_ALLOWLIST: Joi.string().optional(),
   RECONCILE_INTERVAL_MINUTES: Joi.number().min(1).default(5),

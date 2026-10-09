@@ -1,9 +1,9 @@
-import { IsUrl } from 'class-validator';
+import { IsPrivateFileRef } from '../../uploads/private-files';
 
 export class DeliveryProofDto {
-  // The `publicUrl` returned by POST /uploads/presign, once the runner has
-  // actually PUT the photo to that URL — this endpoint never accepts the
-  // raw image itself, same upload-then-register pattern as menu-item photos.
-  @IsUrl()
+  // The `fileUrl` (a private-bucket reference) returned by POST
+  // /uploads/presign, once the runner has PUT the photo — this endpoint
+  // never accepts the raw image itself. Must be the runner's own upload.
+  @IsPrivateFileRef('delivery-proof')
   photoUrl!: string;
 }

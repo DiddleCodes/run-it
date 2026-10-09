@@ -11,8 +11,8 @@ function makeService() {
 const baseDto = {
   runnerType: 'student_runner' as const,
   idType: 'student_id' as const,
-  idPhotoUrl: 'https://cdn.example.com/kyc/id.jpg',
-  selfiePhotoUrl: 'https://cdn.example.com/kyc/selfie.jpg',
+  idPhotoUrl: 'private://runner-kyc-id/runner-1/3f2b8c1e-9a4d-4e5f-8b6a-1c2d3e4f5a6b.jpg',
+  selfiePhotoUrl: 'private://runner-kyc-selfie/runner-1/3f2b8c1e-9a4d-4e5f-8b6a-1c2d3e4f5a6b.jpg',
 };
 
 describe('RunnerKycService.submit', () => {
@@ -54,7 +54,7 @@ describe('RunnerKycService.submit', () => {
       service.submit('runner-1', {
         ...baseDto,
         runnerType: 'independent_rider',
-        vehiclePhotoUrl: 'https://cdn.example.com/kyc/vehicle.jpg',
+        vehiclePhotoUrl: 'private://runner-kyc-vehicle/runner-1/3f2b8c1e-9a4d-4e5f-8b6a-1c2d3e4f5a6b.jpg',
         vehicleType: 'motorbike',
       }),
     ).rejects.toThrow(BadRequestException);
@@ -67,7 +67,7 @@ describe('RunnerKycService.submit', () => {
     await service.submit('runner-1', {
       ...baseDto,
       runnerType: 'independent_rider',
-      vehiclePhotoUrl: 'https://cdn.example.com/kyc/vehicle.jpg',
+      vehiclePhotoUrl: 'private://runner-kyc-vehicle/runner-1/3f2b8c1e-9a4d-4e5f-8b6a-1c2d3e4f5a6b.jpg',
       vehicleType: 'bicycle',
     });
 
@@ -86,7 +86,7 @@ describe('RunnerKycService.submit', () => {
     await service.submit('runner-1', {
       ...baseDto,
       runnerType: 'independent_rider',
-      vehiclePhotoUrl: 'https://cdn.example.com/kyc/vehicle.jpg',
+      vehiclePhotoUrl: 'private://runner-kyc-vehicle/runner-1/3f2b8c1e-9a4d-4e5f-8b6a-1c2d3e4f5a6b.jpg',
       vehicleType: 'motorbike',
       vehiclePlate: 'ABC-123-XY',
     });
@@ -130,5 +130,15 @@ describe('RunnerKycService.submit — an already-approved runner', () => {
       await service.submit('runner-1', baseDto);
       expect(prisma.runnerKyc.upsert).toHaveBeenCalled();
     }
+  });
+});
+
+describe("RunnerKycService.submit — only the runner's own photos", () => {
+  it.each(['idPhotoUrl', 'selfiePhotoUrl'] as const)("refuses another user's %s, saving nothing", async (field) => {
+    const { service, prisma } = makeService();
+    prisma.runnerKyc.findUnique.mockResolvedValue(null);
+    const foreign = baseDto[field].replace('/runner-1/', '/runner-2/');
+    await expect(service.submit('runner-1', { ...baseDto, [field]: foreign })).rejects.toThrow(/uploaded by someone else/);
+    expect(prisma.runnerKyc.upsert).not.toHaveBeenCalled();
   });
 });

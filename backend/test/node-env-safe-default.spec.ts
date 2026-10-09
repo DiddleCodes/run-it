@@ -18,6 +18,7 @@ const REQUIRED_ENV = {
   JWT_SECRET: 'a-long-enough-test-secret',
   INTERNAL_SERVICE_API_KEY: 'internal-key',
   S3_UPLOADS_BUCKET: 'bucket',
+  S3_PRIVATE_BUCKET: 'private-bucket',
   AWS_ACCESS_KEY_ID: 'id',
   AWS_SECRET_ACCESS_KEY: 'secret',
 };

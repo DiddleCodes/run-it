@@ -17,9 +17,10 @@ import { AdminUsersController } from './users/admin-users.controller';
 import { AdminUsersService } from './users/admin-users.service';
 import { AdminVendorReviewController } from './vendor-review/admin-vendor-review.controller';
 import { AdminVendorReviewService } from './vendor-review/admin-vendor-review.service';
+import { UploadsModule } from '../uploads/uploads.module';
 
 @Module({
-  imports: [CommonModule, OrderEscrowModule, PayoutAccountsModule, NotificationsModule, CampusModule],
+  imports: [CommonModule, OrderEscrowModule, PayoutAccountsModule, NotificationsModule, CampusModule, UploadsModule],
   controllers: [
     AdminVendorReviewController,
     AdminDisputesController,

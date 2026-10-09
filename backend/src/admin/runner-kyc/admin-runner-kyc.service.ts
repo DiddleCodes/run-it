@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { UploadsService } from '../../uploads/uploads.service';
 import { AdminAuditLogService } from '../admin-audit-log.service';
 import { DEFAULT_PAGE_SIZE, ListAdminRunnerKycQueryDto, MAX_PAGE_SIZE } from './dto/list-admin-runner-kyc-query.dto';
 
@@ -14,6 +15,7 @@ export class AdminRunnerKycService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditLog: AdminAuditLogService,
+    private readonly uploads: UploadsService,
   ) {}
 
   async list(query: ListAdminRunnerKycQueryDto) {
@@ -32,16 +34,26 @@ export class AdminRunnerKycService {
       this.prisma.runnerKyc.count({ where }),
     ]);
 
-    return { items, total, page, limit };
+    // The list never shows photos — no references, no links.
+    const withoutPhotos = items.map((item) => ({ ...item, idPhotoUrl: null, selfiePhotoUrl: null, vehiclePhotoUrl: null }));
+    return { items: withoutPhotos, total, page, limit };
   }
 
+  // Admin-only (AdminGuard on the controller): the ID, selfie and vehicle
+  // photos come back as signed links that work for 10 minutes, never as
+  // stored references or public URLs.
   async getOne(id: string) {
     const kyc = await this.prisma.runnerKyc.findUnique({
       where: { id },
       include: { user: { select: { name: true, email: true, phone: true, createdAt: true, averageRating: true, ratingCount: true } } },
     });
     if (!kyc) throw new NotFoundException('Runner KYC submission not found');
-    return kyc;
+    const [idPhotoUrl, selfiePhotoUrl, vehiclePhotoUrl] = await Promise.all([
+      this.uploads.signedReadUrl(kyc.idPhotoUrl),
+      this.uploads.signedReadUrl(kyc.selfiePhotoUrl),
+      this.uploads.signedReadUrl(kyc.vehiclePhotoUrl),
+    ]);
+    return { ...kyc, idPhotoUrl, selfiePhotoUrl, vehiclePhotoUrl };
   }
 
   async approve(adminUserId: string, id: string) {
