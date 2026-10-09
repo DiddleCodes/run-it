@@ -3,18 +3,22 @@
  * dev seed's admin@runit.dev. Run it inside the deployed backend so it uses
  * that environment's DATABASE_URL:
  *
- *   railway ssh -s run-it -- node dist/cli/create-admin.js
+ *   railway ssh -s run-it -- node dist/cli/create-admin.js --email you@example.com --name "Your Name"
  *
- * Everything is typed at prompts: nothing secret is ever a command-line
- * argument (so never in shell history or the process list), the password
- * is not echoed while typed, and nothing prints it. Refuses to run without
- * an interactive terminal, so a password can't be piped in from a file.
+ * Only the password is typed, at a prompt: it is never a command-line
+ * argument (so never in shell history or the process list), it is read
+ * with the terminal's echo off, and nothing prints it. --email and --name
+ * are optional; anything not given is asked for. Refuses to run without an
+ * interactive terminal, so a password can't be piped in from a file.
  * Never changes an existing account — a forgotten admin password is reset
  * from the dashboard's "Forgot password?".
+ *
+ * Every prompt ends in a newline: Railway's SSH relay holds output until a
+ * line ends, so a prompt left on the same line as the answer only appeared
+ * after Enter.
  */
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import * as readline from 'node:readline';
 
 // Same cost factor AuthService uses for dashboard passwords.
 const BCRYPT_ROUNDS = 12;
@@ -31,6 +35,25 @@ export function passwordProblem(password: string, confirmation: string): string 
   if (password.trim() !== password) return 'The password starts or ends with a space — leave those out.';
   if (password !== confirmation) return "The two passwords don't match.";
   return null;
+}
+
+/** `--email a@b.co --name "Ada O"` or `--email=a@b.co`. Never accepts a password. */
+export function parseArgs(argv: string[]): { email?: string; name?: string; error?: string } {
+  const out: { email?: string; name?: string } = {};
+  for (let i = 0; i < argv.length; i++) {
+    const [flag, inline] = argv[i].split(/=(.*)/s, 2);
+    if (flag !== '--email' && flag !== '--name') {
+      return {
+        error: /pass/i.test(flag)
+          ? 'The password is never taken as an argument — you will be asked for it.'
+          : `Unknown argument "${flag}". Use --email and --name.`,
+      };
+    }
+    const value = inline ?? argv[++i];
+    if (value === undefined || value.startsWith('--')) return { error: `${flag} needs a value.` };
+    out[flag === '--email' ? 'email' : 'name'] = value;
+  }
+  return out;
 }
 
 type Users = Pick<PrismaClient['user'], 'findUnique' | 'create'>;
@@ -58,66 +81,146 @@ export async function createAdmin(
   return { ok: true, id: user.id };
 }
 
-/** Prompts on the terminal; `hidden` answers are not echoed. */
-function prompter() {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-  let muted = false;
-  // readline echoes each keystroke through _writeToOutput — swallow it while
-  // a hidden answer is being typed.
-  (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput = (s: string) => {
-    if (!muted) process.stdout.write(s);
-  };
-  const ask = (question: string, hidden = false) =>
+export interface Terminal {
+  /** Writes a whole line (a newline is added). */
+  line(text: string): void;
+  /** Reads one line; `hidden` reads with echo off. */
+  readLine(hidden: boolean): Promise<string>;
+}
+
+/**
+ * The interactive flow, separate from the real terminal so a test can check
+ * every prompt is a complete line before anything is read.
+ */
+export async function run(term: Terminal, argv: string[], users: Users): Promise<number> {
+  const args = parseArgs(argv);
+  if (args.error) {
+    term.line(args.error);
+    return 1;
+  }
+  term.line('Create a Bridgit dashboard admin. Nothing you type is saved anywhere but the database.');
+
+  let email = args.email?.trim() ?? '';
+  for (;;) {
+    if (!email) {
+      term.line('Admin email, then Enter:');
+      email = (await term.readLine(false)).trim();
+    }
+    const problem = emailProblem(email);
+    if (!problem) break;
+    term.line(problem);
+    email = '';
+  }
+  let name = args.name;
+  if (name === undefined) {
+    term.line('Display name (optional), then Enter:');
+    name = await term.readLine(false);
+  }
+  term.line(`Admin: ${email.toLowerCase()}${name.trim() ? ` (${name.trim()})` : ''}`);
+
+  let password = '';
+  for (;;) {
+    term.line(`Password, at least ${MIN_ADMIN_PASSWORD_LENGTH} characters. Nothing will show as you type — type it, then Enter:`);
+    password = await term.readLine(true);
+    term.line('Type it again, then Enter:');
+    const confirmation = await term.readLine(true);
+    const problem = passwordProblem(password, confirmation);
+    if (!problem) break;
+    term.line(problem);
+  }
+
+  const result = await createAdmin(users, { email, name, password });
+  password = '';
+  if (!result.ok) {
+    term.line(`Not created: ${result.reason}`);
+    return 1;
+  }
+  term.line(`Created admin ${email.toLowerCase()}. Sign in at the dashboard with this email and password.`);
+  return 0;
+}
+
+/**
+ * The real terminal, in raw mode: echo is off for hidden answers and on
+ * (written back by us) for visible ones. Handles Backspace and Ctrl-C.
+ */
+function rawTerminal(): Terminal & { close(): void } {
+  const stdin = process.stdin;
+  stdin.setRawMode(true);
+  stdin.setEncoding('utf8');
+  stdin.resume();
+  let pending = '';
+  let waiter: ((chunk: string) => void) | null = null;
+  stdin.on('data', (chunk: string) => {
+    if (waiter) waiter(chunk);
+    else pending += chunk;
+  });
+  const nextChunk = () =>
     new Promise<string>((resolve) => {
-      process.stdout.write(question);
-      muted = hidden;
-      rl.question('', (answer) => {
-        muted = false;
-        if (hidden) process.stdout.write('\n');
-        resolve(answer);
-      });
+      if (pending) {
+        const chunk = pending;
+        pending = '';
+        resolve(chunk);
+      } else {
+        waiter = (chunk) => {
+          waiter = null;
+          resolve(chunk);
+        };
+      }
     });
-  return { ask, close: () => rl.close() };
+
+  return {
+    line: (text) => process.stdout.write(`${text}\n`),
+    async readLine(hidden) {
+      let value = '';
+      for (;;) {
+        const chunk = await nextChunk();
+        for (let i = 0; i < chunk.length; i++) {
+          const ch = chunk[i];
+          if (ch === '\r' || ch === '\n') {
+            if (i + 1 < chunk.length) pending = chunk.slice(i + 1).replace(/^\n/, '') + pending;
+            process.stdout.write('\r\n');
+            return value;
+          }
+          if (ch === '\u0003') {
+            process.stdout.write('\r\nCancelled — nothing was created.\r\n');
+            stdin.setRawMode(false);
+            process.exit(130);
+          }
+          if (ch === '\u007f' || ch === '\b') {
+            if (value) {
+              value = value.slice(0, -1);
+              if (!hidden) process.stdout.write('\b \b');
+            }
+            continue;
+          }
+          if (ch < ' ') continue; // other control keys
+          value += ch;
+          if (!hidden) process.stdout.write(ch);
+        }
+      }
+    },
+    close() {
+      stdin.setRawMode(false);
+      stdin.pause();
+    },
+  };
 }
 
 async function main(): Promise<number> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    console.error('Run this in an interactive terminal (railway ssh -s run-it -- node dist/cli/create-admin.js).');
+    console.error(
+      'Run this in an interactive terminal: railway ssh -s run-it -- node dist/cli/create-admin.js --email you@example.com',
+    );
     return 1;
   }
-  const { ask, close } = prompter();
+  const term = rawTerminal();
+  // Raw mode turns off the terminal's own newline translation for output.
+  const line = (text: string) => process.stdout.write(`${text}\r\n`);
   const prisma = new PrismaClient();
   try {
-    console.log('Create a Bridgit dashboard admin. Nothing you type here is saved anywhere but the database.\n');
-
-    let email = '';
-    for (;;) {
-      email = (await ask('Admin email: ')).trim();
-      const problem = emailProblem(email);
-      if (!problem) break;
-      console.log(problem);
-    }
-    const name = await ask('Display name (optional): ');
-
-    let password = '';
-    for (;;) {
-      password = await ask(`Password (at least ${MIN_ADMIN_PASSWORD_LENGTH} characters, not shown): `, true);
-      const confirmation = await ask('Type it again: ', true);
-      const problem = passwordProblem(password, confirmation);
-      if (!problem) break;
-      console.log(problem);
-    }
-
-    const result = await createAdmin(prisma.user, { email, name, password });
-    password = '';
-    if (!result.ok) {
-      console.error(`\nNot created: ${result.reason}`);
-      return 1;
-    }
-    console.log(`\nCreated admin ${email.toLowerCase()}. Sign in at the dashboard with this email and password.`);
-    return 0;
+    return await run({ line, readLine: term.readLine }, process.argv.slice(2), prisma.user);
   } finally {
-    close();
+    term.close();
     await prisma.$disconnect();
   }
 }
