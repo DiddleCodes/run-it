@@ -2,7 +2,8 @@
 # Builds a signed Android release and sends it to testers through Firebase
 # App Distribution — see android/DISTRIBUTION.md.
 #
-#   API_BASE_URL=https://api.example.com tool/distribute_android.sh "What changed"
+#   tool/distribute_android.sh "What changed"          # production backend
+#   API_BASE_URL=https://staging.example tool/distribute_android.sh "…"
 #
 # Optional: TESTER_GROUPS (default "testers"), ALLOW_LOCAL_BACKEND=1 to ship a
 # build that talks to http://localhost:3000 (only useful over USB with
@@ -11,7 +12,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-APP_ID="1:694264652054:android:96c2410f7f6bd4e61f7037"
+APP_ID="1:694264652054:android:a577129dc2130ec91f7037"  # com.bridgitcampus.app
 PROJECT="run-it-febca"
 TESTER_GROUPS="${TESTER_GROUPS:-testers}"
 # The upload key's certificate (android/SIGNING.md) — never ship anything else.
@@ -19,11 +20,11 @@ EXPECTED_SIGNER="e8e078270d62d1ec688259e015c0eb8fdf70aac7f853b614adf004dad95abe8
 NOTES="${1:-$(git log -1 --pretty=%s)}"
 
 if [[ -z "${API_BASE_URL:-}" ]]; then
-  if [[ "${ALLOW_LOCAL_BACKEND:-}" != 1 ]]; then
-    echo "Set API_BASE_URL to the backend testers should use (or ALLOW_LOCAL_BACKEND=1)." >&2
-    exit 1
+  if [[ "${ALLOW_LOCAL_BACKEND:-}" == 1 ]]; then
+    API_BASE_URL="http://localhost:3000"
+  else
+    API_BASE_URL="https://api.bridgitcampus.com"
   fi
-  API_BASE_URL="http://localhost:3000"
 fi
 if [[ "$API_BASE_URL" != https://* && "${ALLOW_LOCAL_BACKEND:-}" != 1 ]]; then
   echo "API_BASE_URL must be https:// for a tester build (got $API_BASE_URL)." >&2
@@ -48,7 +49,7 @@ APK="build/app/outputs/flutter-apk/app-release.apk"
 APKSIGNER="$(ls -d "${ANDROID_HOME:-$HOME/Library/Android/sdk}"/build-tools/*/apksigner | sort -V | tail -1)"
 SIGNER="$("$APKSIGNER" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
 if [[ "$SIGNER" != "$EXPECTED_SIGNER" ]]; then
-  echo "Refusing to distribute: $APK is signed by $SIGNER, not the RUN-It upload key." >&2
+  echo "Refusing to distribute: $APK is signed by $SIGNER, not the Bridgit upload key." >&2
   exit 1
 fi
 

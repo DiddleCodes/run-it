@@ -51,18 +51,17 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAXc3RichygJNfqdObck_C6PLNKXfHlNWc',
-    appId: '1:694264652054:android:96c2410f7f6bd4e61f7037',
+    appId: '1:694264652054:android:a577129dc2130ec91f7037',
     messagingSenderId: '694264652054',
     projectId: 'run-it-febca',
     storageBucket: 'run-it-febca.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyBDl_W1tZNco_wkAF0ReOYZsH7fdXxeBQ0',
-    appId: '1:694264652054:ios:5c18b92ed749f3b61f7037',
+    appId: '1:694264652054:ios:19be81cfddefc27c1f7037',
     messagingSenderId: '694264652054',
     projectId: 'run-it-febca',
     storageBucket: 'run-it-febca.firebasestorage.app',
-    iosBundleId: 'com.runit.runIt',
+    iosBundleId: 'com.bridgitcampus.app',
   );
 }

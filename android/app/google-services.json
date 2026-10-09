@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:694264652054:android:96c2410f7f6bd4e61f7037",
+        "mobilesdk_app_id": "1:694264652054:android:a577129dc2130ec91f7037",
         "android_client_info": {
-          "package_name": "com.runit.run_it"
+          "package_name": "com.bridgitcampus.app"
         }
       },
       "oauth_client": [],

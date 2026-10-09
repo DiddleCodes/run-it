@@ -8,7 +8,7 @@ Developer Program enrollment; this is the checklist for when it's done.
 | | |
 |---|---|
 | Bundle ID | `com.bridgitcampus.app` (the same as Android's applicationId) |
-| Firebase iOS app | **Not yet registered for `com.bridgitcampus.app`.** `Runner/GoogleService-Info.plist` and `lib/firebase_options.dart` still describe the old `com.runit.runIt` app (`1:694264652054:ios:5c18b92ed749f3b61f7037`) — replace them with `flutterfire configure` once the new iOS app is registered |
+| Firebase iOS app | `1:694264652054:ios:19be81cfddefc27c1f7037` — `Runner/GoogleService-Info.plist` and `lib/firebase_options.dart` match `com.bridgitcampus.app` |
 | Push entitlement | `Runner/Runner.entitlements` has `aps-environment`; `UIBackgroundModes` has `remote-notification` |
 | Signing style | Automatic (Xcode manages certificates and profiles once a team is set) |
 | Minimum iOS | 15.0 |
@@ -59,7 +59,7 @@ Developer Program enrollment; this is the checklist for when it's done.
 ## Building and uploading
 
 ```sh
-flutter build ipa --release --dart-define=API_BASE_URL=https://<production backend>
+flutter build ipa --release   # release builds default to https://api.bridgitcampus.com
 ```
 
 then upload `build/ios/ipa/*.ipa` with Xcode's Organizer or Transporter, and

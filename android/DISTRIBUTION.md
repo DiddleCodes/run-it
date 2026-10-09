@@ -7,15 +7,18 @@ Tester" app once, and every new build shows up there.
 | | |
 |---|---|
 | Firebase project | `run-it-febca` |
-| Android app | `com.bridgitcampus.app` — **Firebase app not registered yet**; `tool/distribute_android.sh` still uploads to the old `com.runit.run_it` app (`1:694264652054:android:96c2410f7f6bd4e61f7037`) until its `APP_ID` is switched |
+| Android app | `com.bridgitcampus.app` (`1:694264652054:android:a577129dc2130ec91f7037`) |
 | Tester group | `testers` ("RUN-It testers") |
 | Signing | the upload key — see [SIGNING.md](SIGNING.md) |
 
 ## Sending a build
 
 ```sh
-API_BASE_URL=https://<production backend> tool/distribute_android.sh "What changed"
+tool/distribute_android.sh "What changed"
 ```
+
+Builds against production (`https://api.bridgitcampus.com`) unless
+`API_BASE_URL` says otherwise.
 
 The script:
 
@@ -29,11 +32,11 @@ It needs the Firebase CLI logged in to an account with access to
 `run-it-febca` (`firebase login`; if `firebase` isn't installed the script
 uses `npx firebase-tools`).
 
-**Until the backend is hosted** (Railway), there's no URL a tester's phone can
-reach. `ALLOW_LOCAL_BACKEND=1` builds against `http://localhost:3000`, which
+`ALLOW_LOCAL_BACKEND=1` builds against `http://localhost:3000` instead, which
 only works for a phone plugged into the dev machine with
-`adb reverse tcp:3000 tcp:3000` — useful for checking the pipeline, not
-for real testers. The script refuses a non-`https://` backend otherwise.
+`adb reverse tcp:3000 tcp:3000`. The script refuses any other non-`https://`
+backend. A release build made without any `API_BASE_URL` also defaults to
+production (`lib/core/network/api_config.dart`).
 
 ## Adding testers
 
@@ -50,6 +53,6 @@ They get an invite email for the next build sent to the group. Remove with
    with the invited Google account.
 2. Install **App Tester** when prompted (allow installs from unknown sources
    for it).
-3. Open the RUN-It build in App Tester → **Download** → **Install**.
+3. Open the Bridgit build in App Tester → **Download** → **Install**.
 
 New builds sent to the group appear in App Tester (and by email).

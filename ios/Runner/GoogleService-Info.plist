@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.runit.runIt</string>
+	<string>com.bridgitcampus.app</string>
 	<key>PROJECT_ID</key>
 	<string>run-it-febca</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:694264652054:ios:5c18b92ed749f3b61f7037</string>
+	<string>1:694264652054:ios:19be81cfddefc27c1f7037</string>
 </dict>
 </plist>
