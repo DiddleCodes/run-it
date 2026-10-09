@@ -102,7 +102,7 @@ Logout (`POST /api/auth/logout`) just clears the cookie.
 
 ## Production
 
-`npm run build` then `npm run start` (port 3001; put it behind the host's HTTPS).
+`npm run build` then `npm run start` — listens on `$PORT` (Railway sets it), or 3001 when unset; put it behind the host's HTTPS.
 Nothing here is deployed yet — this is the checklist for when the backend is live
 on Railway and a domain is connected.
 
