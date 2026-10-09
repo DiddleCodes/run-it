@@ -1,18 +1,19 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import ipRangeCheck from 'ip-range-check';
+import { isDevEnvironment } from '../config/environment';
 
 /**
  * Second factor alongside HMAC signature verification: rejects requests
  * that didn't originate from one of Paystack's published webhook IPs
  * (`paystack.webhookIpAllowlist`).
  *
- * Enforced only in production. Local/staging testing (this collection's own
- * "Simulate Webhook" requests, ngrok tunnels, CI) legitimately calls this
- * endpoint from arbitrary IPs that aren't Paystack's — signature
- * verification alone is what those environments rely on, same as the
- * dev-token endpoint's inverse convention (disabled *in* production instead
- * of enabled only *in* production).
+ * Enforced everywhere except an explicit NODE_ENV of development or test
+ * (unset counts as production — isDevEnvironment). Local testing (this
+ * collection's own "Simulate Webhook" requests, ngrok tunnels, CI)
+ * legitimately calls this endpoint from arbitrary IPs that aren't
+ * Paystack's — signature verification alone is what those environments
+ * rely on.
  *
  * Correctness depends on `request.ip` actually reflecting the real client
  * IP. Behind a reverse proxy/load balancer in production, that requires
@@ -29,7 +30,7 @@ export class PaystackWebhookIpGuard implements CanActivate {
   constructor(private readonly config: ConfigService) {}
 
   canActivate(context: ExecutionContext): boolean {
-    if (this.config.get<string>('nodeEnv') !== 'production') return true;
+    if (isDevEnvironment(this.config.get<string>('nodeEnv'))) return true;
 
     const request = context.switchToHttp().getRequest();
     const allowlist = this.config.get<string[]>('paystack.webhookIpAllowlist') ?? [];

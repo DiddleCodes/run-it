@@ -1,6 +1,7 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { isDevEnvironment } from '../config/environment';
 import { User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
@@ -130,9 +131,10 @@ export class AuthService {
       text: `Your Bridgit verification code is ${code}. It expires in ${OTP_TTL_MINUTES} minutes. If you didn't request this, you can safely ignore this email.`,
     });
 
-    if (!sent && this.config.get<string>('nodeEnv') !== 'production') {
+    if (!sent && isDevEnvironment(this.config.get<string>('nodeEnv'))) {
       // DEV ONLY: no Brevo credentials configured locally, or the send
-      // failed. Never reachable in production — see EmailService.send's
+      // failed. Only when NODE_ENV is explicitly development/test — unset
+      // counts as production. See EmailService.send's
       // warning log for the production-equivalent signal, which never
       // includes the code itself.
       this.logger.warn(`[DEV ONLY] Brevo not configured/send failed — OTP for ${contact}: ${code}`);
@@ -383,9 +385,10 @@ export class AuthService {
       text: `Reset your Bridgit password: ${resetLink} (expires in ${RESET_TOKEN_TTL_MINUTES} minutes). If you didn't request this, you can safely ignore this email.`,
     });
 
-    if (!sent && this.config.get<string>('nodeEnv') !== 'production') {
+    if (!sent && isDevEnvironment(this.config.get<string>('nodeEnv'))) {
       // DEV ONLY: no Brevo credentials configured locally, or the send
-      // failed. Never reachable in production — see EmailService.send's
+      // failed. Only when NODE_ENV is explicitly development/test — unset
+      // counts as production. See EmailService.send's
       // warning log for the production-equivalent signal, which never
       // includes the link itself.
       this.logger.warn(`[DEV ONLY] Brevo not configured/send failed — reset link for ${email}: ${resetLink}`);

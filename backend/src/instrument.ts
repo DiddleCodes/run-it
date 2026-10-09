@@ -28,7 +28,7 @@ const dsn = process.env.SENTRY_DSN;
 if (dsn) {
   Sentry.init({
     dsn,
-    environment: process.env.NODE_ENV ?? 'development',
+    environment: process.env.NODE_ENV ?? 'production',
     // Errors only for now — no perf/tracing sampling. This app has no
     // latency-monitoring requirement yet, and tracesSampleRate: 0 keeps
     // Sentry's footprint limited to exactly what Task 31 asked for.

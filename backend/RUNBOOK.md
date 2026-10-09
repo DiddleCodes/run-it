@@ -178,8 +178,9 @@ webhook, the underlying charge/transfer genuinely didn't succeed.
   deliveries (e.g. after your own downtime, when Paystack retries a backlog)
   should stay well under this; if you see `429`s from Paystack's own retry
   logs, that limit may need raising for your traffic volume.
-- **IP allowlist is production-only**: `PaystackWebhookIpGuard` only
-  enforces `PAYSTACK_WEBHOOK_IP_ALLOWLIST` when `NODE_ENV=production`. If a
+- **IP allowlist is off only in development/test**: `PaystackWebhookIpGuard`
+  enforces `PAYSTACK_WEBHOOK_IP_ALLOWLIST` unless `NODE_ENV` is explicitly
+  `development` or `test` (unset counts as production). If a
   production deployment sits behind a reverse proxy/load balancer, Express's
   `trust proxy` setting must match that infrastructure (`TRUST_PROXY_HOPS`,
   applied in `main.ts`) — otherwise every request appears to originate from

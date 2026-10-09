@@ -1,9 +1,11 @@
 import * as Joi from 'joi';
 
 export const envValidationSchema = Joi.object({
-  NODE_ENV: Joi.string()
-    .valid('development', 'test', 'production')
-    .default('development'),
+  // No default on purpose: ConfigModule writes defaults back into
+  // process.env, and a 'development' default made an unset NODE_ENV log
+  // sign-in codes and open /auth/dev-token. Unset now behaves as
+  // production — see isDevEnvironment.
+  NODE_ENV: Joi.string().valid('development', 'test', 'production').optional(),
   PORT: Joi.number().default(3000),
   DASHBOARD_ORIGIN: Joi.string().optional(),
   // Reverse proxies in front of the app (Railway: 1). Unset = 1 outside

@@ -168,7 +168,8 @@ already in use by a real vendor row plus headroom for growth.
   own doc comment for the tracked production-hardening follow-up.
 - `POST /auth/dev-token` mints a JWT for a given `userId`/`role` (caller
   chooses both — no suspension check, no ownership check) and
-  **self-disables when `NODE_ENV=production`**, enforced by `DevOnlyGuard`
+  **is open only when `NODE_ENV` is explicitly `development` or `test`** —
+  unset or anything else counts as production — enforced by `DevOnlyGuard`
   (`src/common/guards/dev-only.guard.ts`). It exists only so this service
   can be exercised end-to-end (Postman collection, local testing) without
   going through the real OTP flow below. It's no longer the only bridge
@@ -294,7 +295,8 @@ npm test
   rethrows a processing failure so BullMQ retries rather than swallowing
   it; alerts only once retries are exhausted, not on every attempt.
 - **Webhook source-IP allowlist** (`test/paystack-webhook-ip.guard.spec.ts`)
-  — enforced only in production; explicit empty-allowlist escape hatch.
+  — enforced unless `NODE_ENV` is development/test; explicit empty-allowlist
+  escape hatch.
 - **Reconciliation sweep** (`test/reconciliation.service.spec.ts`) — a
   manually-inserted stale-pending wallet_transaction and a stale
   escrow transfer leg, each resolved (success/failed/reversed) or alerted
@@ -543,8 +545,8 @@ logged warning rather than turning alerting itself into a new failure mode.
 - `PaystackWebhookIpGuard` checks the request's source IP against
   `PAYSTACK_WEBHOOK_IP_ALLOWLIST` (defaults to Paystack's published webhook
   IPs) as a second factor alongside HMAC signature verification —
-  **production only** (mirrors `/auth/dev-token`'s inverse convention of
-  disabling itself only in production); local/staging webhook testing
+  **off only when `NODE_ENV` is development/test** (unset counts as
+  production, same as `/auth/dev-token`); local webhook testing
   (including this collection's own "Simulate Webhook" requests) relies on
   signature verification alone, same as before.
 - `POST /webhooks/paystack` is rate-limited to 60 requests/minute per source
