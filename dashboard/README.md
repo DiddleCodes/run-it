@@ -103,13 +103,14 @@ Logout (`POST /api/auth/logout`) just clears the cookie.
 ## Production
 
 `npm run build` then `npm run start` — listens on `$PORT` (Railway sets it), or 3001 when unset; put it behind the host's HTTPS.
-Nothing here is deployed yet — this is the checklist for when the backend is live
-on Railway and a domain is connected.
+Deployed on Railway as the `dashboard` service (project `fabulous-curiosity`).
 
-On Railway, create the service with **root directory `dashboard/`** so it picks
-up `railway.json` (build `npm run build`, start `npm run start`, health check
-`/login` — the one page that answers 200 without a session). Node comes from
-`.nvmrc` / `engines` (24).
+Railway no longer reads `railway.json` (it rejects pointing a service at one:
+"Config as Code is deprecated"), so the same settings are set directly on the
+service: **root directory `/dashboard`**, build `npm run build`, start
+`npm run start`, health check `/login` (the one page that answers 200
+without a session). `railway.json` stays as the record of those values — keep
+the two in step. Node comes from `.nvmrc` / `engines` (24).
 
 ### Environment variables
 

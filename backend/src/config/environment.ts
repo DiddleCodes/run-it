@@ -18,7 +18,8 @@ export function isDevEnvironment(nodeEnv: string | undefined): boolean {
  * sending its own X-Forwarded-For.
  *
  * TRUST_PROXY_HOPS wins when set (0 turns it off). Otherwise: 1 outside
- * development/test (Railway's edge proxy), 0 locally.
+ * development/test, 0 locally. Railway sits behind two (a CDN77 edge,
+ * then Railway's proxy), so its service sets TRUST_PROXY_HOPS=2.
  */
 export function trustProxyHops(env: { NODE_ENV?: string; TRUST_PROXY_HOPS?: string }): number {
   const explicit = env.TRUST_PROXY_HOPS?.trim();

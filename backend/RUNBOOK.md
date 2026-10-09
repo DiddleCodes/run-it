@@ -204,8 +204,15 @@ webhook, the underlying charge/transfer genuinely didn't succeed.
 `req.ip` must be the real caller, not Railway's proxy: the Paystack webhook
 allowlist and every rate limit (sign-in codes, login, webhooks) key on it.
 The backend trusts `TRUST_PROXY_HOPS` proxies in front of it — unset, that's
-1 outside development/test (Railway's edge), 0 locally. The boot log says
-which: `[Bootstrap] trust proxy: 1 hop(s)`.
+1 outside development/test, 0 locally. The boot log says which:
+`[Bootstrap] trust proxy: 2 hop(s)`.
+
+**On Railway it must be 2** — set on the `run-it` service. Requests reach
+the app through a CDN77 edge and then Railway's own proxy. With 1 hop,
+every request appeared to come from a CDN77 address in Johannesburg
+(found on the first deploy, 2026-10-09: `/health/client-ip` returned
+`46.151.193.241`, AS60068 CDN77); with 2 it returns the caller's real IP
+and still ignores a forged `X-Forwarded-For`.
 
 After every deploy (and after any change to domains, a CDN, or Cloudflare in
 front of Railway):
@@ -240,3 +247,15 @@ front of Railway):
    resolved IP and the `x-forwarded-for` chain, which tells you which way
    the hop count is wrong.
 
+
+## Railway service settings
+
+Railway no longer reads `railway.json` ("Config as Code is deprecated" — it
+refuses to point a service at one), so `backend/railway.json` is a record,
+not the source of truth. The `run-it` service has these set directly (Settings,
+or `serviceInstanceUpdate` via `railway api`): root directory `/backend`,
+build `npx prisma generate && npm run build`, pre-deploy
+`npx prisma migrate deploy`, start `npm run start:prod`, health check
+`/health` (120 s), draining 30 s, restart on failure ×5. Change both
+together. Variables besides the secrets: `NODE_ENV=production`,
+`TRUST_PROXY_HOPS=2`.
