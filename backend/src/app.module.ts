@@ -1,5 +1,5 @@
 import { BullModule } from '@nestjs/bullmq';
-import { Module } from '@nestjs/common';
+import { BeforeApplicationShutdown, Logger, Module, OnApplicationShutdown } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -97,4 +97,17 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     { provide: APP_FILTER, useClass: SentryGlobalFilter },
   ],
 })
-export class AppModule {}
+export class AppModule implements BeforeApplicationShutdown, OnApplicationShutdown {
+  private readonly logger = new Logger('Shutdown');
+
+  // Bookends for enableShutdownHooks (main.ts): what a redeploy looks like
+  // in the logs, and proof the queue workers and connections were closed
+  // rather than killed.
+  beforeApplicationShutdown(signal?: string) {
+    this.logger.log(`${signal ?? 'Shutdown'} received — finishing queue jobs and closing connections`);
+  }
+
+  onApplicationShutdown(signal?: string) {
+    this.logger.log(`Shutdown complete (${signal ?? 'no signal'})`);
+  }
+}

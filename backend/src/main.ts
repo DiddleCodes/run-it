@@ -20,6 +20,12 @@ async function bootstrap() {
   const hops = applyTrustProxy(app);
   Logger.log(`trust proxy: ${hops === 0 ? 'off' : `${hops} hop(s)`}`, 'Bootstrap');
 
+  // On SIGTERM (every Railway redeploy) Nest runs its shutdown lifecycle:
+  // BullMQ workers finish their current job and close, then sockets and
+  // the database disconnect — instead of the process dying mid-job.
+  // Railway waits deploy.drainingSeconds (railway.json) before SIGKILL.
+  app.enableShutdownHooks();
+
   // The web dashboard's Next.js server proxies auth/data calls through its
   // own Route Handlers rather than calling this API from the browser, so
   // this isn't standing in for a same-origin policy — it's a narrow
