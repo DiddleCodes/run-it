@@ -53,7 +53,7 @@ export function PlatformMetricsBoard({ initialData }: { initialData: PlatformMet
 
   return (
     <>
-      <div className="flex items-center justify-end mb-6">
+      <div className="flex flex-wrap items-center justify-start sm:justify-end gap-3 mb-6">
         <div className="flex rounded-lg border border-[var(--border)] overflow-hidden bg-card">
           {RANGES.map((r) => (
             <button
@@ -69,7 +69,7 @@ export function PlatformMetricsBoard({ initialData }: { initialData: PlatformMet
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-6">
         <StatCard
           icon={
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">

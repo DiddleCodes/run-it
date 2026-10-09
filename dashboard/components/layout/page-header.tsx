@@ -9,8 +9,8 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, subtitle, breadcrumb, action }: PageHeaderProps) {
   return (
-    <div className="flex items-start justify-between mb-6">
-      <div>
+    <div className="flex flex-wrap items-start justify-between gap-3 mb-5 sm:mb-6">
+      <div className="min-w-0">
         {breadcrumb && <p className="text-xs text-[var(--muted-foreground)] mb-1">{breadcrumb}</p>}
         <h1 className="font-fraunces text-2xl font-semibold text-[var(--foreground)]">{title}</h1>
         {subtitle && <p className="text-sm text-[var(--muted-foreground)] mt-0.5">{subtitle}</p>}

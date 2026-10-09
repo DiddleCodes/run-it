@@ -6,6 +6,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { Column, DataTable } from "@/components/shared/data-table";
 import { StatCard } from "@/components/shared/stat-card";
 import { formatKobo, formatKoboCompact } from "@/lib/format";
+import { useIsPhone } from "@/lib/hooks/use-is-phone";
 import { adminClient, MenuAnalytics, MenuAnalyticsDish, MenuAnalyticsRestaurant, MenuInsight } from "@/lib/api/admin-client";
 
 const RANGES = [
@@ -47,6 +48,7 @@ export function MenuAnalyticsBoard({ initialData }: { initialData: MenuAnalytics
   const [customTo, setCustomTo] = useState("");
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const isPhone = useIsPhone();
 
   async function load(next: { from: string; to: string } | null, nextVendorId: string) {
     setLoading(true);
@@ -83,13 +85,14 @@ export function MenuAnalyticsBoard({ initialData }: { initialData: MenuAnalytics
 
   const { totals } = data;
   const chartData = data.dishes.slice(0, CHART_DISHES).map((d) => ({
-    label: data.vendorId ? d.name : `${d.name} · ${d.restaurantName}`,
+    // Phones: dish names only — the restaurant is on each dish's card below.
+    label: data.vendorId || isPhone ? d.name : `${d.name} · ${d.restaurantName}`,
     earned: d.earnedKobo,
   }));
 
   const dishColumns: Column<MenuAnalyticsDish & { id: string; rank: number }>[] = [
-    { key: "rank", header: "#", render: (d) => <span className="tabular-nums text-[var(--muted-foreground)]">{d.rank}</span> },
-    { key: "name", header: "Dish", render: (d) => <span className="font-semibold text-[var(--foreground)]">{d.name}</span> },
+    { key: "rank", header: "#", phoneHidden: true, render: (d) => <span className="tabular-nums text-[var(--muted-foreground)]">{d.rank}</span> },
+    { key: "name", header: "Dish", phoneTitle: true, render: (d) => <span className="font-semibold text-[var(--foreground)]">{d.name}</span> },
     { key: "restaurantName", header: "Restaurant", render: (d) => d.restaurantName },
     { key: "quantity", header: "Sold", align: "right", sortable: true, render: (d) => d.quantity },
     { key: "salesKobo", header: "Sales", align: "right", sortable: true, render: (d) => formatKobo(d.salesKobo) },
@@ -137,7 +140,7 @@ export function MenuAnalyticsBoard({ initialData }: { initialData: MenuAnalytics
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-end gap-3 mb-6">
+      <div className="flex flex-wrap items-center justify-start sm:justify-end gap-3 mb-6">
         <label className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
           Restaurant
           <select
@@ -154,7 +157,7 @@ export function MenuAnalyticsBoard({ initialData }: { initialData: MenuAnalytics
             ))}
           </select>
         </label>
-        <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
           <label className="flex items-center gap-1">
             From
             <input
@@ -204,7 +207,7 @@ export function MenuAnalyticsBoard({ initialData }: { initialData: MenuAnalytics
         </p>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <StatCard icon={<Banknote size={16} />} label="Restaurants earned (after Bridgit's cut)" value={loading ? "" : formatKobo(totals.earnedKobo)} accent="green" loading={loading} />
         <StatCard icon={<ShoppingBag size={16} />} label="Food sales" value={loading ? "" : formatKobo(totals.salesKobo)} accent="burgundy" loading={loading} />
         <StatCard icon={<UtensilsCrossed size={16} />} label="Dishes sold" value={loading ? "" : totals.itemsSold.toLocaleString("en-NG")} accent="gold" loading={loading} />
@@ -248,7 +251,7 @@ export function MenuAnalyticsBoard({ initialData }: { initialData: MenuAnalytics
               <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 24 }}>
                 <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis type="number" tickFormatter={(v: number) => formatKoboCompact(v)} tick={{ fontSize: 11 }} />
-                <YAxis type="category" dataKey="label" width={220} tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="label" width={isPhone ? 110 : 220} tick={{ fontSize: 11 }} />
                 <Tooltip formatter={(v) => formatKobo(Number(v))} labelStyle={{ fontWeight: 600 }} />
                 <Bar dataKey="earned" name="Restaurant earned" fill="#7A1636" radius={[0, 4, 4, 0]} />
               </BarChart>

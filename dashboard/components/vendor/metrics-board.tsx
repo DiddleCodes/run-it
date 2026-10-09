@@ -103,7 +103,7 @@ export function MetricsBoard({ initialData }: { initialData: Metrics }) {
 
   return (
     <>
-      <div className="flex items-center justify-end mb-6">
+      <div className="flex flex-wrap items-center justify-start sm:justify-end gap-3 mb-6">
         <div className="flex rounded-lg border border-[var(--border)] overflow-hidden bg-card">
           {RANGES.map((r) => (
             <button

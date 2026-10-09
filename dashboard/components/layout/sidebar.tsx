@@ -9,15 +9,19 @@ interface SidebarProps {
   role: "restaurant" | "admin";
   collapsed: boolean;
   onToggle: () => void;
+  /** The phone slide-in menu: full labels, and the bottom button closes it. */
+  mobile?: boolean;
+  /** Called when a link is chosen — the phone menu closes itself. */
+  onNavigate?: () => void;
 }
 
-export function Sidebar({ role, collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ role, collapsed, onToggle, mobile = false, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const navItems = role === "admin" ? adminNav : restaurantNav;
 
   return (
     <aside
-      className={`sidebar-transition flex flex-col h-full bg-[#1A0E12] border-r border-white/5 flex-shrink-0 ${collapsed ? "w-16" : "w-60"}`}
+      className={`sidebar-transition flex flex-col h-full bg-[#1A0E12] border-r border-white/5 flex-shrink-0 ${collapsed ? "w-16" : mobile ? "w-72 max-w-[85vw]" : "w-60"}`}
     >
       <div className={`flex items-center h-14 px-4 border-b border-white/5 ${collapsed ? "justify-center" : "gap-3"}`}>
         {/* The brand icon mark — the same asset the login screen and favicon use. */}
@@ -42,6 +46,7 @@ export function Sidebar({ role, collapsed, onToggle }: SidebarProps) {
               <li key={item.href}>
                 <Link
                   href={item.href}
+                  onClick={onNavigate}
                   title={collapsed ? item.label : undefined}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 relative group ${
                     active ? "bg-[#7A1636]/20 text-white nav-active-indicator" : "text-white/50 hover:text-white/80 hover:bg-white/5"
@@ -83,7 +88,8 @@ export function Sidebar({ role, collapsed, onToggle }: SidebarProps) {
         <button
           onClick={onToggle}
           className="w-full flex items-center justify-center p-2 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors"
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={mobile ? "Close menu" : collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={mobile ? "Close menu" : collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={`transition-transform duration-300 ${collapsed ? "rotate-180" : ""}`}>
             <path d="M10 3L6 8l4 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />

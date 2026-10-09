@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useMemo, useState } from "react";
+import { useIsPhone } from "@/lib/hooks/use-is-phone";
 
 export interface Column<T> {
   key: string;
@@ -10,6 +11,10 @@ export interface Column<T> {
   className?: string;
   /** "right" for money: header and cells flush right, digits tabular so they line up. */
   align?: "left" | "right";
+  /** On phones, this column is each card's title (default: the first column). */
+  phoneTitle?: boolean;
+  /** Left out of the phone cards (e.g. a rank the card order already shows). */
+  phoneHidden?: boolean;
 }
 
 interface DataTableProps<T extends { id: string }> {
@@ -68,69 +73,126 @@ export function DataTable<T extends { id: string }>({
 
   const totalPages = Math.ceil(sorted.length / pageSize);
   const paged = sorted.slice((page - 1) * pageSize, page * pageSize);
+  const isPhone = useIsPhone();
+
+  const cell = (col: Column<T>, row: T) => (col.render ? col.render(row) : String((row as Record<string, unknown>)[col.key] ?? ""));
+  const empty = (
+    <div className="flex flex-col items-center gap-2">
+      <span className="text-4xl opacity-20">◎</span>
+      <p className="font-medium text-[var(--foreground)]">{emptyTitle}</p>
+      <p className="text-[var(--muted-foreground)] text-xs">{emptyDescription}</p>
+    </div>
+  );
+
+  // Phones: each row as a card — the first column is its title, the
+  // rest are label/value lines, and header-less (action) columns sit at
+  // the bottom. No sideways scrolling through a wide table.
+  const titleCol = columns.find((col) => col.phoneTitle) ?? columns[0];
+  const restCols = columns.filter((col) => col !== titleCol && !col.phoneHidden);
+  const phoneList = (
+    <ul className="divide-y divide-[var(--border)]">
+      {loading ? (
+        Array.from({ length: 3 }).map((_, i) => (
+          <li key={i} className="p-4 space-y-2">
+            <div className="skeleton-shimmer h-4 w-2/3 rounded" />
+            <div className="skeleton-shimmer h-3 w-1/2 rounded" />
+          </li>
+        ))
+      ) : paged.length === 0 ? (
+        <li className="py-12 text-center">{empty}</li>
+      ) : (
+        paged.map((row) => (
+          <li key={row.id} className={`p-4 text-sm ${onRowClick ? "cursor-pointer active:bg-[var(--muted)]" : ""}`} onClick={() => onRowClick?.(row)}>
+            <div className="font-medium text-[var(--card-foreground)] mb-2 break-words">{cell(titleCol, row)}</div>
+            <dl className="space-y-1.5">
+              {restCols
+                .filter((col) => col.header)
+                .map((col) => (
+                  <div key={col.key} className="flex items-baseline justify-between gap-4">
+                    <dt className="text-xs text-[var(--muted-foreground)] shrink-0">{col.header}</dt>
+                    <dd className="text-right text-[var(--card-foreground)] tabular-nums min-w-0 break-words">{cell(col, row)}</dd>
+                  </div>
+                ))}
+            </dl>
+            {restCols
+              .filter((col) => !col.header)
+              .map((col) => (
+                <div key={col.key} className="mt-3 flex flex-wrap gap-2">
+                  {cell(col, row)}
+                </div>
+              ))}
+          </li>
+        ))
+      )}
+    </ul>
+  );
 
   return (
     <div className="bg-card rounded-[var(--radius)] border border-[var(--border)] shadow-[0_1px_8px_rgba(0,0,0,0.06)] overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[var(--border)] bg-[var(--secondary)]">
-              {columns.map((col) => (
-                <th
-                  key={col.key}
-                  className={`px-4 py-3 text-left text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide select-none ${
-                    col.sortable ? "cursor-pointer hover:text-[var(--foreground)] transition-colors" : ""
-                  } ${col.align === "right" ? "text-right" : ""} ${col.className ?? ""}`}
-                  onClick={() => col.sortable && handleSort(col.key)}
-                >
-                  <span className={`flex items-center gap-1 ${col.align === "right" ? "justify-end" : ""}`}>
-                    {col.header}
-                    {col.sortable && (
-                      <span className={`opacity-40 ${sortKey === col.key ? "opacity-100 text-[var(--primary)]" : ""}`}>
-                        {sortKey === col.key ? (sortDir === "asc" ? " ↑" : " ↓") : " ↕"}
-                      </span>
-                    )}
-                  </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={columns.length} />)
-            ) : paged.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length} className="py-16 text-center">
-                  <div className="flex flex-col items-center gap-2">
-                    <span className="text-4xl opacity-20">◎</span>
-                    <p className="font-medium text-[var(--foreground)]">{emptyTitle}</p>
-                    <p className="text-[var(--muted-foreground)] text-xs">{emptyDescription}</p>
-                  </div>
-                </td>
+      {isPhone ? (
+        phoneList
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[var(--border)] bg-[var(--secondary)]">
+                {columns.map((col) => (
+                  <th
+                    key={col.key}
+                    className={`px-4 py-3 text-left text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide select-none ${
+                      col.sortable ? "cursor-pointer hover:text-[var(--foreground)] transition-colors" : ""
+                    } ${col.align === "right" ? "text-right" : ""} ${col.className ?? ""}`}
+                    onClick={() => col.sortable && handleSort(col.key)}
+                  >
+                    <span className={`flex items-center gap-1 ${col.align === "right" ? "justify-end" : ""}`}>
+                      {col.header}
+                      {col.sortable && (
+                        <span className={`opacity-40 ${sortKey === col.key ? "opacity-100 text-[var(--primary)]" : ""}`}>
+                          {sortKey === col.key ? (sortDir === "asc" ? " ↑" : " ↓") : " ↕"}
+                        </span>
+                      )}
+                    </span>
+                  </th>
+                ))}
               </tr>
-            ) : (
-              paged.map((row) => (
-                <tr
-                  key={row.id}
-                  className={`border-b border-[var(--border)] last:border-0 table-row-hover ${onRowClick ? "cursor-pointer" : ""}`}
-                  onClick={() => onRowClick?.(row)}
-                >
-                  {columns.map((col) => (
-                    <td
-                      key={col.key}
-                      className={`px-4 py-3 text-[var(--card-foreground)] ${col.align === "right" ? "text-right tabular-nums" : ""} ${col.className ?? ""}`}
-                    >
-                      {col.render ? col.render(row) : String((row as Record<string, unknown>)[col.key] ?? "")}
-                    </td>
-                  ))}
+            </thead>
+            <tbody>
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={columns.length} />)
+              ) : paged.length === 0 ? (
+                <tr>
+                  <td colSpan={columns.length} className="py-16 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="text-4xl opacity-20">◎</span>
+                      <p className="font-medium text-[var(--foreground)]">{emptyTitle}</p>
+                      <p className="text-[var(--muted-foreground)] text-xs">{emptyDescription}</p>
+                    </div>
+                  </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : (
+                paged.map((row) => (
+                  <tr
+                    key={row.id}
+                    className={`border-b border-[var(--border)] last:border-0 table-row-hover ${onRowClick ? "cursor-pointer" : ""}`}
+                    onClick={() => onRowClick?.(row)}
+                  >
+                    {columns.map((col) => (
+                      <td
+                        key={col.key}
+                        className={`px-4 py-3 text-[var(--card-foreground)] ${col.align === "right" ? "text-right tabular-nums" : ""} ${col.className ?? ""}`}
+                      >
+                        {col.render ? col.render(row) : String((row as Record<string, unknown>)[col.key] ?? "")}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
       {!loading && totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border)] bg-[var(--secondary)]">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-t border-[var(--border)] bg-[var(--secondary)]">
           <span className="text-xs text-[var(--muted-foreground)]">
             Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, sorted.length)} of {sorted.length}
           </span>
@@ -142,7 +204,12 @@ export function DataTable<T extends { id: string }>({
             >
               ← Prev
             </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+            {isPhone && (
+              <span className="px-2 py-1 text-xs text-[var(--muted-foreground)] tabular-nums">
+                {page} / {totalPages}
+              </span>
+            )}
+            {!isPhone && Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
               <button
                 key={p}
                 onClick={() => setPage(p)}

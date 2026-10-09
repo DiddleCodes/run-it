@@ -6,9 +6,11 @@ import { NotificationBell } from "./notification-bell";
 
 interface TopBarProps {
   user: { name: string | null; email: string | null; accountType: string };
+  /** Opens the slide-in menu on phones (the sidebar is hidden there). */
+  onMenuClick?: () => void;
 }
 
-export function TopBar({ user }: TopBarProps) {
+export function TopBar({ user, onMenuClick }: TopBarProps) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -29,7 +31,19 @@ export function TopBar({ user }: TopBarProps) {
   }
 
   return (
-    <header className="glass-bar h-14 flex items-center px-5 border-b border-black/5 flex-shrink-0 gap-4 sticky top-0 z-30">
+    <header className="glass-bar h-14 flex items-center px-3 sm:px-5 border-b border-black/5 flex-shrink-0 gap-2 sm:gap-4 sticky top-0 z-30">
+      <button
+        onClick={onMenuClick}
+        aria-label="Open menu"
+        className="md:hidden flex items-center gap-2 p-2 -ml-1 rounded-lg text-[var(--foreground)] hover:bg-black/5"
+      >
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        </svg>
+        <span className="font-fraunces font-semibold text-base leading-none">
+          Bridg<span className="text-[#D99A18]">it</span>
+        </span>
+      </button>
       <div className="ml-auto flex items-center gap-1">
         <NotificationBell
           accountType={user.accountType}
