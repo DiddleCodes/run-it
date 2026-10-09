@@ -6,6 +6,9 @@ export const envValidationSchema = Joi.object({
     .default('development'),
   PORT: Joi.number().default(3000),
   DASHBOARD_ORIGIN: Joi.string().optional(),
+  // Reverse proxies in front of the app (Railway: 1). Unset = 1 outside
+  // development/test, 0 locally — see trustProxyHops.
+  TRUST_PROXY_HOPS: Joi.number().integer().min(0).optional(),
 
   DATABASE_URL: Joi.string().uri().required(),
   REDIS_URL: Joi.string().uri().required(),

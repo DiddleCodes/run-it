@@ -22,4 +22,8 @@ describe('HealthController (Task 71)', () => {
     const error = await controller({ redis: false }).get().catch((e) => e);
     expect(error.getResponse()).toEqual({ status: 'degraded', database: 'up', redis: 'down' });
   });
+
+  it('client-ip echoes the address this server resolved for the caller', () => {
+    expect(controller().clientIp({ ip: '203.0.113.7' } as any)).toEqual({ ip: '203.0.113.7' });
+  });
 });

@@ -1,4 +1,5 @@
-import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Get, Req, ServiceUnavailableException } from '@nestjs/common';
+import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 
@@ -37,5 +38,14 @@ export class HealthController {
     const body = { status: database === 'up' && redis === 'up' ? 'ok' : 'degraded', database, redis };
     if (body.status !== 'ok') throw new ServiceUnavailableException(body);
     return body;
+  }
+
+  // The caller's own address as this server resolved it (trust proxy) —
+  // compare with what the caller sees as its public IP to confirm rate
+  // limits and the Paystack allowlist see real clients, not the proxy.
+  // RUNBOOK.md → "Checking the resolved client IP".
+  @Get('client-ip')
+  clientIp(@Req() req: Request) {
+    return { ip: req.ip };
   }
 }

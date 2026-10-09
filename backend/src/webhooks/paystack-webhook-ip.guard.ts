@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import ipRangeCheck from 'ip-range-check';
 
@@ -17,11 +17,15 @@ import ipRangeCheck from 'ip-range-check';
  * Correctness depends on `request.ip` actually reflecting the real client
  * IP. Behind a reverse proxy/load balancer in production, that requires
  * Express's `trust proxy` setting to be configured for that infrastructure
- * (see main.ts) — otherwise every request appears to come from the proxy
- * and this guard will reject genuine Paystack deliveries. See RUNBOOK.md.
+ * (TRUST_PROXY_HOPS, applied in main.ts) — otherwise every request appears
+ * to come from the proxy and this guard will reject genuine Paystack
+ * deliveries. Rejections log the resolved IP and X-Forwarded-For so that
+ * case is obvious. See RUNBOOK.md.
  */
 @Injectable()
 export class PaystackWebhookIpGuard implements CanActivate {
+  private readonly logger = new Logger(PaystackWebhookIpGuard.name);
+
   constructor(private readonly config: ConfigService) {}
 
   canActivate(context: ExecutionContext): boolean {
@@ -33,6 +37,9 @@ export class PaystackWebhookIpGuard implements CanActivate {
 
     const clientIp: string = request.ip;
     if (!ipRangeCheck(clientIp, allowlist)) {
+      this.logger.warn(
+        `Rejected Paystack webhook from ${clientIp} (x-forwarded-for: ${request.headers?.['x-forwarded-for'] ?? 'none'})`,
+      );
       throw new ForbiddenException('Request did not originate from a recognized Paystack IP');
     }
     return true;

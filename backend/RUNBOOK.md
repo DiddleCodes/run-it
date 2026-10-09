@@ -181,12 +181,13 @@ webhook, the underlying charge/transfer genuinely didn't succeed.
 - **IP allowlist is production-only**: `PaystackWebhookIpGuard` only
   enforces `PAYSTACK_WEBHOOK_IP_ALLOWLIST` when `NODE_ENV=production`. If a
   production deployment sits behind a reverse proxy/load balancer, Express's
-  `trust proxy` setting must be configured to match that infrastructure
-  (see `main.ts`) — otherwise every request appears to originate from the
-  proxy's own IP and this guard will reject genuine Paystack deliveries. If
-  that happens (alerts stop arriving from a proxy migration, or all webhook
-  calls suddenly 403), that's the first thing to check — not the allowlist
-  itself.
+  `trust proxy` setting must match that infrastructure (`TRUST_PROXY_HOPS`,
+  applied in `main.ts`) — otherwise every request appears to originate from
+  the proxy's own IP and this guard will reject genuine Paystack deliveries.
+  If that happens (alerts stop arriving from a proxy migration, or all
+  webhook calls suddenly 403), that's the first thing to check — not the
+  allowlist itself. Each rejection logs `Rejected Paystack webhook from
+  <ip> (x-forwarded-for: …)`; see "Checking the resolved client IP" below.
 - **A retried hold for the same orderId is always safe.** Two concurrent
   requests, or a client retry after a timeout, cannot create two escrows
   for one order — `order_escrows.order_id` has a real Postgres unique
@@ -196,3 +197,45 @@ webhook, the underlying charge/transfer genuinely didn't succeed.
   `RUN_DB_INTEGRATION_TESTS=1 npx jest order-escrow.db-constraint` — not
   part of the default `npm test`, since that suite intentionally requires no
   live database) for a live proof against a real Postgres instance.
+
+## Checking the resolved client IP
+
+`req.ip` must be the real caller, not Railway's proxy: the Paystack webhook
+allowlist and every rate limit (sign-in codes, login, webhooks) key on it.
+The backend trusts `TRUST_PROXY_HOPS` proxies in front of it — unset, that's
+1 outside development/test (Railway's edge), 0 locally. The boot log says
+which: `[Bootstrap] trust proxy: 1 hop(s)`.
+
+After every deploy (and after any change to domains, a CDN, or Cloudflare in
+front of Railway):
+
+1. From your own machine, compare the IP the backend resolved for you with
+   your real public IP:
+
+   ```sh
+   curl -s https://api.bridgitcampus.com/health/client-ip   # {"ip":"<x>"}
+   curl -s https://api.ipify.org; echo                      # your public IP
+   ```
+
+2. Read the result:
+
+   | `/health/client-ip` says | Meaning | Fix |
+   |---|---|---|
+   | Your public IP | Correct | — |
+   | A private / Railway address (`10.*`, `100.64.*`–`100.127.*`, `172.16.*`–`172.31.*`, `::ffff:10.*`) | Too few hops trusted — every user looks the same; Paystack webhooks will 403 | Raise `TRUST_PROXY_HOPS` by 1 (e.g. `2` with Cloudflare proxying in front of Railway) |
+
+   Then check a client can't forge its address:
+
+   ```sh
+   curl -s -H 'X-Forwarded-For: 6.6.6.6' https://api.bridgitcampus.com/health/client-ip
+   ```
+
+   This must still print your real IP. If it prints `6.6.6.6`, too many
+   hops are trusted — clients could forge their IP and dodge rate limits —
+   so lower `TRUST_PROXY_HOPS`.
+
+3. Once Paystack is sending live webhooks, confirm none are being refused:
+   search the logs for `Rejected Paystack webhook`. Any hit shows the
+   resolved IP and the `x-forwarded-for` chain, which tells you which way
+   the hop count is wrong.
+
