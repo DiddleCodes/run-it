@@ -20,12 +20,14 @@ export async function uploadImageToS3(file: File, purpose: "menu-item-photo" | "
     throw new Error("Only JPEG, PNG, or WEBP images are supported.");
   }
 
-  const { uploadUrl, publicUrl } = await vendorClient.presignUpload({
+  const { uploadUrl, fileUrl } = await vendorClient.presignUpload({
     contentType: file.type,
     purpose,
     contentLengthBytes: file.size,
   });
 
+  // Size and type are signed into the URL: the browser sends exactly
+  // file.size bytes with file.type, matching what was declared above.
   const res = await fetch(uploadUrl, {
     method: "PUT",
     headers: { "Content-Type": file.type },
@@ -36,5 +38,5 @@ export async function uploadImageToS3(file: File, purpose: "menu-item-photo" | "
     throw new Error(`Upload failed (HTTP ${res.status})`);
   }
 
-  return publicUrl;
+  return fileUrl;
 }

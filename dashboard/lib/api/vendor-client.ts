@@ -178,7 +178,10 @@ export interface PayoutAccount {
 
 export interface PresignResponse {
   uploadUrl: string;
-  publicUrl: string;
+  /** What to save: the public URL here (the dashboard only uploads menu photos and logos). */
+  fileUrl: string;
+  /** Null for private purposes — the dashboard never uploads those. */
+  publicUrl: string | null;
   expiresInSeconds: number;
 }
 

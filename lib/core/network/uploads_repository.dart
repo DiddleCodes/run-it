@@ -10,8 +10,10 @@ final uploadsRepositoryProvider = Provider<UploadsRepository>(
 /// The presign-then-PUT-then-register pattern Task 9's backend expects: ask
 /// this app's own backend for a one-time upload URL, PUT the raw bytes
 /// straight to storage (never through this app's own backend), then hand
-/// the resulting public URL to whichever endpoint actually wants it
-/// recorded — here, `OrdersRepository.submitDeliveryProof`.
+/// the returned `fileUrl` to whichever endpoint records it. Menu photos and
+/// logos get a public URL; ID, selfie, delivery, handoff and dispute photos
+/// go to a private bucket and get a `private://` reference instead, which
+/// only the backend can turn into a (short-lived) viewable link.
 class UploadsRepository {
   const UploadsRepository({this.client = const ApiClient(), this.httpClient});
 
@@ -22,8 +24,8 @@ class UploadsRepository {
   /// class has no long-lived state of its own.
   final http.Client? httpClient;
 
-  /// Returns the public URL to hand to whichever endpoint registers this
-  /// upload.
+  /// Returns what to hand to whichever endpoint registers this upload: a
+  /// public URL, or a private reference.
   Future<String> uploadImage({
     required List<int> bytes,
     required String purpose,
@@ -43,15 +45,16 @@ class UploadsRepository {
             as Map<String, dynamic>;
 
     final uploadUrl = presign['uploadUrl'] as String;
-    final publicUrl = presign['publicUrl'] as String;
+    final fileUrl = (presign['fileUrl'] ?? presign['publicUrl']) as String;
 
     final putClient = httpClient ?? http.Client();
     final response = await putClient
+        // Size and type are signed into the URL: send exactly what was declared.
         .put(Uri.parse(uploadUrl), headers: {'Content-Type': contentType}, body: bytes)
         .timeout(ApiClient.requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('Upload failed (HTTP ${response.statusCode})');
     }
-    return publicUrl;
+    return fileUrl;
   }
 }

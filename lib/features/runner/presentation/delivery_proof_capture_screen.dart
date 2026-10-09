@@ -46,7 +46,7 @@ class _DeliveryProofCaptureScreenState
     }
     setState(() => _submitting = true);
     try {
-      final publicUrl = await ref
+      final photoRef = await ref
           .read(uploadsRepositoryProvider)
           .uploadImage(
             bytes: bytes,
@@ -58,7 +58,7 @@ class _DeliveryProofCaptureScreenState
           .read(ordersRepositoryProvider)
           .submitDeliveryProof(
             orderId: widget.orderId,
-            photoUrl: publicUrl,
+            photoUrl: photoRef,
             token: token,
           );
       if (!mounted) return;

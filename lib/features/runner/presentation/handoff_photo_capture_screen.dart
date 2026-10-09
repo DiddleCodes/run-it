@@ -36,7 +36,7 @@ class _HandoffPhotoCaptureScreenState
   Future<void> _submit(Uint8List bytes) async {
     setState(() => _uploading = true);
     try {
-      final publicUrl = await ref
+      final photoRef = await ref
           .read(uploadsRepositoryProvider)
           .uploadImage(
             bytes: bytes,
@@ -45,7 +45,7 @@ class _HandoffPhotoCaptureScreenState
             token: widget.token,
           );
       if (!mounted) return;
-      Navigator.of(context).pop(publicUrl);
+      Navigator.of(context).pop(photoRef);
     } catch (e) {
       if (!mounted) return;
       setState(() => _uploading = false);
