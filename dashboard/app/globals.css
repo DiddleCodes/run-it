@@ -43,7 +43,7 @@
 }
 
 /*
- * RUN-It dashboard brand palette — ported verbatim from the Figma Make
+ * Bridgit dashboard brand palette — ported verbatim from the Figma Make
  * prototype's index.css so the real app matches its visual direction
  * exactly (burgundy/gold on a neutral surface), mapped onto shadcn's
  * standard token names so shadcn/ui primitives pick it up automatically.

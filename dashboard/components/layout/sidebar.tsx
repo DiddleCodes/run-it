@@ -21,7 +21,7 @@ export function Sidebar({ role, collapsed, onToggle }: SidebarProps) {
     >
       <div className={`flex items-center h-14 px-4 border-b border-white/5 ${collapsed ? "justify-center" : "gap-3"}`}>
         {/* The brand icon mark — the same asset the login screen and favicon use. */}
-        <Image src="/brand/run-it-icon.png" alt="Bridgit" width={36} height={32} className="flex-shrink-0" priority />
+        <Image src="/brand/bridgit-icon.png" alt="Bridgit" width={36} height={32} className="flex-shrink-0" priority />
         {!collapsed && (
           <span className="font-fraunces font-semibold text-white text-lg tracking-tight leading-none">
             Bridg<span className="text-[#D99A18]">it</span>

@@ -1,6 +1,6 @@
-# RUN-It Web Dashboard
+# Bridgit Web Dashboard
 
-Restaurant & Admin portal for RUN-It, built with Next.js (App Router) + TypeScript +
+Restaurant & Admin portal for Bridgit, built with Next.js (App Router) + TypeScript +
 Tailwind v4 + shadcn/ui + Framer Motion. This is Task 13a: real auth, real
 server-verified role guards, the layout shell, and the shared component set —
 foundation only. Full feature screens (Orders tables, Metrics charts, etc. wired to
