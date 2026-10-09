@@ -106,6 +106,11 @@ Logout (`POST /api/auth/logout`) just clears the cookie.
 Nothing here is deployed yet — this is the checklist for when the backend is live
 on Railway and a domain is connected.
 
+On Railway, create the service with **root directory `dashboard/`** so it picks
+up `railway.json` (build `npm run build`, start `npm run start`, health check
+`/login` — the one page that answers 200 without a session). Node comes from
+`.nvmrc` / `engines` (24).
+
 ### Environment variables
 
 | Variable | Required | When | Value |
